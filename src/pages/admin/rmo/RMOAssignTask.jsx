@@ -266,7 +266,6 @@ const RMOAssignTask = () => {
                             bedNo: bed.bed,
                             floor: bed.floor,
                             ward: bed.ward,
-                            room: bed.room,
                             serialNo: bed.serial_no,
                             status: bed.status,
                             ipdNumber: matchingAdmission.ipd_number,

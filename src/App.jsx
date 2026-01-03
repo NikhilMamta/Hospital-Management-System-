@@ -83,6 +83,12 @@ function App() {
   return (
     <NotificationProvider>
       <Routes>
+        {/* Root Route - Redirect to Login or Dashboard */}
+        <Route
+          path="/"
+          element={<Navigate to={user ? "/admin/dashboard" : "/login"} replace />}
+        />
+
         {/* Public Routes */}
         <Route
           path="/login"

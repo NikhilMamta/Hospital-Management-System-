@@ -662,7 +662,6 @@ export default function GivenTask() {
           ward_type: selectedOtTask.ward_type || null,
           room: selectedOtTask.room || null,
           bed_no: selectedOtTask.bed_no || null,
-          bed_no: selectedOtTask.bed_no || null,
           planned1: timestamp,
           submitted_by: userName // Add submitted_by field
         };

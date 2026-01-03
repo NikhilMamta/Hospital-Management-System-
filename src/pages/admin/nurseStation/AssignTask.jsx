@@ -266,7 +266,6 @@ const AssignTask = () => {
                             bedNo: bed.bed,
                             floor: bed.floor,
                             ward: bed.ward,
-                            room: bed.room,
                             serialNo: bed.serial_no,
                             status: bed.status,
                             ipdNumber: matchingAdmission.ipd_number,
@@ -647,8 +646,8 @@ const AssignTask = () => {
                                         type="button"
                                         onClick={() => setActiveShift(shiftKey)}
                                         className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all ${activeShift === shiftKey
-                                                ? `bg-gradient-to-r ${config.color} text-gray-800 border-t border-l border-r ${config.border}`
-                                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                                            ? `bg-gradient-to-r ${config.color} text-gray-800 border-t border-l border-r ${config.border}`
+                                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
                                             }`}
                                     >
                                         {config.label}
