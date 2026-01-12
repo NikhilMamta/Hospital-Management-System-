@@ -153,10 +153,66 @@ export default function PatientProfile() {
             setLoading(true);
             setIsRefreshing(true);
 
-            const { data, error } = await supabase
+            // Get current user details
+            const currentUser = JSON.parse(localStorage.getItem('mis_user'));
+            const userRole = currentUser?.role?.toLowerCase();
+            const userName = currentUser?.name;
+
+            let ipdNumbers = null;
+            let shouldFilter = false;
+
+            // Role-based filtering logic
+            if (userRole === 'nurse' || userRole === 'ot' || userRole === 'ot staff') {
+                shouldFilter = true;
+                // Fetch assigned tasks for Nurse or OT Staff
+                const { data: tasks, error: taskError } = await supabase
+                    .from('nurse_assign_task')
+                    .select('Ipd_number') // Column name is case-sensitive "Ipd_number"
+                    .eq('assign_nurse', userName)
+                    .not('planned1', 'is', null)
+                    .is('actual1', null);
+
+                if (taskError) {
+                    console.error('Error fetching nurse/ot tasks:', taskError);
+                } else if (tasks) {
+                    ipdNumbers = tasks.map(t => t.Ipd_number);
+                }
+            } else if (userRole === 'rmo') {
+                shouldFilter = true;
+                // Fetch assigned tasks for RMO
+                const { data: tasks, error: taskError } = await supabase
+                    .from('rmo_assign_task')
+                    .select('ipd_number') // Column name is "ipd_number"
+                    .eq('assign_rmo', userName)
+                    .not('planned1', 'is', null)
+                    .is('actual1', null);
+
+                if (taskError) {
+                    console.error('Error fetching rmo tasks:', taskError);
+                } else if (tasks) {
+                    ipdNumbers = tasks.map(t => t.ipd_number);
+                }
+            }
+
+            // Build the main query
+            let query = supabase
                 .from('ipd_admissions')
                 .select('*')
                 .order('timestamp', { ascending: false });
+
+            // Apply filter if applicable
+            if (shouldFilter && ipdNumbers) {
+                if (ipdNumbers.length > 0) {
+                    query = query.in('ipd_number', ipdNumbers); // Assuming ipd_admissions uses ipd_number
+                } else {
+                    // Start an impossible query to return empty result if no tasks assigned
+                    query = query.eq('id', -1);
+                }
+            } else if (shouldFilter && !ipdNumbers) {
+                query = query.eq('id', -1);
+            }
+
+            const { data, error } = await query;
 
             if (error) {
                 console.error('Error fetching patients:', error);

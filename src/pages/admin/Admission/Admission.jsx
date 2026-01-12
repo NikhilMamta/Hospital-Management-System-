@@ -14,7 +14,6 @@ const Admission = () => {
     patientName: '',
     phoneNumber: '',
     attenderName: '',
-    attenderMobile: '',
     reasonForVisit: '',
     dateOfBirth: '',
     age: '',
@@ -51,7 +50,6 @@ const Admission = () => {
           patientName: patient.patient_name || '',
           phoneNumber: patient.phone_no || '',
           attenderName: patient.attender_name || '',
-          attenderMobile: patient.attender_mobile_no || '',
           reasonForVisit: patient.reason_for_visit || '',
           dateOfBirth: patient.date_of_birth || '',
           age: patient.age || calculateAge(patient.date_of_birth),
@@ -162,7 +160,6 @@ const Admission = () => {
           patient_name: formData.patientName.trim(),
           phone_no: formData.phoneNumber.trim(),
           attender_name: formData.attenderName.trim(),
-          attender_mobile_no: formData.attenderMobile.trim(),
           reason_for_visit: formData.reasonForVisit.trim(),
           date_of_birth: formData.dateOfBirth,
           age: formData.age,
@@ -190,7 +187,6 @@ const Admission = () => {
           patient_name: formData.patientName.trim(),
           phone_no: formData.phoneNumber.trim(),
           attender_name: formData.attenderName.trim(),
-          attender_mobile_no: formData.attenderMobile.trim(),
           reason_for_visit: formData.reasonForVisit.trim(),
           date_of_birth: formData.dateOfBirth,
           age: formData.age,
@@ -227,7 +223,6 @@ const Admission = () => {
       patientName: '',
       phoneNumber: '',
       attenderName: '',
-      attenderMobile: '',
       reasonForVisit: '',
       dateOfBirth: '',
       age: '',
@@ -244,7 +239,6 @@ const Admission = () => {
       patientName: patient.patientName,
       phoneNumber: patient.phoneNumber,
       attenderName: patient.attenderName,
-      attenderMobile: patient.attenderMobile,
       reasonForVisit: patient.reasonForVisit,
       dateOfBirth: patient.dateOfBirth,
       age: patient.age,
@@ -318,7 +312,6 @@ const Admission = () => {
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Patient Name</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Phone Number</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Attender Name</th>
-                <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Attender Mobile</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50 min-w-[200px]">Reason For Visit</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Date of Birth</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Age</th>
@@ -352,9 +345,6 @@ const Admission = () => {
                     </td>
                     <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
                       {patient.attenderName}
-                    </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
-                      {patient.attenderMobile}
                     </td>
                     <td className="px-4 py-3 text-sm max-w-[250px] whitespace-normal break-words text-gray-900">
                       {patient.reasonForVisit}
@@ -449,10 +439,6 @@ const Admission = () => {
                   <span className="font-medium text-gray-900">{patient.attenderName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Attender Mobile:</span>
-                  <span className="font-medium text-gray-900">{patient.attenderMobile}</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-600">DOB:</span>
                   <span className="font-medium text-gray-900">{formatDateForDisplay(patient.dateOfBirth)}</span>
                 </div>
@@ -535,19 +521,6 @@ const Admission = () => {
                     type="text"
                     name="attenderName"
                     value={formData.attenderName}
-                    onChange={handleInputChange}
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block mb-1 text-sm font-medium text-gray-700">
-                    Attender Mobile Number *
-                  </label>
-                  <input
-                    type="tel"
-                    name="attenderMobile"
-                    value={formData.attenderMobile}
                     onChange={handleInputChange}
                     className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
                   />

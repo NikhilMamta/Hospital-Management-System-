@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION public.fn_lab_generate_nurse_task()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     v_shift TEXT;
     v_start_date DATE;
@@ -74,8 +74,9 @@ BEGIN
             SELECT *
             FROM roster
             WHERE shift = v_shift
+              AND (start_date <= current_date OR start_date IS NULL) -- Added Date Logic
             ORDER BY created_at DESC
-            LIMIT 1
+            LIMIT 3 -- Increased from 1 to 3 for fallback logic
         )
         SELECT jsonb_array_elements_text(
             CASE
@@ -166,4 +167,4 @@ BEGIN
 
     RETURN NEW;
 END;
-$$;
+$function$

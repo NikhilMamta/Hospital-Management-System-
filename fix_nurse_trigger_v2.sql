@@ -45,6 +45,7 @@ begin
             ) as nurse_name
         from roster
         where shift = v_shift
+          and (start_date <= current_date OR start_date is null)
         order by created_at desc
         limit 3
     ) nurses

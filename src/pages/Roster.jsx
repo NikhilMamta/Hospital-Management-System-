@@ -41,6 +41,17 @@ const Roster = () => {
   const [activeTab, setActiveTab] = useState('nurses');
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(null);
+  const [showStartDateModal, setShowStartDateModal] = useState(false);
+  const [startDate, setStartDate] = useState('');
+
+  // Navigation State
+  const [viewMode, setViewMode] = useState('current'); // 'previous', 'current', 'next'
+  const [rosterSets, setRosterSets] = useState({
+    previous: null,
+    current: null,
+    next: null
+  });
+  const [currentSetDate, setCurrentSetDate] = useState(null);
 
   // Leave management state
   const [staffOnLeave, setStaffOnLeave] = useState({
@@ -393,14 +404,15 @@ const Roster = () => {
     try {
       setLoadingRoster(true);
 
-      console.log('Fetching latest roster data...');
+      console.log('Fetching roster history...');
 
-      // Get the LATEST 3 rows (one for each shift from the latest save)
+      // Get enough history to determine Previous/Current/Next
+      // Fetching 30 rows (approx 10 sets of 3 shifts) should be sufficient
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
         .select('*')
         .order('timestamp', { ascending: false })
-        .limit(9); // Get more rows to ensure we have all shifts
+        .limit(30);
 
       if (rosterError) {
         console.error('Error fetching roster data:', rosterError);
@@ -408,33 +420,101 @@ const Roster = () => {
       }
 
       if (rosterData && rosterData.length > 0) {
-        console.log('Loaded roster data:', rosterData);
+        console.log('Loaded roster history:', rosterData.length, 'rows');
 
-        // Group by shift and get the latest entry for each shift
-        const latestShifts = {};
+        // Group rows by unique timestamp
+        const groupedSets = {};
         rosterData.forEach(row => {
-          // If we haven't seen this shift yet, or this is a newer timestamp
-          if (!latestShifts[row.shift] || new Date(row.timestamp) > new Date(latestShifts[row.shift].timestamp)) {
-            latestShifts[row.shift] = row;
+          // Use timestamp as key (string comparison)
+          const key = row.timestamp;
+          if (!groupedSets[key]) {
+            groupedSets[key] = [];
           }
+          groupedSets[key].push(row);
         });
 
-        // Convert object to array
-        const latestRosterData = Object.values(latestShifts);
-        console.log('Latest unique shifts:', latestRosterData);
+        // Convert to array of sets, sorted by timestamp descending
+        const sortedSets = Object.values(groupedSets).sort((a, b) => {
+          return new Date(b[0].timestamp) - new Date(a[0].timestamp);
+        });
 
-        const parsedAssignments = parseRosterData(latestRosterData, currentStaffData, currentStaffOnLeave);
-        setAssignments(parsedAssignments);
+        console.log('Found roster sets:', sortedSets.length);
 
-        // Set the last save time if available
-        if (latestRosterData.length > 0) {
-          const timestamps = latestRosterData.map(row => row.timestamp);
-          const latestTimestamp = timestamps.sort().reverse()[0];
-          setLastSaveTime(latestTimestamp);
+        // LOGIC: Determine Previous / Current / Next
+        // We need to check the start_date of the LATEST set (Index 0)
+
+        let nextSet = null;
+        let currentSet = null;
+        let previousSet = null;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (sortedSets.length > 0) {
+          const latestSet = sortedSets[0];
+          // Check start_date of any row in the set (all should form one update)
+          const latestStartDateStr = latestSet[0].start_date;
+
+          let latestIsFuture = false;
+          if (latestStartDateStr) {
+            const latestStartDate = new Date(latestStartDateStr);
+            latestStartDate.setHours(0, 0, 0, 0);
+            if (latestStartDate > today) {
+              latestIsFuture = true;
+            }
+          }
+
+          if (latestIsFuture) {
+            // Scenario A: Latest is Future
+            // Next = Index 0
+            // Current = Index 1
+            // Previous = Index 2
+            nextSet = sortedSets[0] || null;
+            currentSet = sortedSets[1] || null;
+            previousSet = sortedSets[2] || null;
+          } else {
+            // Scenario B: Latest is Present/Past (or No Date)
+            // Next = null (No future plan)
+            // Current = Index 0
+            // Previous = Index 1
+            nextSet = null;
+            currentSet = sortedSets[0] || null;
+            previousSet = sortedSets[1] || null;
+          }
         }
+
+        setRosterSets({
+          next: nextSet,
+          current: currentSet,
+          previous: previousSet
+        });
+
+        // Default to Current View
+        const dataToLoad = viewMode === 'current' ? currentSet :
+          viewMode === 'previous' ? previousSet : nextSet;
+
+        if (dataToLoad) {
+          const parsedAssignments = parseRosterData(dataToLoad, currentStaffData, currentStaffOnLeave);
+          setAssignments(parsedAssignments);
+          setLastSaveTime(dataToLoad[0].timestamp);
+          setCurrentSetDate(dataToLoad[0].timestamp);
+        } else {
+          // Clear if the selected view has no data
+          const initialAssignments = {};
+          wards.forEach(ward => {
+            initialAssignments[ward] = {
+              'Shift A': [],
+              'Shift B': [],
+              'Shift C': []
+            };
+          });
+          setAssignments(initialAssignments);
+          setLastSaveTime(null);
+          setCurrentSetDate(null);
+        }
+
       } else {
         console.log('No roster data found, initializing empty assignments');
-        // Initialize empty assignments
         const initialAssignments = {};
         wards.forEach(ward => {
           initialAssignments[ward] = {
@@ -444,6 +524,7 @@ const Roster = () => {
           };
         });
         setAssignments(initialAssignments);
+        setRosterSets({ previous: null, current: null, next: null });
       }
     } catch (err) {
       console.error('Error in fetchLatestRosterData:', err);
@@ -452,6 +533,38 @@ const Roster = () => {
       setLoadingRoster(false);
     }
   };
+
+  // Effect to handle View Mode Switch
+  useEffect(() => {
+    // When viewMode changes, reload assignments from the stored rosterSets
+    // But ONLY if rosterSets is populated (avoid running on initial mount before fetch)
+    if (rosterSets.current || rosterSets.previous || rosterSets.next) {
+      let set = null;
+      if (viewMode === 'current') set = rosterSets.current;
+      else if (viewMode === 'previous') set = rosterSets.previous;
+      else if (viewMode === 'next') set = rosterSets.next;
+
+      if (set) {
+        const parsed = parseRosterData(set, staffData, staffOnLeave);
+        setAssignments(parsed);
+        setLastSaveTime(set[0].timestamp);
+        setCurrentSetDate(set[0].timestamp);
+      } else {
+        // Initialize empty if no set for this view
+        const initialAssignments = {};
+        wards.forEach(ward => {
+          initialAssignments[ward] = {
+            'Shift A': [],
+            'Shift B': [],
+            'Shift C': []
+          };
+        });
+        setAssignments(initialAssignments);
+        setLastSaveTime(null);
+        setCurrentSetDate(null);
+      }
+    }
+  }, [viewMode, rosterSets, staffData, staffOnLeave]);
 
   // Fetch staff data and roster data from Supabase
   useEffect(() => {
@@ -525,6 +638,11 @@ const Roster = () => {
     };
 
     fetchData();
+  }, []);
+
+  // Initialize start date with today
+  useEffect(() => {
+    setStartDate(getTodayDateStr());
   }, []);
 
   // Clean up assignments when leave data changes
@@ -988,7 +1106,10 @@ const Roster = () => {
   };
 
   // Handle save roster to Supabase - ALWAYS CREATE NEW ROWS
-  const handleSaveRoster = async () => {
+  const proceedWithSave = async () => {
+    // Close modal first
+    setShowStartDateModal(false);
+
     try {
       // Show saving toast
       showToast('Saving roster data...', 'info');
@@ -1014,6 +1135,7 @@ const Roster = () => {
         const insertData = {
           timestamp: timestamp,
           shift: shift.name,
+          start_date: startDate // Add start_date to the payload
         };
 
         // Fill ward columns with structured JSON
@@ -1135,6 +1257,11 @@ const Roster = () => {
       // Show backup toast
       showToast('Data has been downloaded as backup JSON file.', 'warning');
     }
+  };
+
+  // Trigger save flow - open modal
+  const handleSaveRoster = () => {
+    setShowStartDateModal(true);
   };
 
   // Calculate statistics
@@ -1261,160 +1388,178 @@ const Roster = () => {
           )}
         </div>
 
-        {/* Compact Controls */}
+        {/* Compact Controls & Navigation */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4 bg-white p-3 rounded-lg shadow-sm">
-          {/* <div className="flex flex-wrap gap-1">
+          {/* Navigation Buttons */}
+          <div className="flex bg-gray-100 rounded p-1">
             <button
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
-              onClick={handleSelectAll}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === 'previous' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setViewMode('previous')}
             >
-              Select All ({getAllSelectedCount()})
+              Previous
             </button>
             <button
-              className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 transition-colors"
-              onClick={handleDeselectAll}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === 'current' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setViewMode('current')}
             >
-              Deselect All
-            </button>
-          </div> */}
-          <div className="flex flex-wrap gap-1">
-            <button
-              className="px-3 py-1.5 bg-rose-500 text-white rounded text-xs font-medium hover:bg-rose-600 transition-colors"
-              onClick={handleClearAllAssignments}
-            >
-              Clear All
+              Current
             </button>
             <button
-              className="px-3 py-1.5 bg-emerald-500 text-white rounded text-xs font-medium hover:bg-emerald-600 transition-colors"
-              onClick={handleSaveRoster}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === 'next' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setViewMode('next')}
             >
-              Save Roster
+              Next
             </button>
           </div>
+
+          {/* Action Buttons - ONLY SHOW IN CURRENT MODE */}
+          {viewMode === 'current' && (
+            <div className="flex flex-wrap gap-1">
+              <button
+                className="px-3 py-1.5 bg-rose-500 text-white rounded text-xs font-medium hover:bg-rose-600 transition-colors"
+                onClick={handleClearAllAssignments}
+              >
+                Clear All
+              </button>
+              <button
+                className="px-3 py-1.5 bg-emerald-500 text-white rounded text-xs font-medium hover:bg-emerald-600 transition-colors"
+                onClick={handleSaveRoster}
+              >
+                Save Roster
+              </button>
+            </div>
+          )}
+          {viewMode !== 'current' && (
+            <div className="px-3 py-1.5 text-xs text-gray-500 italic bg-gray-50 rounded border border-gray-200">
+              Read-Only Mode
+            </div>
+          )}
         </div>
 
         {/* Main Content - Responsive Layout */}
         <div className="flex flex-col lg:flex-row gap-4 mb-4">
-          {/* Left Column - Staff Lists */}
-          <div className="lg:w-1/4 xl:w-1/5">
-            <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm h-full">
-              <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
-                <h2 className="text-base font-semibold text-gray-700">
-                  Available Staff
-                </h2>
-                <div className="text-xs text-gray-500">
-                  {getSelectedCountForActiveTab()}/{getActiveTabStaff().length} selected
-                </div>
-              </div>
-
-              {/* Tab Navigation - Compact */}
-              <div className="flex border-b border-gray-200 mb-2">
-                <button
-                  className={`flex-1 py-1.5 text-xs font-medium ${activeTab === 'nurses' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                  onClick={() => setActiveTab('nurses')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                    <span>Nurses ({getAvailableStaff('nurses').length})</span>
-                  </div>
-                </button>
-                <button
-                  className={`flex-1 py-1.5 text-xs font-medium ${activeTab === 'rmos' ? 'text-rose-600 border-b-2 border-rose-600' : 'text-gray-500 hover:text-gray-700'}`}
-                  onClick={() => setActiveTab('rmos')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                    <span>RMO ({getAvailableStaff('rmos').length})</span>
-                  </div>
-                </button>
-                <button
-                  className={`flex-1 py-1.5 text-xs font-medium ${activeTab === 'otStaff' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
-                  onClick={() => setActiveTab('otStaff')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                    <span>OT ({getAvailableStaff('otStaff').length})</span>
-                  </div>
-                </button>
-              </div>
-
-              {/* Tab Content */}
-              <div className="mb-1">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1">
-                    <div className={`w-2 h-2 rounded-full ${activeTab === 'nurses' ? 'bg-blue-500' :
-                      activeTab === 'rmos' ? 'bg-rose-500' :
-                        'bg-emerald-500'
-                      }`}></div>
-                    <h3 className="text-xs font-medium text-gray-700">
-                      {activeTab === 'nurses' ? 'Nursing Staff' :
-                        activeTab === 'rmos' ? 'RMO Staff' :
-                          'OT Staff'}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={handleSelectAllActiveTab}
-                      className="text-xs text-blue-600 hover:text-blue-800 px-1 py-0.5 hover:bg-blue-50 rounded"
-                    >
-                      {getSelectedCountForActiveTab() === getActiveTabStaff().length ? 'Deselect' : 'Select All'}
-                    </button>
+          {/* Left Column - Staff Lists - HIDDEN IN PREVIOUS/NEXT */}
+          {viewMode === 'current' && (
+            <div className="lg:w-1/4 xl:w-1/5">
+              <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm h-full">
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+                  <h2 className="text-base font-semibold text-gray-700">
+                    Available Staff
+                  </h2>
+                  <div className="text-xs text-gray-500">
+                    {getSelectedCountForActiveTab()}/{getActiveTabStaff().length} selected
                   </div>
                 </div>
 
-                <div className="space-y-1 max-h-[200px] md:max-h-[300px] overflow-y-auto pr-1">
-                  {getActiveTabStaff().map((staff, index) => {
-                    const categoryPrefix = activeTab === 'nurses' ? 'nurse_' :
-                      activeTab === 'rmos' ? 'rmo_' : 'ot_';
-                    const staffId = `${categoryPrefix}${staff.replace(/\s+/g, '_')}`;
-                    const isSelected = selectedStaff.has(staffId);
-                    const staffType = activeTab === 'nurses' ? 'nurse' :
-                      activeTab === 'rmos' ? 'rmo' : 'ot';
-
-                    return (
-                      <div
-                        key={index}
-                        className={`flex items-center p-2 rounded cursor-pointer transition-all select-none ${isSelected
-                          ? activeTab === 'nurses' ? 'bg-blue-50 border border-blue-200 shadow-xs' :
-                            activeTab === 'rmos' ? 'bg-rose-50 border border-rose-200 shadow-xs' :
-                              'bg-emerald-50 border border-emerald-200 shadow-xs'
-                          : 'bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:shadow-xs'
-                          }`}
-                        onClick={() => handleStaffSelection(staffId)}
-                        draggable="true"
-                        onDragStart={(e) => handleDragStart(e, staffId, staff, staffType)}
-                      >
-                        <div className="flex items-center flex-1">
-                          <div className={`w-3 h-3 rounded mr-2 flex items-center justify-center ${isSelected ?
-                            (activeTab === 'nurses' ? 'bg-blue-500' :
-                              activeTab === 'rmos' ? 'bg-rose-500' :
-                                'bg-emerald-500') :
-                            'border border-gray-300'
-                            }`}>
-                            {isSelected && <span className="text-white text-xs">✓</span>}
-                          </div>
-                          <span className="text-gray-700 text-xs truncate">{staff}</span>
-                        </div>
-                        <div className="text-gray-400 text-xs bg-gray-100 px-1 py-0.5 rounded text-nowrap">
-                          Drag
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {getActiveTabStaff().length === 0 && (
-                    <div className="text-center py-4 text-gray-400 text-xs italic">
-                      No {activeTab === 'nurses' ? 'nursing' :
-                        activeTab === 'rmos' ? 'RMO' :
-                          'OT'} staff available
+                {/* Tab Navigation - Compact */}
+                <div className="flex border-b border-gray-200 mb-2">
+                  <button
+                    className={`flex-1 py-1.5 text-xs font-medium ${activeTab === 'nurses' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setActiveTab('nurses')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                      <span>Nurses ({getAvailableStaff('nurses').length})</span>
                     </div>
-                  )}
+                  </button>
+                  <button
+                    className={`flex-1 py-1.5 text-xs font-medium ${activeTab === 'rmos' ? 'text-rose-600 border-b-2 border-rose-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setActiveTab('rmos')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
+                      <span>RMO ({getAvailableStaff('rmos').length})</span>
+                    </div>
+                  </button>
+                  <button
+                    className={`flex-1 py-1.5 text-xs font-medium ${activeTab === 'otStaff' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => setActiveTab('otStaff')}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                      <span>OT ({getAvailableStaff('otStaff').length})</span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Tab Content */}
+                <div className="mb-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1">
+                      <div className={`w-2 h-2 rounded-full ${activeTab === 'nurses' ? 'bg-blue-500' :
+                        activeTab === 'rmos' ? 'bg-rose-500' :
+                          'bg-emerald-500'
+                        }`}></div>
+                      <h3 className="text-xs font-medium text-gray-700">
+                        {activeTab === 'nurses' ? 'Nursing Staff' :
+                          activeTab === 'rmos' ? 'RMO Staff' :
+                            'OT Staff'}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={handleSelectAllActiveTab}
+                        className="text-xs text-blue-600 hover:text-blue-800 px-1 py-0.5 hover:bg-blue-50 rounded"
+                      >
+                        {getSelectedCountForActiveTab() === getActiveTabStaff().length ? 'Deselect' : 'Select All'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 max-h-[200px] md:max-h-[300px] overflow-y-auto pr-1">
+                    {getActiveTabStaff().map((staff, index) => {
+                      const categoryPrefix = activeTab === 'nurses' ? 'nurse_' :
+                        activeTab === 'rmos' ? 'rmo_' : 'ot_';
+                      const staffId = `${categoryPrefix}${staff.replace(/\s+/g, '_')}`;
+                      const isSelected = selectedStaff.has(staffId);
+                      const staffType = activeTab === 'nurses' ? 'nurse' :
+                        activeTab === 'rmos' ? 'rmo' : 'ot';
+
+                      return (
+                        <div
+                          key={index}
+                          className={`flex items-center p-2 rounded cursor-pointer transition-all select-none ${isSelected
+                            ? activeTab === 'nurses' ? 'bg-blue-50 border border-blue-200 shadow-xs' :
+                              activeTab === 'rmos' ? 'bg-rose-50 border border-rose-200 shadow-xs' :
+                                'bg-emerald-50 border border-emerald-200 shadow-xs'
+                            : 'bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:shadow-xs'
+                            }`}
+                          onClick={() => handleStaffSelection(staffId)}
+                          draggable="true"
+                          onDragStart={(e) => handleDragStart(e, staffId, staff, staffType)}
+                        >
+                          <div className="flex items-center flex-1">
+                            <div className={`w-3 h-3 rounded mr-2 flex items-center justify-center ${isSelected ?
+                              (activeTab === 'nurses' ? 'bg-blue-500' :
+                                activeTab === 'rmos' ? 'bg-rose-500' :
+                                  'bg-emerald-500') :
+                              'border border-gray-300'
+                              }`}>
+                              {isSelected && <span className="text-white text-xs">✓</span>}
+                            </div>
+                            <span className="text-gray-700 text-xs truncate">{staff}</span>
+                          </div>
+                          <div className="text-gray-400 text-xs bg-gray-100 px-1 py-0.5 rounded text-nowrap">
+                            Drag
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {getActiveTabStaff().length === 0 && (
+                      <div className="text-center py-4 text-gray-400 text-xs italic">
+                        No {activeTab === 'nurses' ? 'nursing' :
+                          activeTab === 'rmos' ? 'RMO' :
+                            'OT'} staff available
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Middle Column - Roster Table */}
-          <div className="lg:w-1/2 xl:w-3/5">
+          <div className={`${viewMode === 'current' ? 'lg:w-1/2 xl:w-3/5' : 'w-full'}`}>
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-full flex flex-col">
               <div className="p-3 border-b border-gray-200">
                 <div className="flex items-center justify-between">
@@ -1488,15 +1633,17 @@ const Roster = () => {
                                         }`}
                                     >
                                       <span className="truncate">{assignment.name}</span>
-                                      <button
-                                        className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors text-xs"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleRemoveAssignment(assignment.id, ward, shift.name);
-                                        }}
-                                      >
-                                        ×
-                                      </button>
+                                      {viewMode === 'current' && (
+                                        <button
+                                          className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors text-xs"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveAssignment(assignment.id, ward, shift.name);
+                                          }}
+                                        >
+                                          ×
+                                        </button>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -1542,96 +1689,98 @@ const Roster = () => {
             </div>
           </div>
 
-          {/* Right Column - Staff on Leave */}
-          <div className="lg:w-1/4 xl:w-1/5">
-            <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm h-full">
-              <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
-                <h2 className="text-base font-semibold text-gray-700">
-                  Staff on Leave
-                </h2>
-                {leaveCounts.total > 0 && (
-                  <button
-                    onClick={handleClearAllLeave}
-                    className="text-xs text-rose-600 hover:text-rose-800 px-1.5 py-0.5 hover:bg-rose-50 rounded"
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
-
-              <div
-                className={`min-h-[100px] border-2 border-dashed rounded p-2 mb-3 ${draggingOver === 'leave-section'
-                  ? 'bg-amber-50 border-amber-300'
-                  : 'border-gray-200'
-                  }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDraggingOver('leave-section');
-                }}
-                onDragLeave={() => setDraggingOver(null)}
-                onDrop={handleDropOnLeave}
-              >
-                <div className="text-center">
-                  <div className="text-amber-500 mb-1">
-                    <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                  </div>
-                  <p className="text-xs text-gray-600 mb-0.5">
-                    Drop staff here to mark as on leave
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    They will be hidden from available staff
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 max-h-[150px] md:max-h-[250px] overflow-y-auto">
-                {/* Unified Staff on Leave List */}
-                {[
-                  ...Array.from(staffOnLeave.nurses).map(name => ({ name, type: 'nurse' })),
-                  ...Array.from(staffOnLeave.rmos).map(name => ({ name, type: 'rmo' })),
-                  ...Array.from(staffOnLeave.otStaff).map(name => ({ name, type: 'ot' }))
-                ].sort((a, b) => a.name.localeCompare(b.name)).map((staff, index) => (
-                  <div
-                    key={`${staff.type}-${index}`}
-                    className="flex items-center justify-between p-2 bg-amber-50 border border-amber-200 rounded text-xs"
-                  >
-                    <div className="flex items-center">
-                      <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${staff.type === 'nurse' ? 'bg-blue-500' :
-                        staff.type === 'rmo' ? 'bg-rose-500' : 'bg-emerald-500'
-                        }`}></div>
-                      <span className="text-gray-700 line-through truncate">{staff.name}</span>
-                    </div>
+          {/* Right Column - Staff on Leave - HIDDEN IN PREVIOUS/NEXT */}
+          {viewMode === 'current' && (
+            <div className="lg:w-1/4 xl:w-1/5">
+              <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm h-full">
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+                  <h2 className="text-base font-semibold text-gray-700">
+                    Staff on Leave
+                  </h2>
+                  {leaveCounts.total > 0 && (
                     <button
-                      onClick={() => handleRemoveFromLeave(staff.name, staff.type)}
-                      className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                      onClick={handleClearAllLeave}
+                      className="text-xs text-rose-600 hover:text-rose-800 px-1.5 py-0.5 hover:bg-rose-50 rounded"
                     >
-                      ×
+                      Clear All
                     </button>
-                  </div>
-                ))}
+                  )}
+                </div>
 
-                {leaveCounts.total === 0 && (
-                  <div className="text-center py-3 text-gray-400 text-xs italic">
-                    No staff on leave
+                <div
+                  className={`min-h-[100px] border-2 border-dashed rounded p-2 mb-3 ${draggingOver === 'leave-section'
+                    ? 'bg-amber-50 border-amber-300'
+                    : 'border-gray-200'
+                    }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDraggingOver('leave-section');
+                  }}
+                  onDragLeave={() => setDraggingOver(null)}
+                  onDrop={handleDropOnLeave}
+                >
+                  <div className="text-center">
+                    <div className="text-amber-500 mb-1">
+                      <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-0.5">
+                      Drop staff here to mark as on leave
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      They will be hidden from available staff
+                    </p>
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div className="mt-3 pt-2 border-t border-gray-200">
-                <div className="text-center">
-                  <div className="text-xs text-gray-600">
-                    <span className="font-medium">{leaveCounts.total}</span> staff on leave
-                  </div>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    Drag staff here to mark as absent
+                <div className="space-y-2 max-h-[150px] md:max-h-[250px] overflow-y-auto">
+                  {/* Unified Staff on Leave List */}
+                  {[
+                    ...Array.from(staffOnLeave.nurses).map(name => ({ name, type: 'nurse' })),
+                    ...Array.from(staffOnLeave.rmos).map(name => ({ name, type: 'rmo' })),
+                    ...Array.from(staffOnLeave.otStaff).map(name => ({ name, type: 'ot' }))
+                  ].sort((a, b) => a.name.localeCompare(b.name)).map((staff, index) => (
+                    <div
+                      key={`${staff.type}-${index}`}
+                      className="flex items-center justify-between p-2 bg-amber-50 border border-amber-200 rounded text-xs"
+                    >
+                      <div className="flex items-center">
+                        <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${staff.type === 'nurse' ? 'bg-blue-500' :
+                          staff.type === 'rmo' ? 'bg-rose-500' : 'bg-emerald-500'
+                          }`}></div>
+                        <span className="text-gray-700 line-through truncate">{staff.name}</span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveFromLeave(staff.name, staff.type)}
+                        className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+
+                  {leaveCounts.total === 0 && (
+                    <div className="text-center py-3 text-gray-400 text-xs italic">
+                      No staff on leave
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-gray-200">
+                  <div className="text-center">
+                    <div className="text-xs text-gray-600">
+                      <span className="font-medium">{leaveCounts.total}</span> staff on leave
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      Drag staff here to mark as absent
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Summary Cards - Compact Grid */}
@@ -1771,6 +1920,46 @@ const Roster = () => {
           </div>
         )}
       </div>
+
+      {/* Start Date Selection Modal */}
+      {showStartDateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 animate-scale-in">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Start Date</h3>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Roster Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                This date will be associated with the roster assignments.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowStartDateModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={proceedWithSave}
+                disabled={!startDate}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

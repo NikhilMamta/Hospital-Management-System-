@@ -436,7 +436,7 @@ export default function Nursing() {
                       <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Shift</th>
                       <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Assigned Nurse</th>
                       <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Ward/Bed</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Reminder</th>
+                      {/* <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Reminder</th> */}
                       <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Planned Time</th>
                       {activeTab === 'history' && (
                         <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actual Time</th>

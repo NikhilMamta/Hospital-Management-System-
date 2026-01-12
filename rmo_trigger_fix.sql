@@ -91,6 +91,7 @@ BEGIN
             ) AS rmo_name
         FROM roster
         WHERE shift = v_shift
+          AND (start_date <= current_date OR start_date IS NULL)
         ORDER BY created_at DESC
         LIMIT 3
     ) rmos

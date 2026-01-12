@@ -101,10 +101,13 @@ const ManageUsers = () => {
     profile_image: ''
   });
   const [imageFile, setImageFile] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { showNotification } = useNotification();
 
   // Fetch users from Supabase
   useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('mis_user'));
+    setIsAdmin(user?.role === 'admin');
     fetchUsers();
   }, []);
 
@@ -518,13 +521,15 @@ const ManageUsers = () => {
               </div>
             </div>
           </div>
-          <button
-            onClick={handleAddUser}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg text-sm md:text-base"
-          >
-            <Plus size={18} className="md:w-5 md:h-5" />
-            Add New User
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleAddUser}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg text-sm md:text-base"
+            >
+              <Plus size={18} className="md:w-5 md:h-5" />
+              Add New User
+            </button>
+          )}
         </div>
       </div>
 
@@ -609,13 +614,15 @@ const ManageUsers = () => {
                   >
                     <Edit size={14} />
                   </button>
-                  <button
-                    onClick={() => handleDeleteUser(user.id)}
-                    className="p-1.5 text-red-600 bg-red-50 rounded-lg"
-                    title="Delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDeleteUser(user.id)}
+                      className="p-1.5 text-red-600 bg-red-50 rounded-lg"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -813,13 +820,15 @@ const ManageUsers = () => {
                         >
                           <Edit size={18} />
                         </button>
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete user"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete user"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
