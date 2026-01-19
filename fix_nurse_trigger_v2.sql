@@ -32,14 +32,16 @@ begin
                         then (CASE WHEN coalesce(female_general_ward,'') <> '' THEN female_general_ward::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
                     when lower(replace(new.ward_type,' ', '_')) like '%male%' 
                         then (CASE WHEN coalesce(male_general_ward,'') <> '' THEN male_general_ward::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
+                    when lower(replace(new.ward_type,' ', '_')) like '%nicu%' 
+                        then (CASE WHEN coalesce(nicu,'') <> '' THEN nicu::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
+                    when lower(replace(new.ward_type,' ', '_')) like '%picu%' 
+                        then (CASE WHEN coalesce(picu,'') <> '' THEN picu::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
                     when lower(replace(new.ward_type,' ', '_')) like '%icu%' 
                         then (CASE WHEN coalesce(icu,'') <> '' THEN icu::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
                     when lower(replace(new.ward_type,' ', '_')) like '%hdu%' 
                         then (CASE WHEN coalesce(hdu,'') <> '' THEN hdu::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
                     when lower(replace(new.ward_type,' ', '_')) like '%private%' 
                         then (CASE WHEN coalesce(private_ward,'') <> '' THEN private_ward::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
-                    when lower(replace(new.ward_type,' ', '_')) like '%nicu%' 
-                        then (CASE WHEN coalesce(nicu,'') <> '' THEN nicu::jsonb ELSE '{"nurse":[]}'::jsonb END)->'nurse'
                     else '{"nurse":[]}'::jsonb -> 'nurse'
                 end
             ) as nurse_name
@@ -57,7 +59,7 @@ begin
         where nat.assign_nurse = nurse_name
           and nat.shift = v_shift
           and nat.start_date = current_date
-          and nat.status = 'at once'
+          and nat.status IN ('at once', 'picu', 'nicu')
     )
     limit 1;
 
@@ -109,6 +111,92 @@ begin
             'at once'
         );
     end loop;
+
+    -- Additional tasks for PICU
+    if lower(replace(new.ward_type,' ', '_')) like '%picu%' then
+        for v_task in
+            select task
+            from pre_defined_task
+            where staff = 'nurse'
+              and status = 'picu'
+        loop
+            insert into nurse_assign_task (
+                timestamp,
+                "Ipd_number",
+                patient_location,
+                patient_name,
+                ward_type,
+                reminder,
+                room,
+                bed_no,
+                shift,
+                assign_nurse,
+                start_date,
+                task,
+                planned1,
+                status
+            )
+            values (
+                now() at time zone 'Asia/Kolkata',
+                new.ipd_number,
+                new.bed_location,
+                new.patient_name,
+                new.ward_type,
+                'No',
+                new.room,
+                new.bed_no,
+                v_shift,
+                v_nurse,
+                current_date,
+                v_task.task,
+                now() at time zone 'Asia/Kolkata',
+                'picu'
+            );
+        end loop;
+    end if;
+
+    -- Additional tasks for NICU
+    if lower(replace(new.ward_type,' ', '_')) like '%nicu%' then
+        for v_task in
+            select task
+            from pre_defined_task
+            where staff = 'nurse'
+              and status = 'nicu'
+        loop
+            insert into nurse_assign_task (
+                timestamp,
+                "Ipd_number",
+                patient_location,
+                patient_name,
+                ward_type,
+                reminder,
+                room,
+                bed_no,
+                shift,
+                assign_nurse,
+                start_date,
+                task,
+                planned1,
+                status
+            )
+            values (
+                now() at time zone 'Asia/Kolkata',
+                new.ipd_number,
+                new.bed_location,
+                new.patient_name,
+                new.ward_type,
+                'No',
+                new.room,
+                new.bed_no,
+                v_shift,
+                v_nurse,
+                current_date,
+                v_task.task,
+                now() at time zone 'Asia/Kolkata',
+                'nicu'
+            );
+        end loop;
+    end if;
 
     raise notice 'All tasks assigned to nurse %', v_nurse;
     return new;

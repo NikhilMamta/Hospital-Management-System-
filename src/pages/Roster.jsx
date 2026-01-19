@@ -9,6 +9,7 @@ const Roster = () => {
     "HDU",
     "Private Ward",
     "NICU",
+    "PICU",
   ];
 
   const shifts = [
@@ -219,6 +220,9 @@ const Roster = () => {
             break;
           case 'NICU':
             columnName = 'nicu';
+            break;
+          case 'PICU':
+            columnName = 'picu';
             break;
           default:
             columnName = ward.toLowerCase().replace(/\s+/g, '_');
@@ -1160,6 +1164,9 @@ const Roster = () => {
               break;
             case 'NICU':
               columnName = 'nicu';
+              break;
+            case 'PICU':
+              columnName = 'picu';
               break;
             default:
               columnName = ward.toLowerCase().replace(/\s+/g, '_');

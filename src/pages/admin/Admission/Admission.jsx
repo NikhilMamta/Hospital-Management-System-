@@ -56,7 +56,8 @@ const Admission = () => {
           gender: patient.gender || 'Male',
           status: patient.status || 'pending',
           timestamp: patient.timestamp || '',
-          timestampFormatted: patient.timestamp ? patient.timestamp : '-'
+          timestampFormatted: patient.timestamp ? patient.timestamp : '-',
+          submittedBy: patient.submitted_by || '-'
         }));
 
         setPatients(transformedPatients);
@@ -181,6 +182,16 @@ const Admission = () => {
           hour12: false
         }).replace(',', '');
 
+        let submittedBy = 'Unknown';
+        try {
+          const misUser = JSON.parse(localStorage.getItem('mis_user'));
+          if (misUser && misUser.name) {
+            submittedBy = misUser.name;
+          }
+        } catch (e) {
+          console.error('Error fetching user name:', e);
+        }
+
         const patientData = {
           timestamp: timestamp,
           admission_no: generateAdmissionNo(),
@@ -192,7 +203,8 @@ const Admission = () => {
           age: formData.age,
           gender: formData.gender,
           status: 'pending',
-          planned1: timestamp
+          planned1: timestamp,
+          submitted_by: submittedBy
         };
 
         const { error } = await supabase
@@ -317,6 +329,7 @@ const Admission = () => {
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Age</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Gender</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Admission Time</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Submitted By</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Action</th>
               </tr>
             </thead>
@@ -362,6 +375,9 @@ const Admission = () => {
                       {patient.timestampFormatted ? new Date(patient.timestampFormatted).toLocaleString('en-GB', {
                         hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
                       }) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                      {patient.submittedBy}
                     </td>
                     <td className="px-4 py-3 text-sm whitespace-nowrap">
                       <button
@@ -445,6 +461,10 @@ const Admission = () => {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Age/Gender:</span>
                   <span className="font-medium text-gray-900">{patient.age} / {patient.gender}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Submitted By:</span>
+                  <span className="font-medium text-gray-900">{patient.submittedBy}</span>
                 </div>
                 <div className="pt-2 mt-2 border-t border-gray-100">
                   <span className="text-gray-600">Reason:</span>

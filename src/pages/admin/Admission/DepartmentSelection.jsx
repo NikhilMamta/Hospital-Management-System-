@@ -108,7 +108,8 @@ const DepartmentSelection = () => {
           planned1: patient.planned1 || '',
           actual1: patient.actual1 || '',
           planned1Formatted: patient.planned1 ? patient.planned1.split(' ')[0].split('-').reverse().join('/') + ' ' + (patient.planned1.split(' ')[1]?.substring(0, 5) || '') : '-',
-          actual1Formatted: patient.actual1 ? patient.actual1.split(' ')[0].split('-').reverse().join('/') + ' ' + (patient.actual1.split(' ')[1]?.substring(0, 5) || '') : '-'
+          actual1Formatted: patient.actual1 ? patient.actual1.split(' ')[0].split('-').reverse().join('/') + ' ' + (patient.actual1.split(' ')[1]?.substring(0, 5) || '') : '-',
+          submittedBy: patient.submitted_by || '-'
         }));
 
         const pending = transformedPatients.filter(p => p.status === 'pending');
@@ -367,12 +368,13 @@ const DepartmentSelection = () => {
                       <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Reason For Visit</th>
                       <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Age</th>
                       <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Gender</th>
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Submitted By</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {isLoading ? (
                       <tr>
-                        <td colSpan="11" className="px-4 py-8 text-center text-gray-500">
+                        <td colSpan="12" className="px-4 py-8 text-center text-gray-500">
                           <div className="flex flex-col items-center">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
                             <p className="text-gray-700">Loading patients...</p>
@@ -421,11 +423,14 @@ const DepartmentSelection = () => {
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {patient.gender}
                           </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {patient.submittedBy}
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="11" className="px-4 py-8 text-center text-gray-500">
+                        <td colSpan="12" className="px-4 py-8 text-center text-gray-500">
                           <Clock className="mx-auto mb-2 w-12 h-12 text-gray-300" />
                           <p className="text-lg font-medium text-gray-900">
                             {searchQuery ? 'No patients found matching your search' : 'No pending assignments'}
@@ -488,6 +493,10 @@ const DepartmentSelection = () => {
                         <span className="text-gray-600">Age/Gender:</span>
                         <span className="font-medium text-gray-900">{patient.age} / {patient.gender}</span>
                       </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Submitted By:</span>
+                        <span className="font-medium text-gray-900">{patient.submittedBy}</span>
+                      </div>
                       <div className="pt-2 mt-2 border-t border-gray-100">
                         <span className="text-gray-600">Reason:</span>
                         <p className="mt-1 text-sm text-gray-900">{patient.reasonForVisit}</p>
@@ -524,13 +533,13 @@ const DepartmentSelection = () => {
                       <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Reason For Visit</th>
                       <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Age</th>
                       <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Gender</th>
-                      {/* <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Date Assigned</th> */}
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">Submitted By</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {isLoading ? (
                       <tr>
-                        <td colSpan="13" className="px-4 py-8 text-center text-gray-500">
+                        <td colSpan="14" className="px-4 py-8 text-center text-gray-500">
                           <div className="flex flex-col items-center">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
                             <p className="text-gray-700">Loading patients...</p>
@@ -578,14 +587,14 @@ const DepartmentSelection = () => {
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {patient.gender}
                           </td>
-                          {/* <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                            {formatDate(patient.assignedDate)}
-                          </td> */}
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {patient.submittedBy}
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="13" className="px-4 py-8 text-center text-gray-500">
+                        <td colSpan="14" className="px-4 py-8 text-center text-gray-500">
                           <CheckCircle className="mx-auto mb-2 w-12 h-12 text-gray-300" />
                           <p className="text-lg font-medium text-gray-900">
                             {searchQuery ? 'No patients found matching your search' : 'No assignment history'}
@@ -643,6 +652,10 @@ const DepartmentSelection = () => {
                       <div className="flex justify-between">
                         <span className="text-gray-600">Age/Gender:</span>
                         <span className="font-medium text-gray-900">{patient.age} / {patient.gender}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Submitted By:</span>
+                        <span className="font-medium text-gray-900">{patient.submittedBy}</span>
                       </div>
                       <div className="pt-2 mt-2 border-t border-gray-100">
                         <span className="text-gray-600">Reason:</span>
@@ -800,57 +813,35 @@ const DepartmentSelection = () => {
               </button>
             </div>
           </div>
-          {/* Progress bar */}
-          <div className={`h-1 w-full ${notificationType === 'success' ? 'bg-green-200' : 'bg-red-200'
-            }`}>
-            <div className={`h-full ${notificationType === 'success' ? 'bg-green-500' : 'bg-red-500'
-              } animate-progress`}></div>
-          </div>
         </div>
       )}
 
       <style>{`
-        @keyframes scale-in {
-          from {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-        
         @keyframes slide-in {
           from {
-            opacity: 0;
             transform: translateX(100%);
+            opacity: 0;
           }
           to {
-            opacity: 1;
             transform: translateX(0);
+            opacity: 1;
           }
         }
-        
-        @keyframes progress {
+        @keyframes scale-in {
           from {
-            width: 100%;
+            transform: scale(0.95);
+            opacity: 0;
           }
           to {
-            width: 0%;
+            transform: scale(1);
+            opacity: 1;
           }
         }
-        
-        .animate-scale-in {
-          animation: scale-in 0.2s ease-out;
-        }
-        
         .animate-slide-in {
           animation: slide-in 0.3s ease-out;
         }
-        
-        .animate-progress {
-          animation: progress 3s linear forwards;
+        .animate-scale-in {
+          animation: scale-in 0.2s ease-out;
         }
       `}</style>
     </div>

@@ -32,6 +32,12 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- Check 3: Only trigger if the task was JUST completed
+    -- Prevents multiple triggers if actual1 is already set from a previous update
+    IF OLD.actual1 IS NOT NULL THEN
+        RETURN NEW;
+    END IF;
+
     /* --------------------------------------------------
        2. UNIQUENESS CHECK
        Prevent generating duplicate RMO tasks for the same IPD
