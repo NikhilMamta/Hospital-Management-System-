@@ -501,27 +501,7 @@ const PatientAdmissionSystem = () => {
     }
   };
 
-  // Update bed status in all_floor_bed table
-  const updateBedStatus = async (bedId, status) => {
-    try {
-      const { error } = await supabase
-        .from('all_floor_bed')
-        .update({ status: status })
-        .eq('id', bedId);
 
-      if (error) {
-        console.error('Error updating bed status:', error);
-        throw error;
-      }
-
-      // Refresh bed data
-      await loadBedData();
-      return true;
-    } catch (error) {
-      console.error('Failed to update bed status:', error);
-      throw error;
-    }
-  };
 
   // Handle form submission to Supabase
   const handleSubmit = async (e) => {
@@ -560,11 +540,11 @@ const PatientAdmissionSystem = () => {
         adm_purpose: formData.admissionPurpose.trim(),
         location_status: formData.locationStatus,
         floor: formData.floor,
-        // ward: formData.ward,
+        // ward: formData.ward,  // This should match ward_type
         room: formData.room,
         bed_no: formData.bedNo,
         bed_location: formData.bedLocation,
-        ward_type: formData.wardType,
+        ward_type: formData.wardType,  // This is the ward_type field
         bed_tariff: formData.bedTariff,
         kin_name: formData.kinName.trim(),
         kin_relation: formData.kinRelation.trim(),
@@ -593,17 +573,8 @@ const PatientAdmissionSystem = () => {
 
       let result;
 
-      // Update bed status to "Occupied" if a bed is selected
-      if (selectedBedId) {
-        await updateBedStatus(selectedBedId, 'Occupied');
-      }
-
+      // FIRST: Save to ipd_admissions
       if (editingPatient) {
-        // If editing, free the previously occupied bed if changed
-        if (editingPatient.bed_id && editingPatient.bed_id !== selectedBedId) {
-          await updateBedStatus(editingPatient.bed_id, null);
-        }
-
         const { data, error } = await supabase
           .from('ipd_admissions')
           .update(patientData)
@@ -620,8 +591,20 @@ const PatientAdmissionSystem = () => {
 
         if (error) throw error;
         result = data;
+      }
 
-        if (result && result.length > 0) {
+      if (result && result.length > 0) {
+        // Mark the current bed as Occupied
+        await supabase
+          .from('all_floor_bed')
+          .update({ status: 'Occupied' })
+          .eq('floor', patientData.floor)
+          .eq('ward', patientData.ward_type)
+          .eq('room', patientData.room)
+          .eq('bed', patientData.bed_no);
+
+        // Update patient_admission table for new admissions
+        if (!editingPatient && result && result.length > 0) {
           await supabase
             .from('patient_admission')
             .update({
@@ -632,17 +615,14 @@ const PatientAdmissionSystem = () => {
             })
             .eq('admission_no', formData.registrationNumber);
         }
-      }
 
-      if (result && result.length > 0) {
-        // Show success notification instead of alert
+        // Show success notification
         showNotificationPopup(
           `Patient ${editingPatient ? 'updated' : 'admitted'} successfully! IPD Number: ${patientData.ipd_number}`,
           'success'
         );
 
         await loadData();
-
         handleReset();
         setShowModal(false);
         setEditingPatient(null);
