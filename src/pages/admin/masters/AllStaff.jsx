@@ -148,42 +148,6 @@ const AllStaff = () => {
     }
   };
 
-  // Save staff member
-  const saveStaff = async () => {
-    try {
-      // Basic validation
-      if (!formData.name.trim()) {
-        showNotification('Name is required', 'error');
-        return;
-      }
-
-      if (editingStaff) {
-        // Update existing staff
-        const { error } = await supabase
-          .from('all_staff')
-          .update(formData)
-          .eq('id', editingStaff.id);
-
-        if (error) throw error;
-        showNotification('Staff member updated successfully!', 'success');
-      } else {
-        // Insert new staff
-        const { error } = await supabase
-          .from('all_staff')
-          .insert([formData]);
-
-        if (error) throw error;
-        showNotification('Staff member added successfully!', 'success');
-      }
-
-      fetchStaff();
-      closeModal();
-    } catch (error) {
-      console.error('Error saving staff:', error);
-      showNotification('Error saving staff member', 'error');
-    }
-  };
-
   // Delete staff member
   const deleteStaff = async (id) => {
     if (!window.confirm('Are you sure you want to delete this staff member?')) {
@@ -221,13 +185,6 @@ const AllStaff = () => {
           <h1 className="text-xl md:text-2xl font-bold text-gray-800">All Staff Management</h1>
           <p className="hidden md:block text-gray-600 mt-1">Manage hospital staff members</p>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm md:text-base"
-        >
-          <Plus size={18} className="md:w-5 md:h-5" />
-          Add New Staff
-        </button>
       </div>
 
       {/* Search Bar */}

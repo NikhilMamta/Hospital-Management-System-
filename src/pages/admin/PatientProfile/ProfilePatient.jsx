@@ -146,82 +146,131 @@ export default function PatientProfile() {
     const [showFilters, setShowFilters] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState('');
+    const [statusFilter, setStatusFilter] = useState('Active');
 
+    const getShiftTimeRange = () => {
+        const now = new Date();
+        const hour = now.getHours();
+
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000)
+            .toISOString()
+            .split('T')[0];
+
+        if (hour >= 8 && hour < 14) {
+            // Shift A
+            return {
+                shift: 'A',
+                start: `${today} 08:00:00`,
+                end: `${today} 14:00:00`
+            };
+        }
+
+        if (hour >= 14 && hour < 20) {
+            // Shift B
+            return {
+                shift: 'B',
+                start: `${today} 14:00:00`,
+                end: `${today} 20:00:00`
+            };
+        }
+
+        // Shift C (Night shift)
+        if (hour >= 20) {
+            return {
+                shift: 'C',
+                start: `${today} 20:00:00`,
+                end: `${today} 23:59:59`
+            };
+        }
+
+        // Between 12 AM – 8 AM (belongs to previous night shift)
+        return {
+            shift: 'C',
+            start: `${yesterday} 20:00:00`,
+            end: `${today} 08:00:00`
+        };
+    };
     // Load patients from Supabase
     const fetchPatients = useCallback(async () => {
         try {
             setLoading(true);
             setIsRefreshing(true);
 
-            // Get current user details
             const currentUser = JSON.parse(localStorage.getItem('mis_user'));
             const userRole = currentUser?.role?.toLowerCase();
             const userName = currentUser?.name;
 
-            let ipdNumbers = null;
+            const { start, end } = getShiftTimeRange();
+
+            let ipdNumbers = [];
             let shouldFilter = false;
 
-            // Role-based filtering logic
-            if (userRole === 'nurse' || userRole === 'ot' || userRole === 'ot staff') {
+            // ============================
+            // NURSE / OT / OT STAFF
+            // ============================
+            if (['nurse', 'ot', 'ot staff'].includes(userRole)) {
                 shouldFilter = true;
-                // Fetch assigned tasks for Nurse or OT Staff
-                const { data: tasks, error: taskError } = await supabase
+
+                const { data, error } = await supabase
                     .from('nurse_assign_task')
-                    .select('Ipd_number') // Column name is case-sensitive "Ipd_number"
+                    .select('Ipd_number')
                     .eq('assign_nurse', userName)
-                    .not('planned1', 'is', null)
+                    .gte('planned1', start)
+                    .lte('planned1', end)
                     .is('actual1', null);
 
-                if (taskError) {
-                    console.error('Error fetching nurse/ot tasks:', taskError);
-                } else if (tasks) {
-                    ipdNumbers = tasks.map(t => t.Ipd_number);
-                }
-            } else if (userRole === 'rmo') {
-                shouldFilter = true;
-                // Fetch assigned tasks for RMO
-                const { data: tasks, error: taskError } = await supabase
-                    .from('rmo_assign_task')
-                    .select('ipd_number') // Column name is "ipd_number"
-                    .eq('assign_rmo', userName)
-                    .not('planned1', 'is', null)
-                    .is('actual1', null);
-
-                if (taskError) {
-                    console.error('Error fetching rmo tasks:', taskError);
-                } else if (tasks) {
-                    ipdNumbers = tasks.map(t => t.ipd_number);
+                if (!error && data) {
+                    ipdNumbers = data.map(t => t.Ipd_number);
                 }
             }
 
-            // Build the main query
+            // ============================
+            // RMO
+            // ============================
+            else if (userRole === 'rmo') {
+                shouldFilter = true;
+
+                const { data, error } = await supabase
+                    .from('rmo_assign_task')
+                    .select('ipd_number')
+                    .eq('assign_rmo', userName)
+                    .gte('planned1', start)
+                    .lte('planned1', end)
+                    .is('actual1', null);
+
+                if (!error && data) {
+                    ipdNumbers = data.map(t => t.ipd_number);
+                }
+            }
+
+            // ============================
+            // FETCH PATIENTS
+            // ============================
             let query = supabase
                 .from('ipd_admissions')
                 .select('*')
                 .order('timestamp', { ascending: false });
 
-            // Apply filter if applicable
-            if (shouldFilter && ipdNumbers) {
+            if (shouldFilter) {
                 if (ipdNumbers.length > 0) {
-                    query = query.in('ipd_number', ipdNumbers); // Assuming ipd_admissions uses ipd_number
+                    query = query.in('ipd_number', ipdNumbers);
                 } else {
-                    // Start an impossible query to return empty result if no tasks assigned
-                    query = query.eq('id', -1);
+                    query = query.eq('id', -1); // no patients
                 }
-            } else if (shouldFilter && !ipdNumbers) {
-                query = query.eq('id', -1);
             }
 
             const { data, error } = await query;
 
-            if (error) {
-                console.error('Error fetching patients:', error);
-                setPatientsData([]);
-            } else {
+            if (!error) {
                 setPatientsData(data || []);
+            } else {
+                console.error(error);
+                setPatientsData([]);
             }
-        } catch (error) {
-            console.error('Error in fetchPatients:', error);
+
+        } catch (err) {
+            console.error('fetchPatients error:', err);
             setPatientsData([]);
         } finally {
             setLoading(false);
@@ -275,7 +324,12 @@ export default function PatientProfile() {
             wardType === wardFilter;
         const matchesCategory = filterCategory === 'All' || patCategory === filterCategory;
 
-        return matchesSearch && matchesWard && matchesCategory;
+        const matchesStatus =
+            statusFilter === 'All' ||
+            (statusFilter === 'Active' && !patient.actual1) ||
+            (statusFilter === 'Discharged' && patient.actual1);
+
+        return matchesSearch && matchesWard && matchesCategory && matchesStatus;
     });
 
     const handleViewDetails = (patient) => {
@@ -383,6 +437,28 @@ export default function PatientProfile() {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                {/* Status Tabs */}
+                <div className="flex gap-8 mb-4 px-4 lg:px-6 border-b">
+                    {['All', 'Active', 'Discharged'].map((status) => (
+                        <button
+                            key={status}
+                            onClick={() => setStatusFilter(status)}
+                            className={`pb-2 text-sm font-semibold transition-all relative
+                ${statusFilter === status
+                                    ? 'text-green-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                        >
+                            {status}
+
+                            {/* Underline */}
+                            {statusFilter === status && (
+                                <span className="absolute left-0 bottom-0 w-full h-[2px] bg-green-600 rounded-full"></span>
+                            )}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Ward Filter Buttons */}

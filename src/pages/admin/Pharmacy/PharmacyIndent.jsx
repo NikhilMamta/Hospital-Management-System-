@@ -11,6 +11,7 @@ const PharmacyIndents = () => {
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [indents, setIndents] = useState([]);
   const [admissionPatients, setAdmissionPatients] = useState([]);
+  const [activePatientsData, setactivePatientsData] = useState([]);
   const [medicinesList, setMedicinesList] = useState([]);
   const [investigationTests, setInvestigationTests] = useState({
     Pathology: [],
@@ -24,7 +25,10 @@ const PharmacyIndents = () => {
   const { showNotification } = useNotification();
   const [medicineSearchTerm, setMedicineSearchTerm] = useState('');
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(null);
-
+  const [admissionSearch, setAdmissionSearch] = useState('');
+  const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const dropdownRef = useRef(null);
   // Get user name from localStorage
   const getCurrentUser = () => {
     try {
@@ -100,6 +104,23 @@ const PharmacyIndents = () => {
     showNotification(message, type);
   };
 
+  //for closing admission dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target)
+      ) {
+        setShowAdmissionDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   // Load data from Supabase
   useEffect(() => {
     loadData();
@@ -144,6 +165,12 @@ const PharmacyIndents = () => {
         .order('admission_no', { ascending: false });
 
       if (patientsError) throw patientsError;
+
+      const activePatients = admissionPatients.filter(
+        (patient) =>
+          patient.actual1 === null && patient.status === 'Active'
+      );
+      setactivePatientsData(activePatients || []);
       setAdmissionPatients(patientsData || []);
 
     } catch (error) {
@@ -561,32 +588,39 @@ const PharmacyIndents = () => {
         }).replace(',', ''),
       };
 
+      let insertedData;
       if (editMode && selectedIndent) {
         // Update existing indent
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('pharmacy')
           .update(pharmacyData)
-          .eq('id', selectedIndent.id);
+          .eq('id', selectedIndent.id)
+          .select()
+          .single();
 
         if (error) throw error;
+        insertedData = data;
         showPopup('Indent updated successfully!');
       } else {
         // Create new indent
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('pharmacy')
-          .insert([pharmacyData]);
+          .insert([pharmacyData])
+          .select()
+          .single();
 
         if (error) throw error;
+        insertedData = data;
         showPopup('Indent created successfully!');
       }
-
+      console.log(insertedData);
       const totalMedicines = requestTypes.medicineSlip ? medicines.reduce((sum, med) => sum + parseInt(med.quantity || 0), 0) : 0;
 
       setSuccessData({
-        indentNumber: pharmacyData.indent_no,
-        patientName: formData.patientName,
-        admissionNo: formData.admissionNumber,
-        totalMedicines: totalMedicines
+        indentNumber: insertedData.indent_no, // use returned indent_number
+        patientName: insertedData.patient_name,
+        admissionNo: insertedData.admission_number,
+        totalMedicines: totalMedicines,
       });
 
       setShowModal(false);
@@ -979,7 +1013,7 @@ const PharmacyIndents = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
-              <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
+              <div className="sticky top-0 z-40 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
                 <h2 className="text-xl font-bold">{editMode ? 'Edit Indent' : 'Create New Indent'}</h2>
                 <button
                   onClick={() => {
@@ -1000,24 +1034,64 @@ const PharmacyIndents = () => {
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">Patient Information</h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                    <div>
+                    <div className="relative">
                       <label className="block text-sm font-semibold text-gray-700 mb-1">
                         Admission Number <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        name="admissionNumber"
-                        value={formData.admissionNumber}
-                        onChange={(e) => handleAdmissionSelect(e.target.value)}
-                        disabled={editMode || loading}
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100 transition-all text-sm"
-                      >
-                        <option value="">Select Admission</option>
-                        {admissionPatients.map((patient) => (
-                          <option key={patient.admission_no} value={patient.admission_no}>
-                            {patient.admission_no} - {patient.patient_name}
-                          </option>
-                        ))}
-                      </select>
+
+                      <div ref={dropdownRef} className="relative z-10">
+                        <Search className="absolute z-0 left-3 top-3 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={admissionSearch}
+                          onChange={(e) => {
+                            setAdmissionSearch(e.target.value);
+                            setShowAdmissionDropdown(true);
+                          }}
+                          onFocus={() => setShowAdmissionDropdown(true)}
+                          placeholder="Type Admission Number..."
+                          className="w-full px-3 py-2.5 pl-10 pr-3 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-green-500"
+                          disabled={editMode || loading}
+                        />
+
+                        {/* Dropdown */}
+                        {showAdmissionDropdown && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {admissionPatients
+                              .filter(p =>
+                                p.admission_no?.toLowerCase().includes(admissionSearch.toLowerCase()) ||
+                                p.patient_name?.toLowerCase().includes(admissionSearch.toLowerCase())
+                              )
+                              .map((patient) => (
+                                <div
+                                  key={patient.admission_no}
+                                  onMouseDown={() => {
+                                    setSelectedPatient(patient);
+                                    setAdmissionSearch(
+                                      `${patient.admission_no} - ${patient.patient_name}`
+                                    );
+                                    setShowAdmissionDropdown(false);
+                                    handleAdmissionSelect(patient.admission_no);
+                                  }}
+                                  className="px-4 py-2 hover:bg-green-50 cursor-pointer text-sm"
+                                >
+                                  <div className="font-medium">{patient.admission_no}</div>
+                                  <div className="text-xs text-gray-500">
+                                    {patient.patient_name}
+                                  </div>
+                                </div>
+                              ))}
+
+                            {activePatientsData.filter(p =>
+                              p.admission_no?.toLowerCase().includes(admissionSearch.toLowerCase())
+                            ).length === 0 && (
+                                <div className="px-4 py-1 text-sm text-gray-500 text-center">
+                                  No matching admission found
+                                </div>
+                              )}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -1244,6 +1318,12 @@ const PharmacyIndents = () => {
                                 type="number"
                                 min="1"
                                 value={medicine.quantity}
+                                onWheel={(e) => e.target.blur()}
+                                onKeyDown={(e) => {
+                                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                                    e.preventDefault();
+                                  }
+                                }}
                                 onChange={(e) => updateMedicine(medicine.id, 'quantity', e.target.value)}
                                 disabled={loading}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"

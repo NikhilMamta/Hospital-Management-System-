@@ -47,6 +47,7 @@ const ReceiveSample = () => {
             const { data: pending, error: pendingError } = await supabase
                 .from('lab')
                 .select('*')
+                .eq('payment_status', 'Yes')
                 .not('planned2', 'is', null)
                 .is('actual2', null)
                 .order('timestamp', { ascending: false });
@@ -57,6 +58,7 @@ const ReceiveSample = () => {
             const { data: history, error: historyError } = await supabase
                 .from('lab')
                 .select('*')
+                .eq('payment_status', 'Yes')
                 .not('actual2', 'is', null)
                 .order('actual2', { ascending: false })
                 .limit(100);

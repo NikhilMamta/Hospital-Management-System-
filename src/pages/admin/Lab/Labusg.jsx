@@ -60,9 +60,9 @@ const USG = () => {
         .select(`*`)
         .eq('category', 'Radiology')
         .eq('radiology_type', 'USG')
+        .eq('payment_status', 'Yes')
         .not('planned3', 'is', null)
-        .is('actual3', null)
-        .not('payment_status', 'is', null)
+        .is('actual3', null)        
         .order('timestamp', { ascending: false });
 
       if (pendingError) throw pendingError;

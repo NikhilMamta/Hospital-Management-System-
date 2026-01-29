@@ -485,7 +485,7 @@ export default function Pharmacy() {
           hour12: false
         }).replace(',', ''),
         // indent_number provided by insert trigger or generated here
-        indent_no: editMode && selectedIndent ? selectedIndent.indentNumber : generateIndentNumber(), // Careful with field name, PharmacyIndent uses indent_number or indent_no depending on schema. Pharmacy.jsx seems to use indent_no. 
+
         admission_number: formData.admissionNumber || '',
         ipd_number: currentIpdNumber || '',
         staff_name: formData.staffName || '',
@@ -508,25 +508,29 @@ export default function Pharmacy() {
           hour12: false
         }).replace(',', ''),
       };
-
+      let savedRow;
 
       if (editMode && selectedIndent) {
-        // Update existing indent - using indent_no as key
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('pharmacy')
           .update(pharmacyData)
-          .eq('indent_no', selectedIndent.indentNumber);
+          .eq('indent_no', selectedIndent.indentNumber)
+          .select()
+          .single();
 
         if (error) throw error;
+        savedRow = data;
+
         showNotification('Indent updated successfully!');
       } else {
-        // Create new indent
-        // We need to omit indent_no if it is auto-generated in DB, but generateIndentNumber() is used here so we include it.
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('pharmacy')
-          .insert([pharmacyData]);
+          .insert([pharmacyData])
+          .select()
+          .single();
 
         if (error) throw error;
+        savedRow = data;
         showNotification('Indent created successfully!');
       }
 
@@ -535,10 +539,10 @@ export default function Pharmacy() {
       const totalMedicines = requestTypes.medicineSlip ? medicines.reduce((sum, med) => sum + parseInt(med.quantity || 0), 0) : 0;
 
       setSuccessData({
-        indentNumber: pharmacyData.indent_no,
-        patientName: formData.patientName,
-        admissionNo: currentIpdNumber || '',
-        totalMedicines: totalMedicines
+        indentNumber: savedRow.indent_no,
+        patientName: savedRow.patient_name,
+        admissionNo: savedRow.admission_number,
+        totalMedicines
       });
 
       setShowModal(false);
@@ -1266,6 +1270,12 @@ export default function Pharmacy() {
                           <input
                             type="number"
                             min="1"
+                            onWheel={(e) => e.target.blur()}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                                e.preventDefault();
+                              }
+                            }}
                             value={medicine.quantity}
                             onChange={(e) => updateMedicine(medicine.id, 'quantity', e.target.value)}
                             disabled={loading}

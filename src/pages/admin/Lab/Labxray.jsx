@@ -60,9 +60,9 @@ const XRay = () => {
         .select(`*`)
         .eq('category', 'Radiology')
         .eq('radiology_type', 'X-ray')
+        .eq('payment_status', 'Yes')
         .not('planned3', 'is', null)
         .is('actual3', null)
-        .not('payment_status', 'is', null)
         .order('timestamp', { ascending: false });
 
       if (pendingError) throw pendingError;

@@ -39,7 +39,7 @@ import {
   CheckCircle,
   Save,
   Camera,
-  Heart,
+  Briefcase,
   Activity,
   Thermometer,
   AlertCircle,
@@ -96,14 +96,19 @@ const ManageUsers = () => {
     name: '',
     email: '',
     phone_no: '',
-    role: '',
     password: '',
+    role: '',
+    department: '',
     profile_image: ''
   });
   const [imageFile, setImageFile] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const { showNotification } = useNotification();
-
+  const [departments, setDepartments] = useState([
+    'Emergency', 'ICU', 'Cardiology', 'Neurology', 'Orthopedics',
+    'Pediatrics', 'Gynecology', 'Radiology', 'Pathology',
+    'Pharmacy', 'Administration', 'Housekeeping', 'Security'
+  ]);
   // Fetch users from Supabase
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('mis_user'));
@@ -174,9 +179,10 @@ const ManageUsers = () => {
       user_name: '',
       name: '',
       email: '',
+      password: '',
       phone_no: '',
       role: '',
-      password: '',
+      department: '',
       profile_image: ''
     });
     setEditingUser(null);
@@ -194,8 +200,8 @@ const ManageUsers = () => {
       name: user.name || '',
       email: user.email || '',
       phone_no: user.phone_no || '',
-      role: user.role || '',
       password: '',
+      role: user.role || '',
       profile_image: user.profile_image || ''
     });
 
@@ -271,7 +277,7 @@ const ManageUsers = () => {
   const handleModalSubmit = async () => {
     try {
       // Basic validation
-      if (!formData.user_name || !formData.name || !formData.email || !formData.role) {
+      if (!formData.user_name || !formData.name || !formData.email || !formData.role || !formData.department) {
         showNotification('Please fill all required fields', 'error');
         return;
       }
@@ -334,15 +340,24 @@ const ManageUsers = () => {
         if (error) throw error;
         showNotification('User updated successfully', 'success');
       } else {
-        // Create new user
-        const { error } = await supabase
+        const { data: insertedUser, error } = await supabase
           .from('users')
-          .insert([userData]);
+          .insert([userData])
+          .select()
+          .single();
 
         if (error) throw error;
+
+        await supabase.from('all_staff').insert([{
+          name: formData.name,
+          email: formData.email,
+          phone_number: formData.phone_no,
+          department: formData.department,
+          designation: formData.role
+        }]);
+
         showNotification('User created successfully', 'success');
       }
-
       setUploading(false);
       setModalVisible(false);
       fetchUsers();
@@ -927,6 +942,37 @@ const ManageUsers = () => {
                   />
                 </div>
 
+
+                {/* Password (for new users) */}
+                {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Lock size={16} className="text-gray-400" />
+                        <span>Password *</span>
+                      </div>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        placeholder="Enter password"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Phone */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -969,36 +1015,27 @@ const ManageUsers = () => {
                     ))}
                   </select>
                 </div>
-
-                {/* Password (for new users) */}
-                {!editingUser && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Lock size={16} className="text-gray-400" />
-                        <span>Password *</span>
-                      </div>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        name="password"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        placeholder="Enter password"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                      </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Briefcase size={16} className="text-gray-400" />
+                      <span>Department *</span>
                     </div>
-                  </div>
-                )}
+                  </label>
+                  <select
+                    value={formData.department}
+                    onChange={(e) =>
+                      setFormData({ ...formData, department: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map(dep => (
+                      <option key={dep} value={dep}>{dep}</option>
+                    ))}
+                  </select>
+                </div>
 
                 {/* Profile Image - Now spans full width for better display */}
                 <div className="md:col-span-2">
