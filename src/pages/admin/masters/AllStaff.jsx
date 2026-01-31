@@ -71,6 +71,36 @@ const AllStaff = () => {
     fetchStaff();
   }, []);
 
+  // Normalize designation
+  const normalizeDesignation = (designation) =>
+    designation?.toLowerCase().trim() || '';
+
+  // Convert designation to display label
+  const getDisplayDesignation = (designation) => {
+    const normalized = normalizeDesignation(designation);
+
+    if (normalized === 'nurse' || normalized === 'staff nurse') return 'Nurse';
+    if (normalized === 'doctor') return 'Doctor';
+    if (normalized === 'ot staff' || normalized === 'ot') return 'OT Staff';
+    if (normalized === 'rmo') return 'RMO';
+    if (normalized === 'ot superwiser') return 'OT Superwiser';
+    // fallback (Title Case)
+    return designation
+      ? designation.replace(/\b\w/g, c => c.toUpperCase())
+      : 'N/A';
+  };
+
+  // Get badge color class
+  const getDesignationBadgeClass = (designation) => {
+    const normalized = normalizeDesignation(designation);
+
+    if (normalized === 'doctor') return 'bg-blue-100 text-blue-800';
+    if (normalized === 'nurse' || normalized === 'staff nurse')
+      return 'bg-purple-100 text-purple-800';
+
+    return 'bg-gray-100 text-gray-800';
+  };
+
   // Filter staff based on search
   const filteredStaff = staff.filter(staffMember =>
     Object.values(staffMember).some(value =>
@@ -239,13 +269,10 @@ const AllStaff = () => {
               <div className="grid grid-cols-2 gap-3 py-2 border-t border-gray-50 mt-2">
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase font-bold italic">Designation</p>
-                  <span className={`inline-flex px-1.5 py-0.5 mt-0.5 text-[10px] font-medium rounded-full ${staffMember.designation === 'Doctor'
-                    ? 'bg-blue-100 text-blue-800'
-                    : staffMember.designation === 'Nurse'
-                      ? 'bg-purple-100 text-purple-800'
-                      : 'bg-gray-100 text-gray-800'
-                    }`}>
-                    {staffMember.designation || 'N/A'}
+                  <span
+                    className={`inline-flex px-1.5 py-0.5 mt-0.5 text-[10px] font-medium rounded-full ${getDesignationBadgeClass(staffMember.designation)}`}
+                  >
+                    {getDisplayDesignation(staffMember.designation)}
                   </span>
                 </div>
                 <div className="text-right">
@@ -327,13 +354,10 @@ const AllStaff = () => {
                       {staffMember.email || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${staffMember.designation === 'Doctor'
-                        ? 'bg-blue-100 text-blue-800'
-                        : staffMember.designation === 'Nurse'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-gray-100 text-gray-800'
-                        }`}>
-                        {staffMember.designation || 'N/A'}
+                      <span
+                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDesignationBadgeClass(staffMember.designation)}`}
+                      >
+                        {getDisplayDesignation(staffMember.designation)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

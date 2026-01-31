@@ -587,15 +587,24 @@ const Roster = () => {
 
         // Filter staff by designation
         const nurses = allStaff
-          .filter(staff => staff.designation === 'Staff Nurse')
+          .filter(staff => {
+            const designation = staff.designation?.toLowerCase().trim();
+            return designation === 'staff nurse' || designation === 'nurse';
+          })
           .map(staff => (staff.name || `${staff.first_name} ${staff.last_name}`).trim());
 
         const rmos = allStaff
-          .filter(staff => staff.designation === 'RMO')
+          .filter(staff => {
+            const designation = staff.designation?.toLowerCase().trim();
+            return designation === 'rmo';
+          })
           .map(staff => (staff.name || `${staff.first_name} ${staff.last_name}`).trim());
 
         const otStaff = allStaff
-          .filter(staff => staff.designation === 'OT STAFF')
+          .filter(staff => {
+            const designation = staff.designation?.toLowerCase().trim();
+            return designation === 'ot staff';
+          })
           .map(staff => (staff.name || `${staff.first_name} ${staff.last_name}`).trim());
 
         const newStaffData = {

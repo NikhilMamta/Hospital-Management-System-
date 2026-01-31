@@ -277,8 +277,14 @@ const ManageUsers = () => {
   const handleModalSubmit = async () => {
     try {
       // Basic validation
-      if (!formData.user_name || !formData.name || !formData.email || !formData.role || !formData.department) {
+      if (!formData.user_name || !formData.name || !formData.email || !formData.role) {
         showNotification('Please fill all required fields', 'error');
+        return;
+      }
+
+      // Department required ONLY for new user
+      if (!editingUser && !formData.department) {
+        showNotification('Please select department', 'error');
         return;
       }
 
@@ -319,7 +325,7 @@ const ManageUsers = () => {
         name: formData.name,
         email: formData.email,
         phone_no: formData.phone_no,
-        role: formData.role,
+        role: formData.role.toLowerCase().trim(),
         pages: pagesToStore,
         profile_image: profileImageUrl,
         timestamp: new Date().toISOString()
@@ -353,7 +359,7 @@ const ManageUsers = () => {
           email: formData.email,
           phone_number: formData.phone_no,
           department: formData.department,
-          designation: formData.role
+          designation: formData.role.toLowerCase().trim(),
         }]);
 
         showNotification('User created successfully', 'success');
@@ -694,7 +700,9 @@ const ManageUsers = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">User Info</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Password</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Contact</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Role</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Access Pages</th>
@@ -722,6 +730,9 @@ const ManageUsers = () => {
               ) : (
                 filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      #{user.id}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="min-w-0">
                         <div className="font-medium text-gray-900 truncate max-w-[150px]">
@@ -731,6 +742,11 @@ const ManageUsers = () => {
                           {user.user_name || 'No Username'}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-mono text-gray-700">
+                        {user.password ? user.password : 'N/A'}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
@@ -942,36 +958,43 @@ const ManageUsers = () => {
                   />
                 </div>
 
-
-                {/* Password (for new users) */}
-                {!editingUser && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Lock size={16} className="text-gray-400" />
-                        <span>Password *</span>
-                      </div>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        name="password"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        placeholder="Enter password"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                      </button>
+                {/* Password */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Lock size={16} className="text-gray-400" />
+                      <span>
+                        Password {editingUser ? '(Leave blank to keep unchanged)' : '*'}
+                      </span>
                     </div>
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password || ''}
+                      onChange={handleInputChange}
+                      placeholder={editingUser ? 'Enter new password' : 'Enter password'}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required={!editingUser}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
                   </div>
-                )}
+
+                  {editingUser && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Leave empty if you don’t want to change the password
+                    </p>
+                  )}
+                </div>
 
                 {/* Phone */}
                 <div>
@@ -1015,27 +1038,31 @@ const ManageUsers = () => {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <div className="flex items-center gap-2">
-                      <Briefcase size={16} className="text-gray-400" />
-                      <span>Department *</span>
-                    </div>
-                  </label>
-                  <select
-                    value={formData.department}
-                    onChange={(e) =>
-                      setFormData({ ...formData, department: e.target.value })
-                    }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map(dep => (
-                      <option key={dep} value={dep}>{dep}</option>
-                    ))}
-                  </select>
-                </div>
+
+                {/* Department – only for new user */}
+                {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Briefcase size={16} className="text-gray-400" />
+                        <span>Department *</span>
+                      </div>
+                    </label>
+                    <select
+                      value={formData.department}
+                      onChange={(e) =>
+                        setFormData({ ...formData, department: e.target.value })
+                      }
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map(dep => (
+                        <option key={dep} value={dep}>{dep}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Profile Image - Now spans full width for better display */}
                 <div className="md:col-span-2">
