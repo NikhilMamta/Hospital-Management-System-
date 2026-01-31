@@ -104,11 +104,7 @@ const ManageUsers = () => {
   const [imageFile, setImageFile] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const { showNotification } = useNotification();
-  const [departments, setDepartments] = useState([
-    'Emergency', 'ICU', 'Cardiology', 'Neurology', 'Orthopedics',
-    'Pediatrics', 'Gynecology', 'Radiology', 'Pathology',
-    'Pharmacy', 'Administration', 'Housekeeping', 'Security'
-  ]);
+  const [departments, setDepartments] = useState([]);
   // Fetch users from Supabase
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('mis_user'));
@@ -173,6 +169,39 @@ const ManageUsers = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      const { data, error } = await supabase
+        .from("master")
+        .select("department");
+
+      if (error) {
+        console.error("Error fetching departments:", error);
+        return;
+      }
+
+      // Extract unique, non-empty department names
+      const fetchedDepartments = [
+        ...new Set(
+          data
+            .map((item) => item.department)
+            .filter(Boolean) // removes null / undefined / empty
+        ),
+      ];
+
+      // Merge without duplicates
+      setDepartments((prev) => {
+        const existing = new Set(prev);
+        const newOnes = fetchedDepartments.filter(
+          (dep) => !existing.has(dep)
+        );
+        return [...prev, ...newOnes];
+      });
+    };
+
+    fetchDepartments();
+  }, []);
 
   const handleAddUser = () => {
     setFormData({
