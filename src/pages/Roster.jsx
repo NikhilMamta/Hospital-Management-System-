@@ -603,7 +603,7 @@ const Roster = () => {
         const otStaff = allStaff
           .filter(staff => {
             const designation = staff.designation?.toLowerCase().trim();
-            return designation === 'ot staff';
+            return designation === 'ot' || designation === 'ot staff';
           })
           .map(staff => (staff.name || `${staff.first_name} ${staff.last_name}`).trim());
 

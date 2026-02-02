@@ -250,13 +250,6 @@ const AllStaff = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => openModal(staffMember)}
-                    className="p-1.5 text-blue-600 bg-blue-50 rounded-md"
-                    title="Edit"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
                     onClick={() => deleteStaff(staffMember.id)}
                     className="p-1.5 text-red-600 bg-red-50 rounded-md"
                     title="Delete"
@@ -319,9 +312,6 @@ const AllStaff = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Department
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -362,24 +352,6 @@ const AllStaff = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {staffMember.department || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openModal(staffMember)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Edit"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button
-                          onClick={() => deleteStaff(staffMember.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))

@@ -23,7 +23,7 @@ const Department = () => {
       const { data, error } = await supabase
         .from('master')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
       setDepartments(data || []);

@@ -214,11 +214,10 @@ export default function PatientProfile() {
 
                 const { data, error } = await supabase
                     .from('nurse_assign_task')
-                    .select('Ipd_number')
+                    .select('Ipd_number, actual1, status')
                     .eq('assign_nurse', userName)
                     .gte('planned1', start)
                     .lte('planned1', end)
-                    .is('actual1', null);
 
                 if (!error && data) {
                     ipdNumbers = data.map(t => t.Ipd_number);
