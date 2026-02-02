@@ -33,6 +33,11 @@ export default function Nursing() {
   const fetchNursingTasks = async () => {
     if (!data) return;
 
+    // ✅ Correctly read logged-in user
+    const user = JSON.parse(localStorage.getItem('mis_user') || '{}');
+    const userName = user?.name;
+    const userRole = user?.role;
+
     try {
       setLoading(true);
       const ipdNumber = data.personalInfo.ipd;
@@ -42,13 +47,23 @@ export default function Nursing() {
         return;
       }
 
-      // Fetch tasks from nurse_assign_task table
-      const { data: supabaseTasks, error } = await supabase
+      const isAdmin = userRole?.toLowerCase() === 'admin';
+
+      // ✅ Build query FIRST
+      let query = supabase
         .from('nurse_assign_task')
         .select('*')
         .eq('Ipd_number', ipdNumber)
         .or('staff.is.null,staff.eq.nurse')
         .order('timestamp', { ascending: false });
+
+      // 🔒 Restrict non-admin users to their own tasks
+      if (!isAdmin && userName) {
+        query = query.eq('assign_nurse', userName);
+      }
+
+      // ✅ Execute query
+      const { data: supabaseTasks, error } = await query;
 
       if (error) {
         console.error('Error fetching nursing tasks:', error);
@@ -74,17 +89,29 @@ export default function Nursing() {
         status: task.actual1 ? 'Completed' : 'Pending',
         date: task.start_date || new Date(task.timestamp).toISOString().split('T')[0],
         delayStatus: calculateDelayStatus(task),
-        supabaseData: task,
-        plannedTime: task.planned1 ? new Date(task.planned1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
-        actualTime: task.actual1 ? new Date(task.actual1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+        plannedTime: task.planned1
+          ? new Date(task.planned1).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+          : '',
+        actualTime: task.actual1
+          ? new Date(task.actual1).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+          : ''
       }));
 
-      // Separate pending and completed tasks
-      const pending = transformedTasks.filter(task => task.status === 'Pending');
-      const history = transformedTasks.filter(task => task.status === 'Completed');
-
-      setPendingList(pending);
-      setHistoryList(history);
+      // Separate pending and completed
+      setPendingList(transformedTasks.filter(t => t.status === 'Pending'));
+      setHistoryList(transformedTasks.filter(t => t.status === 'Completed'));
 
     } catch (err) {
       console.error('Error in fetchNursingTasks:', err);

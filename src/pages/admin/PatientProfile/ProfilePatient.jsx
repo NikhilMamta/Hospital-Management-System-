@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLocation } from 'react';
 import { Eye, Trash2, Edit, Filter, Search, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../../../SupabaseClient'; // Adjust the path to your supabase client
@@ -16,6 +16,7 @@ export default function PatientProfile() {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState('');
     const [statusFilter, setStatusFilter] = useState('Active');
+    const location = useLocation();
 
     const getShiftTimeRange = () => {
         const now = new Date();
@@ -148,9 +149,8 @@ export default function PatientProfile() {
     }, []);
 
     useEffect(() => {
-        // Initial fetch only
         fetchPatients();
-    }, [fetchPatients]);
+    }, [fetchPatients, location.key]);
 
     const wardFilters = [
         'All Patients',
