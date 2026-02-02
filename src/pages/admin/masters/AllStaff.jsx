@@ -108,6 +108,11 @@ const AllStaff = () => {
     )
   );
 
+  const filteredStaffWithDisplayId = filteredStaff.map((staffMember, index) => ({
+    ...staffMember,
+    displayId: filteredStaff.length - index
+  }));
+
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -231,12 +236,12 @@ const AllStaff = () => {
 
       {/* Mobile View: Cards */}
       <div className="md:hidden space-y-3">
-        {filteredStaff.length === 0 ? (
+        {filteredStaffWithDisplayId.length === 0 ? (
           <div className="bg-white p-8 text-center text-gray-500 border border-gray-200 rounded-lg text-sm">
             {searchTerm ? 'No staff members found matching your search' : 'No staff members found'}
           </div>
         ) : (
-          filteredStaff.map((staffMember) => (
+          filteredStaffWithDisplayId.map((staffMember) => (
             <div key={staffMember.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm p-3">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
@@ -245,7 +250,7 @@ const AllStaff = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900 text-sm leading-tight">{staffMember.name || 'N/A'}</h3>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">ID: #{staffMember.id}</p>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">ID: #{staffMember.displayId}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -315,17 +320,17 @@ const AllStaff = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStaff.length === 0 ? (
+              {filteredStaffWithDisplayId.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                     {searchTerm ? 'No staff members found matching your search' : 'No staff members found'}
                   </td>
                 </tr>
               ) : (
-                filteredStaff.map((staffMember) => (
+                filteredStaffWithDisplayId.map((staffMember) => (
                   <tr key={staffMember.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      #{staffMember.id}
+                      #{staffMember.displayId}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">

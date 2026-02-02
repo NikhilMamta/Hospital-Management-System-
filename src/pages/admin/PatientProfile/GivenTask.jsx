@@ -256,11 +256,12 @@ export default function GivenTask() {
     try {
       setLoading(prev => ({ ...prev, nurse: true }));
 
+      const isAdmin = !['nurse', 'rmo', 'ot', 'dressing'].some(r => userRole.toLowerCase().includes(r));
+
       let query = supabase
         .from('nurse_assign_task')
         .select('*')
         .not('planned1', 'is', null)
-        .is('actual1', null)
         .or('staff.is.null,staff.eq.nurse')  // ← ADD THIS LINE to exclude OT Staff
         .order('planned1', { ascending: true });
 
@@ -268,9 +269,12 @@ export default function GivenTask() {
       if (ipdNumber && ipdNumber !== 'N/A') {
         query = query.eq('Ipd_number', ipdNumber);
       }
+      if (isNurse && userName) {
+        query = query.eq('assign_nurse', userName);
+      }
 
-      // Filter by nurse name if role is nurse
-      if (userRole && userRole.toLowerCase().includes('nurse') && userName) {
+      // Filter by nurse name if not admin and role is nurse
+      if (!isAdmin && userRole && userRole.toLowerCase().includes('nurse') && userName) {
         query = query.ilike('assign_nurse', userName);
       }
 
@@ -313,11 +317,12 @@ export default function GivenTask() {
     try {
       setLoading(prev => ({ ...prev, rmo: true }));
 
+      const isAdmin = !['nurse', 'rmo', 'ot', 'dressing'].some(r => userRole.toLowerCase().includes(r));
+
       let query = supabase
         .from('rmo_assign_task')
         .select('*')
         .not('planned1', 'is', null)
-        .is('actual1', null)
         .order('planned1', { ascending: true });
 
       // Add IPD filter only if we have a valid IPD number
@@ -325,8 +330,8 @@ export default function GivenTask() {
         query = query.eq('ipd_number', ipdNumber);
       }
 
-      // Filter by RMO name if role is rmo
-      if (userRole && userRole.toLowerCase().includes('rmo') && userName) {
+      // Filter by RMO name if not admin and role is rmo
+      if (!isAdmin && userRole && userRole.toLowerCase().includes('rmo') && userName) {
         query = query.ilike('assign_rmo', userName);
       }
 
@@ -369,12 +374,13 @@ export default function GivenTask() {
     try {
       setLoading(prev => ({ ...prev, ot: true }));
 
+      const isAdmin = !['nurse', 'rmo', 'ot', 'dressing'].some(r => userRole.toLowerCase().includes(r));
+
       let query = supabase
         .from('nurse_assign_task')
         .select('*')
         .eq('staff', 'OT Staff')
         .not('planned1', 'is', null)
-        .is('actual1', null)
         .order('planned1', { ascending: true });
 
       // Add IPD filter only if we have a valid IPD number
@@ -382,8 +388,8 @@ export default function GivenTask() {
         query = query.eq('Ipd_number', ipdNumber);
       }
 
-      // Filter by nurse/staff name if role is OT
-      if (userRole && userRole.toLowerCase().includes('ot') && userName) {
+      // Filter by nurse/staff name if not admin and role is OT
+      if (!isAdmin && userRole && userRole.toLowerCase().includes('ot') && userName) {
         query = query.ilike('assign_nurse', userName);
       }
 
@@ -427,16 +433,29 @@ export default function GivenTask() {
     try {
       setLoading(prev => ({ ...prev, dressing: true }));
 
+      const isAdmin = !['nurse', 'rmo', 'ot', 'dressing'].some(r => userRole.toLowerCase().includes(r));
+
       let query = supabase
         .from('dressing')
         .select('*')
         .not('planned1', 'is', null)
-        .is('actual1', null)
         .order('planned1', { ascending: true });
 
       // Add IPD filter only if we have a valid IPD number
       if (ipdNumber && ipdNumber !== 'N/A') {
         query = query.eq('ipd_number', ipdNumber);
+      }
+
+      // Filter by assigned person if not admin
+      if (!isAdmin && userRole && userName) {
+        if (userRole.toLowerCase().includes('nurse')) {
+          query = query.ilike('assign_nurse', userName);
+        } else if (userRole.toLowerCase().includes('rmo')) {
+          query = query.ilike('assign_rmo', userName);
+        } else if (userRole.toLowerCase().includes('dressing')) {
+          // For dressing staff, might need to check both or specific field
+          query = query.or(`assign_nurse.ilike.${userName},assign_rmo.ilike.${userName}`);
+        }
       }
 
       const { data, error } = await query;
@@ -456,7 +475,7 @@ export default function GivenTask() {
         start_date: task.start_date,
         planned1: task.planned1,
         actual1: task.actual1,
-        status: task.status || 'Pending',
+        status: task.actual1 ? 'Completed' : 'Pending',
         ward_type: task.ward_type,
         patient_location: task.patient_location,
         room: task.room,
