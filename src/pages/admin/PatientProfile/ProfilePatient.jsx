@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useLocation } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Eye, Trash2, Edit, Filter, Search, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../../../SupabaseClient'; // Adjust the path to your supabase client
