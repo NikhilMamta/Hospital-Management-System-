@@ -167,7 +167,7 @@ export default function GivenTask() {
       try {
         const user = JSON.parse(storedUser);
         const role = user.role || '';
-        const name = user.name || '';
+        const name = user?.name?.trim();
 
         setUserRole(role);
         setUserName(name);

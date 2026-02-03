@@ -351,7 +351,7 @@ const ManageUsers = () => {
 
       const userData = {
         user_name: formData.user_name,
-        name: formData.name,
+        name: formData.name.trim(),
         email: formData.email,
         phone_no: formData.phone_no,
         role: formData.role.toLowerCase().trim(),

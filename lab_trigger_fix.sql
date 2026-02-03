@@ -1,7 +1,5 @@
-CREATE OR REPLACE FUNCTION public.fn_lab_generate_nurse_task()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
+--  fn_lab_generate_nurse_task
+
 DECLARE
     v_shift TEXT;
     v_start_date DATE;
@@ -13,6 +11,13 @@ DECLARE
     v_last_nurse TEXT;
     v_name TEXT;
 BEGIN
+    --------------------------------------------------
+    -- 🔴 PAYMENT CHECK (ADDED ONLY THIS)
+    --------------------------------------------------
+    IF NEW.payment_status IS DISTINCT FROM 'Yes' THEN
+        RETURN NEW;
+    END IF;
+
     --------------------------------------------------
     -- FIRE ONLY WHEN CONDITIONS MATCH
     --------------------------------------------------
@@ -26,7 +31,6 @@ BEGIN
     --------------------------------------------------
     -- DETERMINE SHIFT FROM CURRENT TIME (TRIGGER FIRE TIME)
     --------------------------------------------------
-    -- Use current local time for shift determination as requested
     v_current_time := (now() AT TIME ZONE 'Asia/Kolkata')::time;
     
     IF v_current_time >= TIME '08:00'
@@ -42,14 +46,24 @@ BEGIN
     v_start_date := (now() AT TIME ZONE 'Asia/Kolkata')::date;
 
     --------------------------------------------------
-    -- FETCH LAB TASK FOR NURSE
+    -- FETCH TASK BASED ON LAB CATEGORY
     --------------------------------------------------
-    SELECT task
-    INTO v_task
-    FROM pre_defined_task
-    WHERE staff = 'nurse'
-      AND status = 'lab'
-    LIMIT 1;
+    IF LOWER(NEW.category) = 'pathology' THEN
+        SELECT task
+        INTO v_task
+        FROM pre_defined_task
+        WHERE staff = 'nurse'
+          AND status = 'lab'
+        LIMIT 1;
+
+    ELSIF LOWER(NEW.category) = 'radiology' THEN
+        SELECT task
+        INTO v_task
+        FROM pre_defined_task
+        WHERE staff = 'nurse'
+          AND status = 'radiology'
+        LIMIT 1;
+    END IF;
 
     IF v_task IS NULL THEN
         RETURN NEW;
@@ -74,19 +88,17 @@ BEGIN
             SELECT *
             FROM roster
             WHERE shift = v_shift
-              AND (start_date <= current_date OR start_date IS NULL) -- Added Date Logic
+              AND (start_date <= current_date OR start_date IS NULL)
             ORDER BY created_at DESC
-            LIMIT 3 -- Increased from 1 to 3 for fallback logic
+            LIMIT 3
         )
         SELECT jsonb_array_elements_text(
             CASE
-                -- FIX: Check Female before Male to strictly match 'Female General Ward'
-                -- 'Male General Ward' contains 'male' but 'Female General Ward' also contains 'male' (if case insensitive without boundaries)
-                -- But specifically 'Female...' contains 'male' inside 'feMALE'.
-                -- Checking Female first ensures we catch it.
                 WHEN LOWER(NEW.ward_type) LIKE '%female%'  THEN (female_general_ward::jsonb)->'nurse'
                 WHEN LOWER(NEW.ward_type) LIKE '%male%'    THEN (male_general_ward::jsonb)->'nurse'
                 WHEN LOWER(NEW.ward_type) LIKE '%icu%'     THEN (icu::jsonb)->'nurse'
+                WHEN LOWER(NEW.ward_type) LIKE '%picu%'    THEN (picu::jsonb)->'nurse'
+                WHEN LOWER(NEW.ward_type) LIKE '%nicu%'    THEN (nicu::jsonb)->'nurse'
                 WHEN LOWER(NEW.ward_type) LIKE '%hdu%'     THEN (hdu::jsonb)->'nurse'
                 WHEN LOWER(NEW.ward_type) LIKE '%private%' THEN (private_ward::jsonb)->'nurse'
                 ELSE '[]'::jsonb
@@ -167,4 +179,3 @@ BEGIN
 
     RETURN NEW;
 END;
-$function$

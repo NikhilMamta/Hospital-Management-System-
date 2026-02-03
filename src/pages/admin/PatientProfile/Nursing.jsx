@@ -85,7 +85,7 @@ export default function Nursing() {
         bedNo: task.bed_no || '',
         assignBy: 'Admin',
         nurseName: task.assign_nurse || 'Nurse',
-        instructions: task.reminder || '',
+        instructions: task.reminder || '-',
         status: task.actual1 ? 'Completed' : 'Pending',
         date: task.start_date || new Date(task.timestamp).toISOString().split('T')[0],
         delayStatus: calculateDelayStatus(task),

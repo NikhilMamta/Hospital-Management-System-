@@ -79,13 +79,14 @@ const Payment = () => {
         .from('lab')
         .select(`*`)
         .not('planned1', 'is', null)
-        .is('actual1', null)
+        .is('payment_status', null)
         .order('timestamp', { ascending: false });
 
       if (pendingError) throw pendingError;
 
       const formattedPending = pendingData.map(record => ({
         id: record.id,
+        lab_no: record.lab_no || 'N/A',
         uniqueNumber: record.admission_no || 'N/A',
         patientName: record.patient_name || 'N/A',
         phoneNumber: record.phone_no || 'N/A',
@@ -114,15 +115,15 @@ const Payment = () => {
       // Load history payments (payment_status IS NOT NULL)
       const { data: historyData, error: historyError } = await supabase
         .from('lab')
-        .select(`*`)
-        .not('planned1', 'is', null)
-        .not('actual1', 'is', null)
+        .select('*')
+        .in('payment_status', ['Yes', 'No'])
         .order('timestamp', { ascending: false });
 
       if (historyError) throw historyError;
 
       const formattedHistory = historyData.map(record => ({
         id: record.id,
+        lab_no: record.lab_no || 'N/A', 
         uniqueNumber: record.admission_no || 'N/A',
         patientName: record.patient_name || 'N/A',
         phoneNumber: record.phone_no || 'N/A',
@@ -247,10 +248,12 @@ const Payment = () => {
       const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(',', '');
       const updateData = {
         payment_status: formData.payment,
-        planned2: now,
-        actual1: now,
       };
 
+      if (formData.payment === 'Yes') {
+        updateData.planned2 = now;
+        updateData.actual1 = now;
+      }
       if (formData.payment === 'Yes' && publicUrl) {
         updateData.bill_image_url = publicUrl;
       } else if (formData.payment !== 'Yes') {
@@ -440,6 +443,7 @@ const Payment = () => {
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Action</th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Lab No</th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Admission No</th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Patient Name</th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Planned</th>
@@ -457,7 +461,7 @@ const Payment = () => {
                         <td className="px-4 py-3 text-sm whitespace-nowrap">
                           <button onClick={() => handleActionClick(record)} className="px-3 py-1.5 text-white bg-green-600 rounded-lg hover:bg-green-700">Process</button>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.admissionNo || record.uniqueNumber}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.lab_no}</td><td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.admissionNo || record.uniqueNumber}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.patientName}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                           {record.planned1 ? new Date(record.planned1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '-'}
@@ -510,6 +514,7 @@ const Payment = () => {
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Admission No</th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Lab No</th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Patient Name</th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Planned</th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">Actual</th>
@@ -525,6 +530,7 @@ const Payment = () => {
                     {filteredHistoryPayments.length > 0 ? filteredHistoryPayments.map(record => (
                       <tr key={record.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.admissionNo || record.uniqueNumber}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.lab_no}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.patientName}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                           {record.planned1 ? new Date(record.planned1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '-'}

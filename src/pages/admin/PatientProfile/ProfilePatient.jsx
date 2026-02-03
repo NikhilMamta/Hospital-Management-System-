@@ -70,7 +70,7 @@ export default function PatientProfile() {
 
             const currentUser = JSON.parse(localStorage.getItem('mis_user'));
             const userRole = currentUser?.role?.toLowerCase();
-            const userName = currentUser?.name;
+            const userName = currentUser?.name?.trim();
 
             const { start, end } = getShiftTimeRange();
 
