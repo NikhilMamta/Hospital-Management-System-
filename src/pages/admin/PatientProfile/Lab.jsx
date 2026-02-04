@@ -93,7 +93,7 @@ export default function Lab() {
         }
 
         const isCompleted = lab.actual2 !== null;
-        const isPending = lab.planned1 !== null && lab.actual2 === null;
+        const isPending = lab.planned1 !== null && lab.actual2 === null && lab.payment_status=== 'Yes';
 
         return {
           adviceId: `LAB-${lab.id}`,
