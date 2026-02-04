@@ -17,6 +17,8 @@ export default function PatientProfile() {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState('');
     const [statusFilter, setStatusFilter] = useState('Active');
+    const [doctorTab, setDoctorTab] = useState('active');
+
     const location = useLocation();
 
     const getShiftTimeRange = () => {
@@ -62,15 +64,14 @@ export default function PatientProfile() {
             end: `${today} 08:00:00`
         };
     };
+    const currentUser = JSON.parse(localStorage.getItem('mis_user'));
+    const userRole = currentUser?.role?.toLowerCase();
+    const userName = currentUser?.name?.trim();
     // Load patients from Supabase
     const fetchPatients = useCallback(async () => {
         try {
             setLoading(true);
             setIsRefreshing(true);
-
-            const currentUser = JSON.parse(localStorage.getItem('mis_user'));
-            const userRole = currentUser?.role?.toLowerCase();
-            const userName = currentUser?.name?.trim();
 
             const { start, end } = getShiftTimeRange();
 
@@ -113,6 +114,23 @@ export default function PatientProfile() {
                     ipdNumbers = data.map(t => t.ipd_number);
                 }
             }
+            // ============================
+            // DRESSING STAFF
+            // ============================
+            // else if (userRole === 'dressing staff') {
+            //     shouldFilter = true;
+
+            //     const { data, error } = await supabase
+            //         .from('dressing')   // 👈 your table name
+            //         .select('ipd_number')
+            //         .eq('assign_staff', userName)   // 👈 column holding staff name
+            //         .gte('planned1', start)
+            //         .lte('planned1', end);
+
+            //     if (!error && data) {
+            //         ipdNumbers = data.map(t => t.ipd_number);
+            //     }
+            // }
 
             // ============================
             // FETCH PATIENTS
@@ -122,6 +140,12 @@ export default function PatientProfile() {
                 .select('*')
                 .order('timestamp', { ascending: false });
 
+            if (userRole === 'doctor') {
+                if (doctorTab === 'active' || doctorTab === 'discharged') {
+                    // Only assigned to this doctor
+                    query = query.eq('consultant_dr', userName);
+                }
+            }
             if (shouldFilter) {
                 if (ipdNumbers.length > 0) {
                     query = query.in('ipd_number', ipdNumbers);
@@ -147,7 +171,7 @@ export default function PatientProfile() {
             setIsRefreshing(false);
             setLastUpdated(new Date().toLocaleTimeString());
         }
-    }, []);
+    }, [doctorTab, userRole, userName]);
 
     useEffect(() => {
         fetchPatients();
@@ -193,10 +217,23 @@ export default function PatientProfile() {
             wardType === wardFilter;
         const matchesCategory = filterCategory === 'All' || patCategory === filterCategory;
 
-        const matchesStatus =
-            statusFilter === 'All' ||
-            (statusFilter === 'Active' && !patient.actual1) ||
-            (statusFilter === 'Discharged' && patient.actual1);
+        let matchesStatus = true;
+
+        // ✅ Doctor tab logic
+        if (userRole === 'doctor') {
+            if (doctorTab === 'active') {
+                matchesStatus = !patient.actual1; // not discharged
+            } else if (doctorTab === 'discharged') {
+                matchesStatus = !!patient.actual1; // discharged
+            }
+            // doctorTab === 'all' → no status filter
+        } else {
+            // Existing status filter for other roles
+            matchesStatus =
+                statusFilter === 'All' ||
+                (statusFilter === 'Active' && !patient.actual1) ||
+                (statusFilter === 'Discharged' && patient.actual1);
+        }
 
         return matchesSearch && matchesWard && matchesCategory && matchesStatus;
     });
@@ -310,24 +347,39 @@ export default function PatientProfile() {
 
                 {/* Status Tabs */}
                 <div className="flex gap-8 mb-4 px-4 lg:px-6 border-b">
-                    {['All', 'Active', 'Discharged'].map((status) => (
-                        <button
-                            key={status}
-                            onClick={() => setStatusFilter(status)}
-                            className={`pb-2 text-sm font-semibold transition-all relative
-                ${statusFilter === status
-                                    ? 'text-green-600'
-                                    : 'text-gray-500 hover:text-gray-700'
-                                }`}
-                        >
-                            {status}
+                    {['All', 'Active', 'Discharged'].map((status) => {
+                        const key = status.toLowerCase(); // 'all' | 'active' | 'discharged'
 
-                            {/* Underline */}
-                            {statusFilter === status && (
-                                <span className="absolute left-0 bottom-0 w-full h-[2px] bg-green-600 rounded-full"></span>
-                            )}
-                        </button>
-                    ))}
+                        const isActive =
+                            userRole === 'doctor'
+                                ? doctorTab === key
+                                : statusFilter === status;
+
+                        return (
+                            <button
+                                key={status}
+                                onClick={() => {
+                                    if (userRole === 'doctor') {
+                                        setDoctorTab(key);
+                                    } else {
+                                        setStatusFilter(status);
+                                    }
+                                }}
+                                className={`pb-2 text-sm font-semibold transition-all relative
+                    ${isActive
+                                        ? 'text-green-600'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                {status}
+
+                                {/* Underline */}
+                                {isActive && (
+                                    <span className="absolute left-0 bottom-0 w-full h-[2px] bg-green-600 rounded-full"></span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Ward Filter Buttons */}

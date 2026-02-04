@@ -159,7 +159,7 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
                             assignedNurses.map((nurse, i) => (
                                 <span
                                     key={i}
-                                    className="px-2 py-0.5 bg-pink-50 text-pink-700 text-[11px] font-semibold rounded-full border border-pink-200 truncate"
+                                    className="px-2 py-0.5 bg-green-50 text-green-700 text-[11px] font-semibold rounded-full border border-green-200 truncate"
                                 >
                                     {nurse}
                                 </span>
