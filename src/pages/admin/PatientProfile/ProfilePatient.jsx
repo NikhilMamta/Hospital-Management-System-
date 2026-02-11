@@ -107,8 +107,7 @@ export default function PatientProfile() {
                     .select('ipd_number')
                     .eq('assign_rmo', userName)
                     .gte('planned1', start)
-                    .lte('planned1', end)
-                    .is('actual1', null);
+                    .lte('planned1', end);
 
                 if (!error && data) {
                     ipdNumbers = data.map(t => t.ipd_number);
