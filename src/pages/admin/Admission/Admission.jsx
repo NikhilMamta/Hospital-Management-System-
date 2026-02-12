@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Edit2, Save, UserPlus, Search, Filter } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const Admission = () => {
   const [patients, setPatients] = useState([]);
@@ -19,12 +20,7 @@ const Admission = () => {
     age: '',
     gender: 'Male'
   });
-
-  // Load existing patients from Supabase on component mount
-  useEffect(() => {
-    loadPatients();
-  }, []);
-
+  
   // Load patients from Supabase database
   const loadPatients = async () => {
     try {
@@ -70,6 +66,17 @@ const Admission = () => {
       setIsLoading(false);
     }
   };
+
+
+  // Real-time sync: refresh patient list when any user modifies patient_admission
+  useRealtimeTable('patient_admission', loadPatients);
+
+  // Load existing patients from Supabase on component mount
+  useEffect(() => {
+    loadPatients();
+  }, []);
+
+
 
   // Calculate age from date of birth
   const calculateAge = (dob) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, X, Clock, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 import { useNotification } from '../../../contexts/NotificationContext';
 
 const ConcernDepartment = () => {
@@ -14,6 +15,9 @@ const ConcernDepartment = () => {
   const { showNotification } = useNotification();
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingRecords, setUploadingRecords] = useState({});
+
+  // Real-time sync: refresh when discharge table changes
+  useRealtimeTable('discharge', loadData);
 
   useEffect(() => {
     loadData();

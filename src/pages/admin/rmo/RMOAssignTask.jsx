@@ -290,8 +290,7 @@ const RMOAssignTask = () => {
                         ipdNumber: '',
                         patientName: 'Unknown Patient',
                         patientLocation: `${bed.ward} - ${bed.room}`,
-                        wardType: bed.ward,
-                        room: bed.room
+                        wardType: bed.ward
                     };
                 });
 

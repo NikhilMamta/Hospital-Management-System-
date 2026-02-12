@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, FlaskConical, IndianRupee } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const Tests = () => {
   const [tests, setTests] = useState([]);
@@ -49,6 +50,8 @@ const Tests = () => {
   useEffect(() => {
     fetchTests();
   }, []);
+
+  useRealtimeTable('investigation', fetchTests);
 
   // Filter tests based on active tab and search
   const filteredTests = tests.filter(test => {

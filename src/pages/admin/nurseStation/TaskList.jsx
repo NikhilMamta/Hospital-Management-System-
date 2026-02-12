@@ -21,6 +21,7 @@ import {
     ChevronUp
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const TaskList = () => {
     const [activeTab, setActiveTab] = useState('Pending');
@@ -643,6 +644,9 @@ const TaskList = () => {
             task.toLowerCase().includes(taskSearchQuery.toLowerCase())
         )
         : predefinedTasks;
+
+    // Real-time sync: refresh task list when any user modifies nurse_assign_task
+    useRealtimeTable('nurse_assign_task', () => loadTasks(false));
 
     useEffect(() => {
         if (!userRole) return;

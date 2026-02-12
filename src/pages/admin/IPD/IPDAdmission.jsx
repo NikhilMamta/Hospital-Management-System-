@@ -375,8 +375,25 @@ const PatientAdmissionSystem = () => {
         )
         .subscribe();
 
+      // Listen to bed status changes so availability updates in real-time
+      const bedChannel = supabase
+        .channel('bed_status_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'all_floor_bed'
+          },
+          () => {
+            loadBedData();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(channel);
+        supabase.removeChannel(bedChannel);
       };
     };
 

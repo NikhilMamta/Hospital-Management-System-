@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserCheck, Home, Building, Activity, Calendar, UserCog, Stethoscope, UserPlus, ClipboardCheck } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -267,6 +268,10 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  // Real-time sync: refresh dashboard when admissions change
+  useRealtimeTable('patient_admission', fetchDashboardData);
+  useRealtimeTable('ipd_admissions', fetchDashboardData);
 
   useEffect(() => {
     fetchDashboardData();

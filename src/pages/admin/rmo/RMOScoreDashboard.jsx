@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import RMOCompleteDetail from './RMOCompleteDetail';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const RMOScoreDashboard = () => {
     const [rmoStats, setRmoStats] = useState([]);
@@ -193,6 +194,9 @@ const RMOScoreDashboard = () => {
     const handleCloseCompleteDetail = () => {
         setSelectedRmo(null);
     };
+
+    // Real-time sync: refresh dashboard when any user modifies rmo_assign_task
+    useRealtimeTable('rmo_assign_task', fetchDashboardData);
 
     useEffect(() => {
         // Initial fetch

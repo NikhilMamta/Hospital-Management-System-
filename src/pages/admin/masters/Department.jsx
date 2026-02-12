@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, Building, Hash, Calendar } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const Department = () => {
   const [departments, setDepartments] = useState([]);
@@ -38,6 +39,8 @@ const Department = () => {
   useEffect(() => {
     fetchDepartments();
   }, []);
+
+  useRealtimeTable('master', fetchDepartments);
 
   // Filter departments based on search
   const filteredDepartments = departments.filter(dept =>

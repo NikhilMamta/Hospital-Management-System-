@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, Bed, Building, DoorOpen, Hash } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const FloorBed = () => {
   const [floorBeds, setFloorBeds] = useState([]);
@@ -67,6 +68,8 @@ const FloorBed = () => {
   useEffect(() => {
     fetchFloorBeds();
   }, []);
+
+  useRealtimeTable('all_floor_bed', fetchFloorBeds);
 
   // Filter floor beds based on search and filters
   const filteredFloorBeds = floorBeds.filter(item => {

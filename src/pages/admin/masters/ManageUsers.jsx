@@ -50,6 +50,7 @@ import {
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { ALL_PAGES } from '../../../contexts/AuthContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 // Icon mapping for sidebar items
 const sidebarIcons = {
@@ -105,14 +106,7 @@ const ManageUsers = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const { showNotification } = useNotification();
   const [departments, setDepartments] = useState([]);
-  // Fetch users from Supabase
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('mis_user'));
-    setIsAdmin(user?.role === 'admin');
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
+   const fetchUsers = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -169,6 +163,19 @@ const ManageUsers = () => {
       setLoading(false);
     }
   };
+ 
+ 
+  // Real-time sync: refresh user list when any user modifies the users table
+  useRealtimeTable('users', fetchUsers);
+
+  // Fetch users from Supabase
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('mis_user'));
+    setIsAdmin(user?.role === 'admin');
+    fetchUsers();
+  }, []);
+
+
 
   useEffect(() => {
     const fetchDepartments = async () => {

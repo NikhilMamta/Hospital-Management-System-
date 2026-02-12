@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, X, Clock, CheckCircle, Upload, Image as ImageIcon } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const InitiationByRMO = () => {
   const [activeTab, setActiveTab] = useState('pending');
@@ -37,6 +38,9 @@ const InitiationByRMO = () => {
     'Completed',
     'Pending Documentation'
   ];
+
+  // Real-time sync: refresh when discharge table changes
+  useRealtimeTable('discharge', loadData);
 
   useEffect(() => {
     loadData();

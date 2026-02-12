@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 // Separate OtCompletionModal component to prevent re-renders
 const OtCompletionModal = React.memo(({
@@ -1026,6 +1027,9 @@ const RMOTaskList = () => {
             task.toLowerCase().includes(taskSearchQuery.toLowerCase())
         )
         : predefinedTasks;
+
+    // Real-time sync: refresh task list when any user modifies rmo_assign_task
+    useRealtimeTable('rmo_assign_task', loadTasks);
 
     useEffect(() => {
         if (!userRole) return;

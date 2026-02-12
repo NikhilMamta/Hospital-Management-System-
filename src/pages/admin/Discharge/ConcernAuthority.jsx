@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, X, Clock, CheckCircle, Image } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 import { useNotification } from '../../../contexts/NotificationContext';
 
 const ConcernAuthority = () => {
@@ -15,15 +16,12 @@ const ConcernAuthority = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission
 
-  // Load data on component mount and set interval
+  // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
+  useRealtimeTable('discharge', loadData);
+
+  // Load data on component mount
   useEffect(() => {
     loadData();
-
-    const interval = setInterval(() => {
-      loadData();
-    }, 1000);
-
-    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {

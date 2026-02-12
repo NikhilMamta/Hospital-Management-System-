@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, User, Tag, Building, ChevronDown, ChevronUp } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const AllStaff = () => {
   const [staff, setStaff] = useState([]);
@@ -70,6 +71,8 @@ const AllStaff = () => {
   useEffect(() => {
     fetchStaff();
   }, []);
+
+  useRealtimeTable('all_staff', fetchStaff);
 
   // Normalize designation
   const normalizeDesignation = (designation) =>

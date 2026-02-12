@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, User, Phone, Mail, Briefcase, Building } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const Doctors = () => {
   const [doctors, setDoctors] = useState([]);
@@ -42,6 +43,8 @@ const Doctors = () => {
   useEffect(() => {
     fetchDoctors();
   }, []);
+
+  useRealtimeTable('doctors', fetchDoctors);
 
   // Filter doctors based on search
   const filteredDoctors = doctors.filter(doctor =>

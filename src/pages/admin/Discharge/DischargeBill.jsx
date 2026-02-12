@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, X, Clock, CheckCircle, Image, Upload } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 import { useNotification } from '../../../contexts/NotificationContext';
 
 const DischargeBill = () => {
@@ -18,13 +19,12 @@ const DischargeBill = () => {
   const [viewImageModal, setViewImageModal] = useState(false);
   const [viewingImage, setViewingImage] = useState(null);
 
-  // Load data on component mount and set interval
+  // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
+  useRealtimeTable('discharge', loadData);
+
+  // Load data on component mount
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => {
-      loadData();
-    }, 1000);
-    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {

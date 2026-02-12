@@ -13,6 +13,7 @@ import {
     ArrowLeft
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const RMOCompleteDetail = ({ nurseName, onClose }) => {
     const [rmoTasks, setRmoTasks] = useState([]);
@@ -95,6 +96,9 @@ const RMOCompleteDetail = ({ nurseName, onClose }) => {
             setLoading(false);
         }
     }, [nurseName]);
+
+    // Real-time sync: refresh tasks when any user modifies rmo_assign_task
+    useRealtimeTable('rmo_assign_task', fetchRmoTasks);
 
     useEffect(() => {
         if (nurseName) {

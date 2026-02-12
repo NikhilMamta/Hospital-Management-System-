@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import CompleteDetail from './CompleteDetail';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const ScoreDashboard = () => {
     const [nurseStats, setNurseStats] = useState([]);
@@ -192,6 +193,9 @@ const ScoreDashboard = () => {
     const handleCloseCompleteDetail = () => {
         setSelectedNurse(null);
     };
+
+    // Real-time sync: refresh dashboard when any user modifies nurse_assign_task
+    useRealtimeTable('nurse_assign_task', fetchDashboardData);
 
     useEffect(() => {
         // Initial fetch

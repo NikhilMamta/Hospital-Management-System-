@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Edit2, Save, UserCheck, Search } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
+import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const DischargePatient = () => {
   const [dischargeRecords, setDischargeRecords] = useState([]);
@@ -22,25 +23,13 @@ const DischargePatient = () => {
     remark: ''
   });
 
-  useEffect(() => {
-    // Get current user from localStorage
-    const getUserFromLocalStorage = () => {
-      try {
-        const storedUser = localStorage.getItem('mis_user');
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          setCurrentUser(user);
-          // Set staff name from user name
-          setFormData(prev => ({
-            ...prev,
-            staff_name: user.name || ''
-          }));
-        }
-      } catch (error) {
-        console.error('Error parsing user from localStorage:', error);
-      }
-    };
+  // Real-time sync: refresh when discharge table changes
+  useRealtimeTable('discharge', () => {
+    fetchDischargeRecords();
+    fetchAvailablePatients();
+  });
 
+  useEffect(() => {
     getUserFromLocalStorage();
     fetchDischargeRecords();
     fetchAvailablePatients();
