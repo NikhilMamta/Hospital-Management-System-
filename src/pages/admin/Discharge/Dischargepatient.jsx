@@ -29,6 +29,13 @@ const DischargePatient = () => {
     fetchAvailablePatients();
   });
 
+  const getUserFromLocalStorage = () => {
+    const storedUser = localStorage.getItem('mis_user');
+    if (storedUser) {
+      setCurrentUser(JSON.parse(storedUser));
+    }
+  };
+
   useEffect(() => {
     getUserFromLocalStorage();
     fetchDischargeRecords();

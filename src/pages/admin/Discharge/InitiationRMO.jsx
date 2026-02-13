@@ -39,13 +39,6 @@ const InitiationByRMO = () => {
     'Pending Documentation'
   ];
 
-  // Real-time sync: refresh when discharge table changes
-  useRealtimeTable('discharge', loadData);
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -60,6 +53,13 @@ const InitiationByRMO = () => {
       setIsLoading(false);
     }
   };
+
+  // Real-time sync: refresh when discharge table changes
+  useRealtimeTable('discharge', loadData);
+
+  useEffect(() => {
+    loadData();
+  }, [activeTab]);
 
   const loadPendingPatients = async () => {
     try {
