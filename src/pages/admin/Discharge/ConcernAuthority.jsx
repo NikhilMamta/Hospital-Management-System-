@@ -16,14 +16,6 @@ const ConcernAuthority = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission
 
-  // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
-  useRealtimeTable('discharge', loadData);
-
-  // Load data on component mount
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -81,6 +73,14 @@ const ConcernAuthority = () => {
       setIsLoading(false);
     }
   };
+
+  // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
+  useRealtimeTable('discharge', loadData);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleCheckboxChange = (admissionNo) => {
     setSelectedRecords((prev) => ({

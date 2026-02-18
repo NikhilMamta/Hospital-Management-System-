@@ -16,13 +16,6 @@ const ConcernDepartment = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingRecords, setUploadingRecords] = useState({});
 
-  // Real-time sync: refresh when discharge table changes
-  useRealtimeTable('discharge', loadData);
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -37,6 +30,13 @@ const ConcernDepartment = () => {
       setIsLoading(false);
     }
   };
+
+  // Real-time sync: refresh when discharge table changes
+  useRealtimeTable('discharge', loadData);
+
+  useEffect(() => {
+    loadData();
+  }, [activeTab]);
 
   const loadPendingRecords = async () => {
     try {

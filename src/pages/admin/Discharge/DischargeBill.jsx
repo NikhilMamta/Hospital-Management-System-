@@ -19,14 +19,6 @@ const DischargeBill = () => {
   const [viewImageModal, setViewImageModal] = useState(false);
   const [viewingImage, setViewingImage] = useState(null);
 
-  // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
-  useRealtimeTable('discharge', loadData);
-
-  // Load data on component mount
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -84,6 +76,14 @@ const DischargeBill = () => {
       setIsLoading(false);
     }
   };
+
+  // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
+  useRealtimeTable('discharge', loadData);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleOpenBillModal = (record) => {
     setSelectedRecord(record);
