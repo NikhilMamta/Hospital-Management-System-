@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Edit,
@@ -45,12 +45,12 @@ import {
   AlertCircle,
   Package,
   Calendar,
-  Syringe
-} from 'lucide-react';
-import supabase from '../../../SupabaseClient';
-import { useNotification } from '../../../contexts/NotificationContext';
-import { ALL_PAGES } from '../../../contexts/AuthContext';
-import useRealtimeTable from '../../../hooks/useRealtimeTable';
+  Syringe,
+} from "lucide-react";
+import supabase from "../../../SupabaseClient";
+import { useNotification } from "../../../contexts/NotificationContext";
+import { ALL_PAGES } from "../../../contexts/AuthContext";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
 
 // Icon mapping for sidebar items
 const sidebarIcons = {
@@ -75,65 +75,66 @@ const sidebarIcons = {
   Bed,
   Stethoscope,
   Key,
-  Calendar
+  Calendar,
 };
 
 // Get all page keys (excluding groups)
-const ALL_PAGE_KEYS = ALL_PAGES.filter(page => page.type !== 'group').map(page => page.key);
-
+const ALL_PAGE_KEYS = ALL_PAGES.filter((page) => page.type !== "group").map(
+  (page) => page.key,
+);
 
 const ManageUsers = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [searchText, setSearchText] = useState('');
+  const [searchText, setSearchText] = useState("");
   const [selectedPages, setSelectedPages] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    user_name: '',
-    name: '',
-    email: '',
-    phone_no: '',
-    password: '',
-    role: '',
-    department: '',
-    profile_image: ''
+    user_name: "",
+    name: "",
+    email: "",
+    phone_no: "",
+    password: "",
+    role: "",
+    department: "",
+    profile_image: "",
   });
   const [imageFile, setImageFile] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const { showNotification } = useNotification();
   const [departments, setDepartments] = useState([]);
-   const fetchUsers = async () => {
+  const fetchUsers = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('timestamp', { ascending: false });
+        .from("users")
+        .select("*")
+        .order("timestamp", { ascending: false });
 
       if (error) throw error;
 
       // Get current user from local storage
-      const currentUser = JSON.parse(localStorage.getItem('mis_user'));
+      const currentUser = JSON.parse(localStorage.getItem("mis_user"));
       const currentUserRole = currentUser?.role;
       const currentUserName = currentUser?.name;
 
       let filteredData = data;
 
       // Filter based on role: if not admin, only show own data
-      if (currentUserRole !== 'admin') {
-        filteredData = data.filter(user => user.name === currentUserName);
+      if (currentUserRole !== "admin") {
+        filteredData = data.filter((user) => user.name === currentUserName);
       }
 
       // Parse pages from string to array for each user
-      const usersWithParsedPages = filteredData.map(user => {
+      const usersWithParsedPages = filteredData.map((user) => {
         let pages = [];
 
         if (user.pages) {
-          if (user.pages === 'all') {
+          if (user.pages === "all") {
             // User has access to all pages
             pages = ALL_PAGE_KEYS;
           } else {
@@ -141,10 +142,17 @@ const ManageUsers = () => {
               // Try to parse as JSON
               pages = JSON.parse(user.pages);
             } catch (parseError) {
-              console.warn('Error parsing pages for user:', user.id, parseError);
+              console.warn(
+                "Error parsing pages for user:",
+                user.id,
+                parseError,
+              );
               // If parsing fails, try to handle as comma-separated string
-              if (typeof user.pages === 'string') {
-                pages = user.pages.split(',').map(p => p.trim()).filter(p => p);
+              if (typeof user.pages === "string") {
+                pages = user.pages
+                  .split(",")
+                  .map((p) => p.trim())
+                  .filter((p) => p);
               }
             }
           }
@@ -152,30 +160,27 @@ const ManageUsers = () => {
 
         return {
           ...user,
-          pages: pages || []
+          pages: pages || [],
         };
       });
       setUsers(usersWithParsedPages);
     } catch (error) {
-      console.error('Error fetching users:', error);
-      showNotification('Failed to fetch users', 'error');
+      console.error("Error fetching users:", error);
+      showNotification("Failed to fetch users", "error");
     } finally {
       setLoading(false);
     }
   };
- 
- 
+
   // Real-time sync: refresh user list when any user modifies the users table
-  useRealtimeTable('users', fetchUsers);
+  useRealtimeTable("users", fetchUsers);
 
   // Fetch users from Supabase
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('mis_user'));
-    setIsAdmin(user?.role === 'admin');
+    const user = JSON.parse(localStorage.getItem("mis_user"));
+    setIsAdmin(user?.role === "admin");
     fetchUsers();
   }, []);
-
-
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -191,18 +196,14 @@ const ManageUsers = () => {
       // Extract unique, non-empty department names
       const fetchedDepartments = [
         ...new Set(
-          data
-            .map((item) => item.department)
-            .filter(Boolean) // removes null / undefined / empty
+          data.map((item) => item.department).filter(Boolean), // removes null / undefined / empty
         ),
       ];
 
       // Merge without duplicates
       setDepartments((prev) => {
         const existing = new Set(prev);
-        const newOnes = fetchedDepartments.filter(
-          (dep) => !existing.has(dep)
-        );
+        const newOnes = fetchedDepartments.filter((dep) => !existing.has(dep));
         return [...prev, ...newOnes];
       });
     };
@@ -212,14 +213,14 @@ const ManageUsers = () => {
 
   const handleAddUser = () => {
     setFormData({
-      user_name: '',
-      name: '',
-      email: '',
-      password: '',
-      phone_no: '',
-      role: '',
-      department: '',
-      profile_image: ''
+      user_name: "",
+      name: "",
+      email: "",
+      password: "",
+      phone_no: "",
+      role: "",
+      department: "",
+      profile_image: "",
     });
     setEditingUser(null);
     setSelectedPages([]);
@@ -232,17 +233,18 @@ const ManageUsers = () => {
   const handleEditUser = (user) => {
     setEditingUser(user);
     setFormData({
-      user_name: user.user_name || '',
-      name: user.name || '',
-      email: user.email || '',
-      phone_no: user.phone_no || '',
-      password: '',
-      role: user.role || '',
-      profile_image: user.profile_image || ''
+      user_name: user.user_name || "",
+      name: user.name || "",
+      email: user.email || "",
+      phone_no: user.phone_no || "",
+      password: "",
+      role: user.role || "",
+      profile_image: user.profile_image || "",
     });
 
     // Check if user has all pages access
-    const hasAllPages = user.pages && user.pages.length === ALL_PAGE_KEYS.length;
+    const hasAllPages =
+      user.pages && user.pages.length === ALL_PAGE_KEYS.length;
     setSelectAll(hasAllPages);
     setSelectedPages(user.pages || []);
     setShowPassword(false);
@@ -251,48 +253,62 @@ const ManageUsers = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
+    if (window.confirm("Are you sure you want to delete this user?")) {
       try {
-        const { error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', userId);
+        const userToDelete = users.find((u) => u.id === userId);
 
+        const { error } = await supabase
+          .from("users")
+          .delete()
+          .eq("id", userId);
         if (error) throw error;
 
-        showNotification('User deleted successfully', 'success');
+        if (userToDelete?.name) {
+          await supabase
+            .from("all_staff")
+            .delete()
+            .eq("name", userToDelete.name);
+        }
+
+        showNotification("User deleted successfully", "success");
         fetchUsers();
       } catch (error) {
-        console.error('Error deleting user:', error);
-        showNotification('Failed to delete user', 'error');
+        console.error("Error deleting user:", error);
+        showNotification("Failed to delete user", "error");
       }
     }
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   const uploadImageToSupabase = async (file) => {
     try {
       // Create a unique file name
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split(".").pop();
       const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
       // Upload to Supabase Storage bucket 'profile_image'
       const { error: uploadError } = await supabase.storage
-        .from('profile_image')
+        .from("profile_image")
         .upload(filePath, file);
 
       if (uploadError) {
         // If bucket doesn't exist, try to create it
-        if (uploadError.message.includes('bucket') && uploadError.message.includes('not found')) {
-          showNotification('Please create a "profile_image" bucket in Supabase Storage first.', 'warning');
+        if (
+          uploadError.message.includes("bucket") &&
+          uploadError.message.includes("not found")
+        ) {
+          showNotification(
+            'Please create a "profile_image" bucket in Supabase Storage first.',
+            "warning",
+          );
           return null;
         }
         throw uploadError;
@@ -300,12 +316,12 @@ const ManageUsers = () => {
 
       // Get public URL
       const { data } = supabase.storage
-        .from('profile_image')
+        .from("profile_image")
         .getPublicUrl(filePath);
 
       return data.publicUrl;
     } catch (error) {
-      console.error('Error uploading image to Supabase:', error);
+      console.error("Error uploading image to Supabase:", error);
       throw error;
     }
   };
@@ -313,19 +329,24 @@ const ManageUsers = () => {
   const handleModalSubmit = async () => {
     try {
       // Basic validation
-      if (!formData.user_name || !formData.name || !formData.email || !formData.role) {
-        showNotification('Please fill all required fields', 'error');
+      if (
+        !formData.user_name ||
+        !formData.name ||
+        !formData.email ||
+        !formData.role
+      ) {
+        showNotification("Please fill all required fields", "error");
         return;
       }
 
       // Department required ONLY for new user
       if (!editingUser && !formData.department) {
-        showNotification('Please select department', 'error');
+        showNotification("Please select department", "error");
         return;
       }
 
       if (!editingUser && !formData.password) {
-        showNotification('Please enter password for new user', 'error');
+        showNotification("Please enter password for new user", "error");
         return;
       }
 
@@ -341,7 +362,10 @@ const ManageUsers = () => {
           }
         } catch (error) {
           setUploading(false);
-          showNotification('Failed to upload image. Please try again.', 'error');
+          showNotification(
+            "Failed to upload image. Please try again.",
+            "error",
+          );
           return;
         }
       }
@@ -350,7 +374,7 @@ const ManageUsers = () => {
       let pagesToStore;
       if (selectAll) {
         // Store 'all' if all pages are selected
-        pagesToStore = 'all';
+        pagesToStore = "all";
       } else {
         // Store as JSON array
         pagesToStore = JSON.stringify(selectedPages);
@@ -364,7 +388,7 @@ const ManageUsers = () => {
         role: formData.role.toLowerCase().trim(),
         pages: pagesToStore,
         profile_image: profileImageUrl,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Only include password if provided (for new users or when changing password)
@@ -375,38 +399,40 @@ const ManageUsers = () => {
       if (editingUser) {
         // Update existing user
         const { error } = await supabase
-          .from('users')
+          .from("users")
           .update(userData)
-          .eq('id', editingUser.id);
+          .eq("id", editingUser.id);
 
         if (error) throw error;
-        showNotification('User updated successfully', 'success');
+        showNotification("User updated successfully", "success");
       } else {
         const { data: insertedUser, error } = await supabase
-          .from('users')
+          .from("users")
           .insert([userData])
           .select()
           .single();
 
         if (error) throw error;
 
-        await supabase.from('all_staff').insert([{
-          name: formData.name,
-          email: formData.email,
-          phone_number: formData.phone_no,
-          department: formData.department,
-          designation: formData.role.toLowerCase().trim(),
-        }]);
+        await supabase.from("all_staff").insert([
+          {
+            name: formData.name,
+            email: formData.email,
+            phone_number: formData.phone_no,
+            department: formData.department,
+            designation: formData.role.toLowerCase().trim(),
+          },
+        ]);
 
-        showNotification('User created successfully', 'success');
+        showNotification("User created successfully", "success");
       }
       setUploading(false);
       setModalVisible(false);
       fetchUsers();
     } catch (error) {
-      console.error('Error saving user:', error);
+      console.error("Error saving user:", error);
       setUploading(false);
-      showNotification(error.message || 'Failed to save user', 'error');
+      showNotification(error.message || "Failed to save user", "error");
     }
   };
 
@@ -416,13 +442,13 @@ const ManageUsers = () => {
 
     // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      showNotification('File size must be less than 2MB', 'error');
+      showNotification("File size must be less than 2MB", "error");
       return;
     }
 
     // Validate file type
-    if (!file.type.startsWith('image/')) {
-      showNotification('Please upload an image file', 'error');
+    if (!file.type.startsWith("image/")) {
+      showNotification("Please upload an image file", "error");
       return;
     }
 
@@ -432,9 +458,9 @@ const ManageUsers = () => {
     // Create a preview URL for display
     const reader = new FileReader();
     reader.onloadend = () => {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        profile_image: reader.result // This is a data URL for preview
+        profile_image: reader.result, // This is a data URL for preview
       }));
     };
     reader.readAsDataURL(file);
@@ -442,16 +468,16 @@ const ManageUsers = () => {
 
   const handleRemoveImage = () => {
     setImageFile(null);
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      profile_image: ''
+      profile_image: "",
     }));
   };
 
   const handlePageToggle = (pageKey) => {
-    setSelectedPages(prev => {
+    setSelectedPages((prev) => {
       if (prev.includes(pageKey)) {
-        return prev.filter(key => key !== pageKey);
+        return prev.filter((key) => key !== pageKey);
       } else {
         return [...prev, pageKey];
       }
@@ -471,71 +497,99 @@ const ManageUsers = () => {
     }
   };
 
-  const filteredUsers = users.filter(user =>
-    (user.user_name && user.user_name.toLowerCase().includes(searchText.toLowerCase())) ||
-    (user.email && user.email.toLowerCase().includes(searchText.toLowerCase())) ||
-    (user.name && user.name.toLowerCase().includes(searchText.toLowerCase())) ||
-    (user.role && user.role.toLowerCase().includes(searchText.toLowerCase()))
+  const filteredUsers = users.filter(
+    (user) =>
+      (user.user_name &&
+        user.user_name.toLowerCase().includes(searchText.toLowerCase())) ||
+      (user.email &&
+        user.email.toLowerCase().includes(searchText.toLowerCase())) ||
+      (user.name &&
+        user.name.toLowerCase().includes(searchText.toLowerCase())) ||
+      (user.role && user.role.toLowerCase().includes(searchText.toLowerCase())),
   );
 
   const getRoleColor = (role) => {
     switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800';
-      case 'doctor': return 'bg-blue-100 text-blue-800';
-      case 'nurse': return 'bg-green-100 text-green-800';
-      case 'lab': return 'bg-orange-100 text-orange-800';
-      case 'pharmacy': return 'bg-purple-100 text-purple-800';
-      case 'receptionist': return 'bg-cyan-100 text-cyan-800';
-      case 'rmo': return 'bg-indigo-100 text-indigo-800';
-      case 'ot': return 'bg-pink-100 text-pink-800'; // OT role color
-      case 'dressing staff': return 'bg-teal-100 text-teal-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case "admin":
+        return "bg-red-100 text-red-800";
+      case "doctor":
+        return "bg-blue-100 text-blue-800";
+      case "nurse":
+        return "bg-green-100 text-green-800";
+      case "lab":
+        return "bg-orange-100 text-orange-800";
+      case "pharmacy":
+        return "bg-purple-100 text-purple-800";
+      case "receptionist":
+        return "bg-cyan-100 text-cyan-800";
+      case "rmo":
+        return "bg-indigo-100 text-indigo-800";
+      case "ot":
+        return "bg-pink-100 text-pink-800"; // OT role color
+      case "dressing staff":
+        return "bg-teal-100 text-teal-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
   const getRoleIcon = (role) => {
     switch (role) {
-      case 'admin': return <Shield size={14} />;
-      case 'doctor': return <Stethoscope size={14} />;
-      case 'nurse': return <UserCog size={14} />;
-      case 'lab': return <FlaskConical size={14} />;
-      case 'pharmacy': return <Pill size={14} />;
-      case 'rmo': return <Activity size={14} />;
-      case 'ot': return <Scissors size={14} />; // OT role icon
-      case 'dressing staff': return <Syringe size={14} />;
-      default: return <User size={14} />;
+      case "admin":
+        return <Shield size={14} />;
+      case "doctor":
+        return <Stethoscope size={14} />;
+      case "nurse":
+        return <UserCog size={14} />;
+      case "lab":
+        return <FlaskConical size={14} />;
+      case "pharmacy":
+        return <Pill size={14} />;
+      case "rmo":
+        return <Activity size={14} />;
+      case "ot":
+        return <Scissors size={14} />; // OT role icon
+      case "dressing staff":
+        return <Syringe size={14} />;
+      default:
+        return <User size={14} />;
     }
   };
 
   // Enhanced function to get page display info
   const getPageDisplayInfo = (pageKey) => {
-    const page = ALL_PAGES.find(p => p.key === pageKey);
-    if (!page) return {
-      label: pageKey,
-      description: '',
-      icon: null
-    };
+    const page = ALL_PAGES.find((p) => p.key === pageKey);
+    if (!page)
+      return {
+        label: pageKey,
+        description: "",
+        icon: null,
+      };
 
     const IconComponent = sidebarIcons[page.icon];
     const icon = IconComponent ? <IconComponent size={16} /> : null;
 
     return {
       label: page.label,
-      description: page.description || '',
-      icon: icon
+      description: page.description || "",
+      icon: icon,
     };
   };
 
   const roles = [
-    { value: 'admin', label: 'Administrator', icon: <Shield size={16} /> },
-    { value: 'doctor', label: 'Doctor', icon: <Stethoscope size={16} /> },
-    { value: 'nurse', label: 'Nurse', icon: <UserCog size={16} /> },
-    { value: 'lab', label: 'Lab Technician', icon: <FlaskConical size={16} /> },
-    { value: 'pharmacy', label: 'Pharmacist', icon: <Pill size={16} /> },
-    { value: 'receptionist', label: 'Receptionist', icon: <User size={16} /> },
-    { value: 'rmo', label: 'RMO', icon: <Activity size={16} /> },
-    { value: 'ot', label: 'OT Staff', icon: <Scissors size={16} /> },
-    { value: 'dressing staff', label: 'Dressing Staff', icon: <Syringe size={16} /> },
+    { value: "admin", label: "Administrator", icon: <Shield size={16} /> },
+    { value: "doctor", label: "Doctor", icon: <Stethoscope size={16} /> },
+    { value: "nurse", label: "Nurse", icon: <UserCog size={16} /> },
+    { value: "lab", label: "Lab Technician", icon: <FlaskConical size={16} /> },
+    { value: "pharmacy", label: "Pharmacist", icon: <Pill size={16} /> },
+    { value: "receptionist", label: "Receptionist", icon: <User size={16} /> },
+    { value: "rmo", label: "RMO", icon: <Activity size={16} /> },
+    { value: "ot", label: "OT Staff", icon: <Scissors size={16} /> },
+    {
+      value: "dressing staff",
+      label: "Dressing Staff",
+      icon: <Syringe size={16} />,
+    },
   ];
 
   // Check if user has all pages access
@@ -546,12 +600,12 @@ const ManageUsers = () => {
   // Function to categorize pages by department for better organization
   const getPagesByDepartment = () => {
     const categories = {};
-    const groups = ALL_PAGES.filter(p => p.type === 'group');
+    const groups = ALL_PAGES.filter((p) => p.type === "group");
 
-    ALL_PAGES.filter(page => page.type !== 'group').forEach(page => {
-      let category = 'General';
+    ALL_PAGES.filter((page) => page.type !== "group").forEach((page) => {
+      let category = "General";
       if (page.parent) {
-        const parentGroup = groups.find(g => g.key === page.parent);
+        const parentGroup = groups.find((g) => g.key === page.parent);
         if (parentGroup) category = parentGroup.label;
       }
 
@@ -573,8 +627,12 @@ const ManageUsers = () => {
                 <Users size={20} className="text-white md:w-6 md:h-6" />
               </div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900">User Management</h1>
-                <p className="hidden md:block text-gray-600">Manage system users and their permissions</p>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+                  User Management
+                </h1>
+                <p className="hidden md:block text-gray-600">
+                  Manage system users and their permissions
+                </p>
               </div>
             </div>
           </div>
@@ -595,7 +653,10 @@ const ManageUsers = () => {
         <div className="flex flex-col md:flex-row gap-3 md:gap-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <Search
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={18}
+              />
               <input
                 type="text"
                 placeholder="Search users..."
@@ -608,8 +669,11 @@ const ManageUsers = () => {
           <div className="flex items-center justify-between md:justify-start gap-4">
             <div className="bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
               <span className="text-xs md:text-sm text-gray-600">
-                <span className="font-bold text-gray-900">{filteredUsers.length}</span>/
-                <span className="font-bold text-gray-900">{users.length}</span> users
+                <span className="font-bold text-gray-900">
+                  {filteredUsers.length}
+                </span>
+                /<span className="font-bold text-gray-900">{users.length}</span>{" "}
+                users
               </span>
             </div>
             <button
@@ -617,7 +681,7 @@ const ManageUsers = () => {
               disabled={loading}
               className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs md:text-sm"
             >
-              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
@@ -628,7 +692,10 @@ const ManageUsers = () => {
       <div className="md:hidden space-y-3">
         {loading ? (
           <div className="bg-white p-12 text-center rounded-xl border border-gray-200 shadow-sm">
-            <RefreshCw className="animate-spin text-green-600 mx-auto" size={24} />
+            <RefreshCw
+              className="animate-spin text-green-600 mx-auto"
+              size={24}
+            />
             <p className="mt-2 text-gray-500 text-sm">Loading users...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
@@ -638,7 +705,10 @@ const ManageUsers = () => {
           </div>
         ) : (
           filteredUsers.map((user) => (
-            <div key={user.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm p-3">
+            <div
+              key={user.id}
+              className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm p-3"
+            >
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-3">
                   <div className="relative">
@@ -649,7 +719,8 @@ const ManageUsers = () => {
                         className="w-10 h-10 rounded-full object-cover border border-gray-100 shadow-sm"
                         onError={(e) => {
                           e.target.onerror = null;
-                          e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyNCIgZmlsbD0iI0VFRUVFRSIvPjxwYXRoIGQ9Ik0zMSAyMUMzMSAyNS40MTgzIDI4LjQxODMgMjggMjQgMjhDMTkuNTgxNyAyOCAxNyAyNS40MTgzIDE3IDIxQzE3IDE2LjU4MTcgMTkuNTgxNyAxNCAyNCAxNEMyOC40MTgzIDE0IDMxIDE2LjU4MTcgMzEgMjFaIiBmaWxsPSIjOTk5OTk5Ii8+PC9zdmc+';
+                          e.target.src =
+                            "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyNCIgZmlsbD0iI0VFRUVFRSIvPjxwYXRoIGQ9Ik0zMSAyMUMzMSAyNS40MTgzIDI4LjQxODMgMjggMjQgMjhDMTkuNTgxNyAyOCAxNyAyNS40MTgzIDE3IDIxQzE3IDE2LjU4MTcgMTkuNTgxNyAxNCAyNCAxNEMyOC40MTgzIDE0IDMxIDE2LjU4MTcgMzEgMjFaIiBmaWxsPSIjOTk5OTk5Ii8+PC9zdmc+";
                         }}
                       />
                     ) : (
@@ -659,8 +730,12 @@ const ManageUsers = () => {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold text-gray-900 text-sm leading-tight truncate">{user.name || user.user_name || 'No Name'}</h3>
-                    <p className="text-[10px] text-gray-500 font-medium">@{user.user_name || 'No Username'}</p>
+                    <h3 className="font-bold text-gray-900 text-sm leading-tight truncate">
+                      {user.name || user.user_name || "No Name"}
+                    </h3>
+                    <p className="text-[10px] text-gray-500 font-medium">
+                      @{user.user_name || "No Username"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -685,21 +760,31 @@ const ManageUsers = () => {
 
               <div className="grid grid-cols-2 gap-3 py-2.5 border-t border-gray-50 mt-1">
                 <div>
-                  <p className="text-[10px] text-gray-500 uppercase font-bold italic mb-1">Role</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-bold italic mb-1">
+                    Role
+                  </p>
                   <div className="flex items-center gap-1.5">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tight ${getRoleColor(user.role)}`}>
-                      {user.role || 'N/A'}
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tight ${getRoleColor(user.role)}`}
+                    >
+                      {user.role || "N/A"}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-gray-500 uppercase font-bold italic mb-1">Contact</p>
-                  <p className="text-[11px] text-gray-800 font-medium truncate">{user.email || 'No Email'}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-bold italic mb-1">
+                    Contact
+                  </p>
+                  <p className="text-[11px] text-gray-800 font-medium truncate">
+                    {user.email || "No Email"}
+                  </p>
                 </div>
               </div>
 
               <div className="pt-2.5 border-t border-gray-50">
-                <p className="text-[10px] text-gray-500 uppercase font-bold italic mb-1.5">Access Control</p>
+                <p className="text-[10px] text-gray-500 uppercase font-bold italic mb-1.5">
+                  Access Control
+                </p>
                 {hasAllPagesAccess(user.pages) ? (
                   <div className="flex items-center gap-1.5 text-green-600 text-[10px] font-bold bg-green-50 px-2 py-1 rounded-md inline-flex">
                     <CheckCircle size={12} />
@@ -710,7 +795,10 @@ const ManageUsers = () => {
                     {user.pages.slice(0, 3).map((page) => {
                       const pageInfo = getPageDisplayInfo(page);
                       return (
-                        <span key={page} className="bg-gray-50 text-gray-600 px-2 py-0.5 rounded border border-gray-100 text-[10px] font-medium">
+                        <span
+                          key={page}
+                          className="bg-gray-50 text-gray-600 px-2 py-0.5 rounded border border-gray-100 text-[10px] font-medium"
+                        >
                           {pageInfo.label}
                         </span>
                       );
@@ -722,7 +810,9 @@ const ManageUsers = () => {
                     )}
                   </div>
                 ) : (
-                  <span className="text-[10px] text-gray-400 italic">No pages assigned</span>
+                  <span className="text-[10px] text-gray-400 italic">
+                    No pages assigned
+                  </span>
                 )}
               </div>
             </div>
@@ -736,14 +826,30 @@ const ManageUsers = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">User Info</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Password</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Access Pages</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Profile Image</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  User Info
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Password
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Contact
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Access Pages
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Profile Image
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -751,7 +857,10 @@ const ManageUsers = () => {
                 <tr>
                   <td colSpan="6" className="px-6 py-12 text-center">
                     <div className="flex justify-center">
-                      <RefreshCw className="animate-spin text-blue-600" size={24} />
+                      <RefreshCw
+                        className="animate-spin text-blue-600"
+                        size={24}
+                      />
                     </div>
                     <p className="mt-2 text-gray-500">Loading users...</p>
                   </td>
@@ -765,35 +874,42 @@ const ManageUsers = () => {
                 </tr>
               ) : (
                 filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={user.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       #{user.id}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="min-w-0">
                         <div className="font-medium text-gray-900 truncate max-w-[150px]">
-                          {user.name || user.user_name || 'No Name'}
+                          {user.name || user.user_name || "No Name"}
                         </div>
                         <div className="text-sm text-gray-500 truncate max-w-[150px]">
-                          {user.user_name || 'No Username'}
+                          {user.user_name || "No Username"}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-mono text-gray-700">
-                        {user.password ? user.password : 'N/A'}
+                        {user.password ? user.password : "N/A"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm">
                           <Mail size={14} className="text-gray-400" />
-                          <span className="truncate max-w-[180px]">{user.email || 'N/A'}</span>
+                          <span className="truncate max-w-[180px]">
+                            {user.email || "N/A"}
+                          </span>
                         </div>
                         {user.phone_no && (
                           <div className="flex items-center gap-2 text-xs text-gray-500">
                             <Phone size={14} className="text-gray-400" />
-                            <span className="truncate max-w-[180px]">{user.phone_no}</span>
+                            <span className="truncate max-w-[180px]">
+                              {user.phone_no}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -801,12 +917,18 @@ const ManageUsers = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         {getRoleIcon(user.role)}
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
-                          {user.role === 'rmo' ? 'RMO' :
-                            user.role === 'nurse' ? 'Nurse' :
-                              user.role === 'ot' ? 'OT Staff' :
-                                user.role === 'dressing staff' ? 'Dressing Staff' :
-                                  user.role || 'N/A'}
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}
+                        >
+                          {user.role === "rmo"
+                            ? "RMO"
+                            : user.role === "nurse"
+                              ? "Nurse"
+                              : user.role === "ot"
+                                ? "OT Staff"
+                                : user.role === "dressing staff"
+                                  ? "Dressing Staff"
+                                  : user.role || "N/A"}
                         </span>
                       </div>
                     </td>
@@ -815,7 +937,9 @@ const ManageUsers = () => {
                         {hasAllPagesAccess(user.pages) ? (
                           <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-lg">
                             <CheckCircle size={14} />
-                            <span className="text-sm font-medium">All Pages Access</span>
+                            <span className="text-sm font-medium">
+                              All Pages Access
+                            </span>
                           </div>
                         ) : user.pages && user.pages.length > 0 ? (
                           <div className="space-y-2">
@@ -828,14 +952,22 @@ const ManageUsers = () => {
                                     className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1.5 rounded-lg text-xs border border-gray-200 group relative"
                                     title={pageInfo.description}
                                   >
-                                    {pageInfo.icon && React.cloneElement(pageInfo.icon, { size: 12, className: 'text-gray-500' })}
+                                    {pageInfo.icon &&
+                                      React.cloneElement(pageInfo.icon, {
+                                        size: 12,
+                                        className: "text-gray-500",
+                                      })}
                                     <span className="truncate max-w-[100px]">
                                       {pageInfo.label}
                                     </span>
                                     {pageInfo.description && (
                                       <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded p-2 whitespace-nowrap z-10">
-                                        <div className="font-medium mb-1">{pageInfo.label}</div>
-                                        <div className="text-gray-300">{pageInfo.description}</div>
+                                        <div className="font-medium mb-1">
+                                          {pageInfo.label}
+                                        </div>
+                                        <div className="text-gray-300">
+                                          {pageInfo.description}
+                                        </div>
                                       </div>
                                     )}
                                   </div>
@@ -850,7 +982,9 @@ const ManageUsers = () => {
                             )}
                           </div>
                         ) : (
-                          <span className="text-gray-400 text-sm">No pages assigned</span>
+                          <span className="text-gray-400 text-sm">
+                            No pages assigned
+                          </span>
                         )}
                       </div>
                     </td>
@@ -864,7 +998,8 @@ const ManageUsers = () => {
                               className="w-12 h-12 rounded-full object-cover border border-gray-300 shadow-sm transition-transform duration-200 group-hover:scale-110"
                               onError={(e) => {
                                 e.target.onerror = null;
-                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyNCIgZmlsbD0iI0VFRUVFRSIvPjxwYXRoIGQ9Ik0zMSAyMUMzMSAyNS40MTgzIDI4LjQxODMgMjggMjQgMjhDMTkuNTgxNyAyOCAxNyAyNS40MTgzIDE3IDIxQzE3IDE2LjU4MTcgMTkuNTgxNyAxNCAyNCAxNEMyOC40MTgzIDE0IDMxIDE2LjU4MTcgMzEgMjFaIiBmaWxsPSIjOTk5OTk5Ii8+PC9zdmc+';
+                                e.target.src =
+                                  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyNCIgZmlsbD0iI0VFRUVFRSIvPjxwYXRoIGQ9Ik0zMSAyMUMzMSAyNS40MTgzIDI4LjQxODMgMjggMjQgMjhDMTkuNTgxNyAyOCAxNyAyNS40MTgzIDE3IDIxQzE3IDE2LjU4MTcgMTkuNTgxNyAxNCAyNCAxNEMyOC40MTgzIDE0IDMxIDE2LjU4MTcgMzEgMjFaIiBmaWxsPSIjOTk5OTk5Ii8+PC9zdmc+";
                               }}
                             />
                             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-full transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -914,7 +1049,9 @@ const ManageUsers = () => {
             <div className="border-b border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${editingUser ? 'bg-blue-100' : 'bg-green-100'}`}>
+                  <div
+                    className={`p-2 rounded-lg ${editingUser ? "bg-blue-100" : "bg-green-100"}`}
+                  >
                     {editingUser ? (
                       <Edit size={24} className="text-blue-600" />
                     ) : (
@@ -923,10 +1060,12 @@ const ManageUsers = () => {
                   </div>
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900">
-                      {editingUser ? 'Edit User' : 'Add New User'}
+                      {editingUser ? "Edit User" : "Add New User"}
                     </h2>
                     <p className="text-gray-500">
-                      {editingUser ? 'Update user details and permissions' : 'Create a new user account'}
+                      {editingUser
+                        ? "Update user details and permissions"
+                        : "Create a new user account"}
                     </p>
                   </div>
                 </div>
@@ -963,7 +1102,9 @@ const ManageUsers = () => {
 
                 {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Full Name *
+                  </label>
                   <input
                     type="text"
                     name="name"
@@ -1000,18 +1141,21 @@ const ManageUsers = () => {
                     <div className="flex items-center gap-2">
                       <Lock size={16} className="text-gray-400" />
                       <span>
-                        Password {editingUser ? '(Leave blank to keep unchanged)' : '*'}
+                        Password{" "}
+                        {editingUser ? "(Leave blank to keep unchanged)" : "*"}
                       </span>
                     </div>
                   </label>
 
                   <div className="relative">
                     <input
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       name="password"
-                      value={formData.password || ''}
+                      value={formData.password || ""}
                       onChange={handleInputChange}
-                      placeholder={editingUser ? 'Enter new password' : 'Enter password'}
+                      placeholder={
+                        editingUser ? "Enter new password" : "Enter password"
+                      }
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required={!editingUser}
                     />
@@ -1093,8 +1237,10 @@ const ManageUsers = () => {
                       required
                     >
                       <option value="">Select Department</option>
-                      {departments.map(dep => (
-                        <option key={dep} value={dep}>{dep}</option>
+                      {departments.map((dep) => (
+                        <option key={dep} value={dep}>
+                          {dep}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1136,7 +1282,11 @@ const ManageUsers = () => {
                         <div>
                           <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium transition-colors cursor-pointer hover:bg-gray-50 hover:border-gray-400">
                             <Upload size={20} />
-                            <span>{uploading ? 'Uploading...' : 'Choose Profile Image'}</span>
+                            <span>
+                              {uploading
+                                ? "Uploading..."
+                                : "Choose Profile Image"}
+                            </span>
                             <input
                               type="file"
                               accept="image/*"
@@ -1145,7 +1295,9 @@ const ManageUsers = () => {
                               disabled={uploading}
                             />
                           </label>
-                          <p className="text-xs text-gray-500 mt-2 text-center">Recommended: Square image, JPG or PNG, max 2MB</p>
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            Recommended: Square image, JPG or PNG, max 2MB
+                          </p>
                         </div>
                         {imageFile && (
                           <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded border border-blue-200">
@@ -1153,7 +1305,9 @@ const ManageUsers = () => {
                               <Check size={16} />
                               <span>Selected: {imageFile.name}</span>
                             </div>
-                            <p className="text-xs text-blue-500 mt-1">Image will be uploaded when you save the user</p>
+                            <p className="text-xs text-blue-500 mt-1">
+                              Image will be uploaded when you save the user
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1166,9 +1320,13 @@ const ManageUsers = () => {
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <div className="flex items-center gap-2 mb-4">
                   <Key size={20} className="text-gray-700" />
-                  <h3 className="text-lg font-semibold text-gray-900">Access Permissions</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Access Permissions
+                  </h3>
                 </div>
-                <p className="text-gray-600 mb-4">Select which pages this user can access</p>
+                <p className="text-gray-600 mb-4">
+                  Select which pages this user can access
+                </p>
 
                 {/* Select All Checkbox */}
                 <div className="mb-4">
@@ -1181,62 +1339,109 @@ const ManageUsers = () => {
                     />
                     <div className="flex items-center gap-2">
                       <CheckCircle size={18} className="text-blue-600" />
-                      <span className="font-medium text-blue-700">Select All Pages (Full Access)</span>
+                      <span className="font-medium text-blue-700">
+                        Select All Pages (Full Access)
+                      </span>
                     </div>
                   </label>
                 </div>
 
                 {!selectAll && (
                   <>
-                    <p className="text-sm text-gray-600 mb-3">Or select individual pages by department:</p>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Or select individual pages by department:
+                    </p>
                     <div className="space-y-4">
-                      {Object.entries(getPagesByDepartment()).map(([department, pages]) => (
-                        <div key={department} className="border border-gray-200 rounded-lg overflow-hidden">
-                          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                            <div className="flex items-center gap-2">
-                              {department === 'Nurse Station' && <UserCog size={16} className="text-green-600" />}
-                              {department === 'RMO' && <Activity size={16} className="text-indigo-600" />}
-                              {department === 'OT' && <Scissors size={16} className="text-pink-600" />} {/* OT department icon */}
-                              {department === 'Laboratory' && <FlaskConical size={16} className="text-orange-600" />}
-                              {department === 'Pharmacy' && <Pill size={16} className="text-purple-600" />}
-                              {department === 'General' && <Users size={16} className="text-gray-600" />}
-                              <span className="font-semibold text-gray-700">{department}</span>
-                              <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
-                                {pages.length} pages
-                              </span>
+                      {Object.entries(getPagesByDepartment()).map(
+                        ([department, pages]) => (
+                          <div
+                            key={department}
+                            className="border border-gray-200 rounded-lg overflow-hidden"
+                          >
+                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                              <div className="flex items-center gap-2">
+                                {department === "Nurse Station" && (
+                                  <UserCog
+                                    size={16}
+                                    className="text-green-600"
+                                  />
+                                )}
+                                {department === "RMO" && (
+                                  <Activity
+                                    size={16}
+                                    className="text-indigo-600"
+                                  />
+                                )}
+                                {department === "OT" && (
+                                  <Scissors
+                                    size={16}
+                                    className="text-pink-600"
+                                  />
+                                )}{" "}
+                                {/* OT department icon */}
+                                {department === "Laboratory" && (
+                                  <FlaskConical
+                                    size={16}
+                                    className="text-orange-600"
+                                  />
+                                )}
+                                {department === "Pharmacy" && (
+                                  <Pill size={16} className="text-purple-600" />
+                                )}
+                                {department === "General" && (
+                                  <Users size={16} className="text-gray-600" />
+                                )}
+                                <span className="font-semibold text-gray-700">
+                                  {department}
+                                </span>
+                                <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                                  {pages.length} pages
+                                </span>
+                              </div>
+                            </div>
+                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {pages.map((page) => (
+                                <label
+                                  key={page.key}
+                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                    selectedPages.includes(page.key)
+                                      ? "bg-blue-50 border-blue-200"
+                                      : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPages.includes(page.key)}
+                                    onChange={() => handlePageToggle(page.key)}
+                                    className="mt-1 rounded text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {page.icon &&
+                                        sidebarIcons[page.icon] &&
+                                        React.createElement(
+                                          sidebarIcons[page.icon],
+                                          {
+                                            size: 14,
+                                            className: "text-gray-500",
+                                          },
+                                        )}
+                                      <span className="text-sm font-medium text-gray-700">
+                                        {page.label}
+                                      </span>
+                                    </div>
+                                    {page.description && (
+                                      <p className="text-xs text-gray-500">
+                                        {page.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </label>
+                              ))}
                             </div>
                           </div>
-                          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {pages.map((page) => (
-                              <label
-                                key={page.key}
-                                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedPages.includes(page.key)
-                                  ? 'bg-blue-50 border-blue-200'
-                                  : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                                  }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selectedPages.includes(page.key)}
-                                  onChange={() => handlePageToggle(page.key)}
-                                  className="mt-1 rounded text-blue-600 focus:ring-blue-500"
-                                />
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    {page.icon && sidebarIcons[page.icon] && React.createElement(sidebarIcons[page.icon], { size: 14, className: 'text-gray-500' })}
-                                    <span className="text-sm font-medium text-gray-700">
-                                      {page.label}
-                                    </span>
-                                  </div>
-                                  {page.description && (
-                                    <p className="text-xs text-gray-500">{page.description}</p>
-                                  )}
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        ),
+                      )}
                     </div>
                   </>
                 )}
@@ -1248,35 +1453,58 @@ const ManageUsers = () => {
                       <div className="flex items-center gap-2">
                         <CheckSquare size={18} className="text-blue-600" />
                         <span className="font-medium text-blue-800">
-                          {selectAll ? 'All Pages Selected' : `Selected Pages (${selectedPages.length})`}
+                          {selectAll
+                            ? "All Pages Selected"
+                            : `Selected Pages (${selectedPages.length})`}
                         </span>
                       </div>
                       <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                        {selectAll ? 'All Access' : `${selectedPages.length} pages`}
+                        {selectAll
+                          ? "All Access"
+                          : `${selectedPages.length} pages`}
                       </span>
                     </div>
                     {selectAll ? (
                       <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg">
                         <CheckCircle size={16} />
-                        <span className="text-sm font-medium">User will have access to all system pages</span>
+                        <span className="text-sm font-medium">
+                          User will have access to all system pages
+                        </span>
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-2">
                           {selectedPages.slice(0, 6).map((page) => {
                             const pageInfo = getPageDisplayInfo(page);
-                            const isNurse = page.startsWith('nurse-station-');
-                            const isRMO = page.startsWith('rmo-');
-                            const isOT = page.startsWith('ot-'); // Check for OT pages
+                            const isNurse = page.startsWith("nurse-station-");
+                            const isRMO = page.startsWith("rmo-");
+                            const isOT = page.startsWith("ot-"); // Check for OT pages
 
                             return (
-                              <div key={page} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border shadow-sm" style={{
-                                borderColor: isNurse ? '#d1fae5' : isRMO ? '#e0e7ff' : isOT ? '#fce7f3' : '#dbeafe'
-                              }}>
-                                {pageInfo.icon && React.cloneElement(pageInfo.icon, {
-                                  size: 14,
-                                  className: isNurse ? 'text-green-600' : isRMO ? 'text-indigo-600' : isOT ? 'text-pink-600' : 'text-blue-600'
-                                })}
+                              <div
+                                key={page}
+                                className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border shadow-sm"
+                                style={{
+                                  borderColor: isNurse
+                                    ? "#d1fae5"
+                                    : isRMO
+                                      ? "#e0e7ff"
+                                      : isOT
+                                        ? "#fce7f3"
+                                        : "#dbeafe",
+                                }}
+                              >
+                                {pageInfo.icon &&
+                                  React.cloneElement(pageInfo.icon, {
+                                    size: 14,
+                                    className: isNurse
+                                      ? "text-green-600"
+                                      : isRMO
+                                        ? "text-indigo-600"
+                                        : isOT
+                                          ? "text-pink-600"
+                                          : "text-blue-600",
+                                  })}
                                 <span className="text-sm font-medium text-gray-700">
                                   {pageInfo.label}
                                 </span>
@@ -1295,19 +1523,23 @@ const ManageUsers = () => {
                         {/* Department Summary */}
                         <div className="mt-3 text-sm text-gray-600">
                           <div className="flex flex-wrap gap-3">
-                            {selectedPages.some(p => p.startsWith('nurse-station-')) && (
+                            {selectedPages.some((p) =>
+                              p.startsWith("nurse-station-"),
+                            ) && (
                               <div className="flex items-center gap-1">
                                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
                                 <span>Nurse Station</span>
                               </div>
                             )}
-                            {selectedPages.some(p => p.startsWith('rmo-')) && (
+                            {selectedPages.some((p) =>
+                              p.startsWith("rmo-"),
+                            ) && (
                               <div className="flex items-center gap-1">
                                 <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
                                 <span>RMO</span>
                               </div>
                             )}
-                            {selectedPages.some(p => p.startsWith('ot-')) && ( // OT department summary
+                            {selectedPages.some((p) => p.startsWith("ot-")) && ( // OT department summary
                               <div className="flex items-center gap-1">
                                 <div className="w-2 h-2 rounded-full bg-pink-500"></div>
                                 <span>OT (Operation Theater)</span>
