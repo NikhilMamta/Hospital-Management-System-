@@ -1,20 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { Scissors, Search, User, ChevronDown, ChevronUp } from 'lucide-react';
-import supabase from '../../../SupabaseClient';
-import { useOutletContext } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { Scissors, Search, User, ChevronDown, ChevronUp } from "lucide-react";
+import supabase from "../../../SupabaseClient";
+import { useOutletContext } from "react-router-dom";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
     switch (status) {
-      case 'Completed': return 'bg-green-100 text-green-700 border-green-200';
-      case 'Delayed': return 'bg-red-100 text-red-700 border-red-200';
-      case 'On Time': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case "Completed":
+        return "bg-green-100 text-green-700 border-green-200";
+      case "Delayed":
+        return "bg-red-100 text-red-700 border-red-200";
+      case "On Time":
+        return "bg-green-100 text-green-700 border-green-200";
+      default:
+        return "bg-yellow-100 text-yellow-700 border-yellow-200";
     }
   };
 
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}>
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}
+    >
       {status}
     </span>
   );
@@ -22,16 +29,21 @@ const StatusBadge = ({ status }) => {
 
 const OTTypeBadge = ({ otType }) => {
   const getColors = () => {
-    const otTypeLower = otType?.toLowerCase() || '';
-    if (otTypeLower.includes('pre')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    if (otTypeLower.includes('post')) return 'bg-teal-100 text-teal-700 border-teal-200';
-    if (otTypeLower.includes('discharge')) return 'bg-red-100 text-red-700 border-red-200';
-    return 'bg-green-100 text-green-700 border-green-200';
+    const otTypeLower = otType?.toLowerCase() || "";
+    if (otTypeLower.includes("pre"))
+      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    if (otTypeLower.includes("post"))
+      return "bg-teal-100 text-teal-700 border-teal-200";
+    if (otTypeLower.includes("discharge"))
+      return "bg-red-100 text-red-700 border-red-200";
+    return "bg-green-100 text-green-700 border-green-200";
   };
 
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}>
-      {otType || 'OT Staff'}
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}
+    >
+      {otType || "OT Staff"}
     </span>
   );
 };
@@ -39,10 +51,10 @@ const OTTypeBadge = ({ otType }) => {
 export default function OT() {
   const [pendingList, setPendingList] = useState([]);
   const [historyList, setHistoryList] = useState([]);
-  const [activeTab, setActiveTab] = useState('history');
+  const [activeTab, setActiveTab] = useState("history");
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterShift, setFilterShift] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterShift, setFilterShift] = useState("all");
   const [expandedCard, setExpandedCard] = useState(null);
 
   // Get IPD number from parent component context
@@ -53,50 +65,70 @@ export default function OT() {
     try {
       setLoading(true);
 
-      console.log('Fetching OT tasks for IPD:', ipdNumber);
+      console.log("Fetching OT tasks for IPD:", ipdNumber);
 
       // Build query based on whether IPD number is available
       let query = supabase
-        .from('nurse_assign_task')
-        .select('*')
-        .or('staff.eq.OT Staff,staff.eq.ot staff')
-        .order('timestamp', { ascending: false });
+        .from("nurse_assign_task")
+        .select("*")
+        .or("staff.eq.OT Staff,staff.eq.ot staff")
+        .order("timestamp", { ascending: false });
 
       // Add IPD filter only if we have a valid IPD number
-      if (ipdNumber && ipdNumber !== 'N/A') {
-        query = query.eq('Ipd_number', ipdNumber);
+      if (ipdNumber && ipdNumber !== "N/A") {
+        query = query.eq("Ipd_number", ipdNumber);
       }
 
       const { data: supabaseTasks, error } = await query;
 
       if (error) {
-        console.error('Error fetching OT tasks:', error);
+        console.error("Error fetching OT tasks:", error);
         loadFromLocalStorage();
         return;
       }
 
       // Transform Supabase data to match our format
-      const transformedTasks = (supabaseTasks || []).map(task => ({
+      const transformedTasks = (supabaseTasks || []).map((task) => ({
         id: task.id,
         taskId: `OT-${task.id}`,
-        taskNo: task.task_no || `OT-${String(task.id).padStart(3, '0')}`,
-        ipdNumber: task.Ipd_number || '',
-        patientName: task.patient_name || '',
-        taskName: task.task || 'OT Task',
-        priority: 'Medium',
-        shift: task.shift || 'General',
-        wardType: task.ward_type || '',
-        room: task.room || '',
-        bedNo: task.bed_no || '',
-        assignBy: 'Admin',
-        nurseName: task.assign_nurse || 'OT Nurse',
-        instructions: task.reminder || '',
-        status: task.actual1 ? 'Completed' : 'Pending',
-        plannedTime: task.planned1 ? new Date(task.planned1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
-        actualTime: task.actual1 ? new Date(task.actual1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
-        delayStatus: task.planned1 && task.actual1 ?
-          (new Date(task.actual1) > new Date(task.planned1) ? 'Delayed' : 'On Time') : 'Pending',
-        otType: task.staff || 'OT Staff',
+        taskNo: task.task_no || `OT-${String(task.id).padStart(3, "0")}`,
+        ipdNumber: task.Ipd_number || "",
+        patientName: task.patient_name || "",
+        taskName: task.task || "OT Task",
+        priority: "Medium",
+        shift: task.shift || "General",
+        wardType: task.ward_type || "",
+        room: task.room || "",
+        bedNo: task.bed_no || "",
+        assignBy: "Admin",
+        nurseName: task.assign_nurse || "OT Nurse",
+        instructions: task.reminder || "",
+        status: task.actual1 ? "Completed" : "Pending",
+        plannedTime: task.planned1
+          ? new Date(task.planned1).toLocaleString("en-GB", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
+        actualTime: task.actual1
+          ? new Date(task.actual1).toLocaleString("en-GB", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
+        delayStatus:
+          task.planned1 && task.actual1
+            ? new Date(task.actual1) > new Date(task.planned1)
+              ? "Delayed"
+              : "On Time"
+            : "Pending",
+        otType: task.staff || "OT Staff",
         supabaseData: {
           id: task.id,
           timestamp: task.timestamp,
@@ -112,27 +144,30 @@ export default function OT() {
           start_date: task.start_date,
           planned1: task.planned1,
           actual1: task.actual1,
-          staff: task.staff
-        }
+          staff: task.staff,
+        },
       }));
 
       // Separate pending and completed tasks
-      const pending = transformedTasks.filter(task => !task.supabaseData.actual1 && task.supabaseData.planned1);
-      const history = transformedTasks.filter(task => task.supabaseData.actual1 && task.supabaseData.planned1);
+      const pending = transformedTasks.filter(
+        (task) => !task.supabaseData.actual1 && task.supabaseData.planned1,
+      );
+      const history = transformedTasks.filter(
+        (task) => task.supabaseData.actual1 && task.supabaseData.planned1,
+      );
 
       setPendingList(pending);
       setHistoryList(history);
 
       // Update localStorage
       try {
-        localStorage.setItem('otTasksPending', JSON.stringify(pending));
-        localStorage.setItem('otTasksHistory', JSON.stringify(history));
+        localStorage.setItem("otTasksPending", JSON.stringify(pending));
+        localStorage.setItem("otTasksHistory", JSON.stringify(history));
       } catch (e) {
-        console.error('Failed to update localStorage:', e);
+        console.error("Failed to update localStorage:", e);
       }
-
     } catch (err) {
-      console.error('Error in fetchOTTasks:', err);
+      console.error("Error in fetchOTTasks:", err);
       loadFromLocalStorage();
     } finally {
       setLoading(false);
@@ -142,28 +177,30 @@ export default function OT() {
   // Load from localStorage as fallback
   const loadFromLocalStorage = () => {
     try {
-      const storedPending = localStorage.getItem('otTasksPending');
-      const storedHistory = localStorage.getItem('otTasksHistory');
+      const storedPending = localStorage.getItem("otTasksPending");
+      const storedHistory = localStorage.getItem("otTasksHistory");
 
       if (storedPending) {
         const allPending = JSON.parse(storedPending);
         // Filter by IPD number if available
-        const filteredPending = ipdNumber && ipdNumber !== 'N/A'
-          ? allPending.filter(task => task.ipdNumber === ipdNumber)
-          : allPending;
+        const filteredPending =
+          ipdNumber && ipdNumber !== "N/A"
+            ? allPending.filter((task) => task.ipdNumber === ipdNumber)
+            : allPending;
         setPendingList(filteredPending);
       }
 
       if (storedHistory) {
         const allHistory = JSON.parse(storedHistory);
         // Filter by IPD number if available
-        const filteredHistory = ipdNumber && ipdNumber !== 'N/A'
-          ? allHistory.filter(task => task.ipdNumber === ipdNumber)
-          : allHistory;
+        const filteredHistory =
+          ipdNumber && ipdNumber !== "N/A"
+            ? allHistory.filter((task) => task.ipdNumber === ipdNumber)
+            : allHistory;
         setHistoryList(filteredHistory);
       }
     } catch (e) {
-      console.error('Error loading from localStorage:', e);
+      console.error("Error loading from localStorage:", e);
     }
     setLoading(false);
   };
@@ -171,19 +208,22 @@ export default function OT() {
   // Re-fetch tasks when IPD number changes
   useEffect(() => {
     if (ipdNumber) {
-      console.log('IPD number available:', ipdNumber);
+      console.log("IPD number available:", ipdNumber);
       fetchOTTasks();
     } else {
-      console.log('No IPD number available, loading all tasks');
+      console.log("No IPD number available, loading all tasks");
       fetchOTTasks();
     }
   }, [ipdNumber]);
 
+  // Real-time: refetch whenever nurse_assign_task changes (covers OT staff rows)
+  useRealtimeTable("nurse_assign_task", fetchOTTasks);
+
   // Filter tasks based on search and filters
   const getFilteredTasks = () => {
-    const tasks = activeTab === 'pending' ? pendingList : historyList;
+    const tasks = activeTab === "pending" ? pendingList : historyList;
 
-    return tasks.filter(task => {
+    return tasks.filter((task) => {
       // Search filter
       const matchesSearch =
         task.taskName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -192,7 +232,7 @@ export default function OT() {
         task.taskNo?.toLowerCase().includes(searchTerm.toLowerCase());
 
       // Shift filter
-      const matchesShift = filterShift === 'all' || task.shift === filterShift;
+      const matchesShift = filterShift === "all" || task.shift === filterShift;
 
       return matchesSearch && matchesShift;
     });
@@ -225,7 +265,9 @@ export default function OT() {
                 <OTTypeBadge otType={task.otType} />
               </div>
 
-              <h3 className="font-bold text-gray-800 text-sm mb-1">{task.taskName}</h3>
+              <h3 className="font-bold text-gray-800 text-sm mb-1">
+                {task.taskName}
+              </h3>
 
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div className="flex items-center gap-1 text-xs text-gray-600">
@@ -241,7 +283,9 @@ export default function OT() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <User className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-700">{task.nurseName}</span>
+                  <span className="text-xs text-gray-700">
+                    {task.nurseName}
+                  </span>
                 </div>
                 {isExpanded ? (
                   <ChevronUp className="w-4 h-4 text-gray-400" />
@@ -258,40 +302,56 @@ export default function OT() {
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Task ID</label>
-                  <span className="text-xs font-medium text-green-600">{task.taskNo}</span>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Task ID
+                  </label>
+                  <span className="text-xs font-medium text-green-600">
+                    {task.taskNo}
+                  </span>
                 </div>
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Priority</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Priority
+                  </label>
                   <span className="text-xs text-gray-700">{task.priority}</span>
                 </div>
               </div>
 
               <div className="bg-gray-50 p-2 rounded">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Ward & Bed</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Ward & Bed
+                </label>
                 <div className="text-xs text-gray-700">
                   {task.wardType} {task.room && `/ ${task.room}`}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">Bed: {task.bedNo || 'N/A'}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Bed: {task.bedNo || "N/A"}
+                </div>
               </div>
 
               {task.instructions && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Instructions</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Instructions
+                  </label>
                   <p className="text-xs text-gray-700">{task.instructions}</p>
                 </div>
               )}
 
               {task.plannedTime && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Planned Time</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Planned Time
+                  </label>
                   <p className="text-xs text-gray-700">{task.plannedTime}</p>
                 </div>
               )}
 
               {task.actualTime && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Actual Time</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Actual Time
+                  </label>
                   <p className="text-xs text-gray-700">{task.actualTime}</p>
                 </div>
               )}
@@ -319,7 +379,10 @@ export default function OT() {
   const filteredTasks = getFilteredTasks();
 
   return (
-    <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 200px)' }}>
+    <div
+      className="flex flex-col h-full"
+      style={{ height: "calc(100vh - 200px)" }}
+    >
       {/* Header */}
       <div className="flex-shrink-0 bg-green-600 text-white p-4 rounded-lg shadow-md">
         {/* Desktop View: Heading on left, tabs/search/filter on right in one row */}
@@ -330,9 +393,9 @@ export default function OT() {
             <div>
               <h1 className="text-xl md:text-2xl font-bold">OT Tasks</h1>
               <p className="text-xs opacity-90 mt-1">
-                {ipdNumber && ipdNumber !== 'N/A'
+                {ipdNumber && ipdNumber !== "N/A"
                   ? `Tasks for IPD: ${ipdNumber}`
-                  : 'All OT Tasks'}
+                  : "All OT Tasks"}
               </p>
             </div>
           </div>
@@ -342,20 +405,22 @@ export default function OT() {
             {/* Tabs */}
             <div className="flex items-center bg-white/20 rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('history')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'history'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("history")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "history"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Complete ({historyList.length})
               </button>
               <button
-                onClick={() => setActiveTab('pending')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'pending'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("pending")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "pending"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Pending ({pendingList.length})
               </button>
@@ -379,11 +444,21 @@ export default function OT() {
               onChange={(e) => setFilterShift(e.target.value)}
               className="px-3 py-2 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-sm"
             >
-              <option value="all" className="text-gray-900">All Shifts</option>
-              <option value="Shift A" className="text-gray-900">Shift A</option>
-              <option value="Shift B" className="text-gray-900">Shift B</option>
-              <option value="Shift C" className="text-gray-900">Shift C</option>
-              <option value="General" className="text-gray-900">General</option>
+              <option value="all" className="text-gray-900">
+                All Shifts
+              </option>
+              <option value="Shift A" className="text-gray-900">
+                Shift A
+              </option>
+              <option value="Shift B" className="text-gray-900">
+                Shift B
+              </option>
+              <option value="Shift C" className="text-gray-900">
+                Shift C
+              </option>
+              <option value="General" className="text-gray-900">
+                General
+              </option>
             </select>
           </div>
         </div>
@@ -397,9 +472,9 @@ export default function OT() {
               <div className="flex-1">
                 <h1 className="text-xl font-bold">OT Tasks</h1>
                 <p className="text-xs opacity-90 mt-1">
-                  {ipdNumber && ipdNumber !== 'N/A'
+                  {ipdNumber && ipdNumber !== "N/A"
                     ? `Tasks for IPD: ${ipdNumber}`
-                    : 'All OT Tasks'}
+                    : "All OT Tasks"}
                 </p>
               </div>
             </div>
@@ -409,20 +484,22 @@ export default function OT() {
               {/* Small Tabs */}
               <div className="flex items-center bg-white/20 rounded-lg p-0.5">
                 <button
-                  onClick={() => setActiveTab('history')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'history'
-                      ? 'bg-white text-green-600'
-                      : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("history")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "history"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Complete ({historyList.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'pending'
-                      ? 'bg-white text-green-600'
-                      : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("pending")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "pending"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Pending ({pendingList.length})
                 </button>
@@ -446,11 +523,21 @@ export default function OT() {
                   onChange={(e) => setFilterShift(e.target.value)}
                   className="px-2 py-1.5 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-xs w-24"
                 >
-                  <option value="all" className="text-gray-900">All Shifts</option>
-                  <option value="Shift A" className="text-gray-900">Shift A</option>
-                  <option value="Shift B" className="text-gray-900">Shift B</option>
-                  <option value="Shift C" className="text-gray-900">Shift C</option>
-                  <option value="General" className="text-gray-900">General</option>
+                  <option value="all" className="text-gray-900">
+                    All Shifts
+                  </option>
+                  <option value="Shift A" className="text-gray-900">
+                    Shift A
+                  </option>
+                  <option value="Shift B" className="text-gray-900">
+                    Shift B
+                  </option>
+                  <option value="Shift C" className="text-gray-900">
+                    Shift C
+                  </option>
+                  <option value="General" className="text-gray-900">
+                    General
+                  </option>
                 </select>
               </div>
             </div>
@@ -468,15 +555,16 @@ export default function OT() {
                 <div className="text-center">
                   <Scissors className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                   <p className="text-gray-600 font-medium text-xs">
-                    {activeTab === 'pending' ? 'No pending tasks found' : 'No completed tasks found'}
+                    {activeTab === "pending"
+                      ? "No pending tasks found"
+                      : "No completed tasks found"}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {ipdNumber && ipdNumber !== 'N/A'
+                    {ipdNumber && ipdNumber !== "N/A"
                       ? `No OT tasks found for IPD: ${ipdNumber}`
                       : searchTerm
-                        ? 'No tasks match your search'
-                        : 'No tasks available'
-                    }
+                        ? "No tasks match your search"
+                        : "No tasks available"}
                   </p>
                 </div>
               </div>
@@ -502,37 +590,69 @@ export default function OT() {
                 <table className="w-full text-sm text-left">
                   <thead className="sticky top-0 z-10 bg-gray-100 border-b-2 border-gray-300">
                     <tr>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Task NO</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Patient</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">IPD No</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Task</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">OT Type</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Shift</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Assigned Nurse</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Ward/Bed</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Planned Time</th>
-                      {activeTab === 'history' && (
-                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actual Time</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Task NO
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Patient
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        IPD No
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Task
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        OT Type
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Shift
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Assigned Nurse
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Ward/Bed
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Planned Time
+                      </th>
+                      {activeTab === "history" && (
+                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                          Actual Time
+                        </th>
                       )}
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Status</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Status
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {filteredTasks.map((task, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <span className="font-semibold text-green-600">{task.taskNo}</span>
+                          <span className="font-semibold text-green-600">
+                            {task.taskNo}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{task.patientName}</div>
+                          <div className="font-medium text-gray-900">
+                            {task.patientName}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="font-medium text-gray-700">{task.ipdNumber}</span>
+                          <span className="font-medium text-gray-700">
+                            {task.ipdNumber}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{task.taskName}</div>
+                          <div className="font-medium text-gray-900">
+                            {task.taskName}
+                          </div>
                           {task.instructions && (
-                            <div className="text-xs text-gray-500 truncate max-w-xs">{task.instructions}</div>
+                            <div className="text-xs text-gray-500 truncate max-w-xs">
+                              {task.instructions}
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -546,19 +666,23 @@ export default function OT() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-700">{task.nurseName}</span>
+                            <span className="text-gray-700">
+                              {task.nurseName}
+                            </span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm text-gray-700">
                             {task.wardType} {task.room && `/ ${task.room}`}
                           </div>
-                          <div className="text-xs text-gray-500">Bed: {task.bedNo || 'N/A'}</div>
+                          <div className="text-xs text-gray-500">
+                            Bed: {task.bedNo || "N/A"}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {task.plannedTime}
                         </td>
-                        {activeTab === 'history' && (
+                        {activeTab === "history" && (
                           <td className="px-4 py-3 text-sm text-gray-700">
                             {task.actualTime}
                           </td>
@@ -576,15 +700,16 @@ export default function OT() {
                 <div className="text-center">
                   <Scissors className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                   <p className="text-gray-600 font-medium text-sm">
-                    {activeTab === 'pending' ? 'No pending tasks found' : 'No completed tasks found'}
+                    {activeTab === "pending"
+                      ? "No pending tasks found"
+                      : "No completed tasks found"}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {ipdNumber && ipdNumber !== 'N/A'
+                    {ipdNumber && ipdNumber !== "N/A"
                       ? `No OT tasks found for IPD: ${ipdNumber}`
                       : searchTerm
-                        ? 'No tasks match your search'
-                        : 'No tasks available'
-                    }
+                        ? "No tasks match your search"
+                        : "No tasks available"}
                   </p>
                 </div>
               </div>

@@ -1,18 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Heart, X, User, Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
-import supabase from '../../../SupabaseClient';
+import React, { useState, useEffect } from "react";
+import { Heart, X, User, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { useOutletContext } from "react-router-dom";
+import supabase from "../../../SupabaseClient";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
-    if (status === 'Completed') return 'bg-green-100 text-green-700 border-green-200';
-    if (status === 'Pending') return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    if (status === 'In Progress') return 'bg-blue-100 text-blue-700 border-blue-200';
-    return 'bg-gray-100 text-gray-700 border-gray-200';
+    if (status === "Completed")
+      return "bg-green-100 text-green-700 border-green-200";
+    if (status === "Pending")
+      return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    if (status === "In Progress")
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    return "bg-gray-100 text-gray-700 border-gray-200";
   };
 
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}>
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}
+    >
       {status}
     </span>
   );
@@ -23,10 +29,10 @@ export default function Nursing() {
 
   const [pendingList, setPendingList] = useState([]);
   const [historyList, setHistoryList] = useState([]);
-  const [activeTab, setActiveTab] = useState('history');
+  const [activeTab, setActiveTab] = useState("history");
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterShift, setFilterShift] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterShift, setFilterShift] = useState("all");
   const [expandedCard, setExpandedCard] = useState(null);
 
   // Fetch nursing tasks from Supabase
@@ -34,7 +40,7 @@ export default function Nursing() {
     if (!data) return;
 
     // ✅ Correctly read logged-in user
-    const user = JSON.parse(localStorage.getItem('mis_user') || '{}');
+    const user = JSON.parse(localStorage.getItem("mis_user") || "{}");
     const userName = user?.name;
     const userRole = user?.role;
 
@@ -42,86 +48,87 @@ export default function Nursing() {
       setLoading(true);
       const ipdNumber = data.personalInfo.ipd;
 
-      if (!ipdNumber || ipdNumber === 'N/A') {
-        console.warn('No IPD number available for fetching nursing tasks');
+      if (!ipdNumber || ipdNumber === "N/A") {
+        console.warn("No IPD number available for fetching nursing tasks");
         return;
       }
 
-      const isAdmin = userRole?.toLowerCase() === 'admin';
+      const isAdmin = userRole?.toLowerCase() === "admin";
 
       // ✅ Build query FIRST
       let query = supabase
-        .from('nurse_assign_task')
-        .select('*')
-        .eq('Ipd_number', ipdNumber)
-        .or('staff.is.null,staff.eq.nurse')
-        .order('timestamp', { ascending: false });
+        .from("nurse_assign_task")
+        .select("*")
+        .eq("Ipd_number", ipdNumber)
+        .or("staff.is.null,staff.eq.nurse")
+        .order("timestamp", { ascending: false });
 
       // 🔒 Restrict non-admin users to their own tasks
       if (!isAdmin && userName) {
-        query = query.eq('assign_nurse', userName);
+        query = query.eq("assign_nurse", userName);
       }
 
       // ✅ Execute query
       const { data: supabaseTasks, error } = await query;
 
       if (error) {
-        console.error('Error fetching nursing tasks:', error);
+        console.error("Error fetching nursing tasks:", error);
         return;
       }
 
       // Transform Supabase data
-      const transformedTasks = (supabaseTasks || []).map(task => ({
+      const transformedTasks = (supabaseTasks || []).map((task) => ({
         id: task.id,
         taskId: `NT-${task.id}`,
-        taskNo: task.task_no || `NT-${String(task.id).padStart(3, '0')}`,
+        taskNo: task.task_no || `NT-${String(task.id).padStart(3, "0")}`,
         admissionNo: task.Ipd_number || ipdNumber,
         patientName: task.patient_name || data.personalInfo.name,
-        taskName: task.task || 'Nursing Task',
-        priority: 'Medium',
-        shift: task.shift || 'General',
-        wardType: task.ward_type || '',
-        room: task.room || '',
-        bedNo: task.bed_no || '',
-        assignBy: 'Admin',
-        nurseName: task.assign_nurse || 'Nurse',
-        instructions: task.reminder || '-',
-        status: task.actual1 ? 'Completed' : 'Pending',
-        date: task.start_date || new Date(task.timestamp).toISOString().split('T')[0],
+        taskName: task.task || "Nursing Task",
+        priority: "Medium",
+        shift: task.shift || "General",
+        wardType: task.ward_type || "",
+        room: task.room || "",
+        bedNo: task.bed_no || "",
+        assignBy: "Admin",
+        nurseName: task.assign_nurse || "Nurse",
+        instructions: task.reminder || "-",
+        status: task.actual1 ? "Completed" : "Pending",
+        date:
+          task.start_date ||
+          new Date(task.timestamp).toISOString().split("T")[0],
         delayStatus: calculateDelayStatus(task),
         plannedTime: task.planned1
-          ? new Date(task.planned1).toLocaleString('en-GB', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-          : '',
+          ? new Date(task.planned1).toLocaleString("en-GB", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
         actualTime: task.actual1
-          ? new Date(task.actual1).toLocaleString('en-GB', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-          : ''
+          ? new Date(task.actual1).toLocaleString("en-GB", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
       }));
 
       // Separate pending and completed
-      setPendingList(transformedTasks.filter(t => t.status === 'Pending'));
-      setHistoryList(transformedTasks.filter(t => t.status === 'Completed'));
-
+      setPendingList(transformedTasks.filter((t) => t.status === "Pending"));
+      setHistoryList(transformedTasks.filter((t) => t.status === "Completed"));
     } catch (err) {
-      console.error('Error in fetchNursingTasks:', err);
+      console.error("Error in fetchNursingTasks:", err);
     } finally {
       setLoading(false);
     }
   };
 
   const calculateDelayStatus = (task) => {
-    if (!task.planned1) return 'No Delay';
+    if (!task.planned1) return "No Delay";
 
     const planned = new Date(task.planned1);
     const now = new Date();
@@ -129,13 +136,13 @@ export default function Nursing() {
     if (task.actual1) {
       const actual = new Date(task.actual1);
       const diffHours = (actual - planned) / (1000 * 60 * 60);
-      return diffHours > 2 ? 'Delayed' : 'On Time';
+      return diffHours > 2 ? "Delayed" : "On Time";
     } else {
       const diffHours = (now - planned) / (1000 * 60 * 60);
       if (diffHours > 0) {
         return `Delayed by ${Math.floor(diffHours)}h`;
       } else {
-        return 'On Time';
+        return "On Time";
       }
     }
   };
@@ -146,17 +153,20 @@ export default function Nursing() {
     }
   }, [data]);
 
-  const getFilteredTasks = () => {
-    const tasks = activeTab === 'pending' ? pendingList : historyList;
+  // Real-time: refetch whenever nurse_assign_task changes
+  useRealtimeTable("nurse_assign_task", fetchNursingTasks);
 
-    return tasks.filter(task => {
+  const getFilteredTasks = () => {
+    const tasks = activeTab === "pending" ? pendingList : historyList;
+
+    return tasks.filter((task) => {
       const matchesSearch =
         task.taskName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.admissionNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.taskNo?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesShift = filterShift === 'all' || task.shift === filterShift;
+      const matchesShift = filterShift === "all" || task.shift === filterShift;
 
       return matchesSearch && matchesShift;
     });
@@ -188,7 +198,9 @@ export default function Nursing() {
                 </span>
               </div>
 
-              <h3 className="font-bold text-gray-800 text-sm mb-1">{task.taskName}</h3>
+              <h3 className="font-bold text-gray-800 text-sm mb-1">
+                {task.taskName}
+              </h3>
 
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div className="flex items-center gap-1 text-xs text-gray-600">
@@ -204,7 +216,9 @@ export default function Nursing() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <User className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-700">{task.nurseName}</span>
+                  <span className="text-xs text-gray-700">
+                    {task.nurseName}
+                  </span>
                 </div>
                 {isExpanded ? (
                   <ChevronUp className="w-4 h-4 text-gray-400" />
@@ -221,40 +235,56 @@ export default function Nursing() {
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Task ID</label>
-                  <span className="text-xs font-medium text-green-600">{task.taskNo}</span>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Task ID
+                  </label>
+                  <span className="text-xs font-medium text-green-600">
+                    {task.taskNo}
+                  </span>
                 </div>
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Priority</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Priority
+                  </label>
                   <span className="text-xs text-gray-700">{task.priority}</span>
                 </div>
               </div>
 
               <div className="bg-gray-50 p-2 rounded">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Ward & Bed</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Ward & Bed
+                </label>
                 <div className="text-xs text-gray-700">
                   {task.wardType} {task.room && `/ ${task.room}`}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">Bed: {task.bedNo || 'N/A'}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Bed: {task.bedNo || "N/A"}
+                </div>
               </div>
 
               {task.instructions && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Reminder</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Reminder
+                  </label>
                   <p className="text-xs text-gray-700">{task.instructions}</p>
                 </div>
               )}
 
               {task.plannedTime && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Planned Time</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Planned Time
+                  </label>
                   <p className="text-xs text-gray-700">{task.plannedTime}</p>
                 </div>
               )}
 
               {task.actualTime && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Actual Time</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Actual Time
+                  </label>
                   <p className="text-xs text-gray-700">{task.actualTime}</p>
                 </div>
               )}
@@ -281,7 +311,10 @@ export default function Nursing() {
   const filteredTasks = getFilteredTasks();
 
   return (
-    <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 200px)' }}>
+    <div
+      className="flex flex-col h-full"
+      style={{ height: "calc(100vh - 200px)" }}
+    >
       {/* Header */}
       <div className="flex-shrink-0 bg-green-600 text-white p-4 rounded-lg shadow-md">
         {/* Desktop View: Heading on left, tabs/search/filter on right in one row */}
@@ -302,20 +335,22 @@ export default function Nursing() {
             {/* Tabs */}
             <div className="flex items-center bg-white/20 rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('history')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'history'
-                  ? 'bg-white text-green-600'
-                  : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("history")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "history"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Complete ({historyList.length})
               </button>
               <button
-                onClick={() => setActiveTab('pending')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'pending'
-                  ? 'bg-white text-green-600'
-                  : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("pending")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "pending"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Pending ({pendingList.length})
               </button>
@@ -339,11 +374,21 @@ export default function Nursing() {
               onChange={(e) => setFilterShift(e.target.value)}
               className="px-3 py-2 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-sm"
             >
-              <option value="all" className="text-gray-900">All Shifts</option>
-              <option value="Shift A" className="text-gray-900">Shift A</option>
-              <option value="Shift B" className="text-gray-900">Shift B</option>
-              <option value="Shift C" className="text-gray-900">Shift C</option>
-              <option value="General" className="text-gray-900">General</option>
+              <option value="all" className="text-gray-900">
+                All Shifts
+              </option>
+              <option value="Shift A" className="text-gray-900">
+                Shift A
+              </option>
+              <option value="Shift B" className="text-gray-900">
+                Shift B
+              </option>
+              <option value="Shift C" className="text-gray-900">
+                Shift C
+              </option>
+              <option value="General" className="text-gray-900">
+                General
+              </option>
             </select>
           </div>
         </div>
@@ -367,20 +412,22 @@ export default function Nursing() {
               {/* Small Tabs */}
               <div className="flex items-center bg-white/20 rounded-lg p-0.5">
                 <button
-                  onClick={() => setActiveTab('history')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'history'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("history")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "history"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Complete ({historyList.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'pending'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("pending")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "pending"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Pending ({pendingList.length})
                 </button>
@@ -404,11 +451,21 @@ export default function Nursing() {
                   onChange={(e) => setFilterShift(e.target.value)}
                   className="px-2 py-1.5 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-xs w-24"
                 >
-                  <option value="all" className="text-gray-900">All Shifts</option>
-                  <option value="Shift A" className="text-gray-900">Shift A</option>
-                  <option value="Shift B" className="text-gray-900">Shift B</option>
-                  <option value="Shift C" className="text-gray-900">Shift C</option>
-                  <option value="General" className="text-gray-900">General</option>
+                  <option value="all" className="text-gray-900">
+                    All Shifts
+                  </option>
+                  <option value="Shift A" className="text-gray-900">
+                    Shift A
+                  </option>
+                  <option value="Shift B" className="text-gray-900">
+                    Shift B
+                  </option>
+                  <option value="Shift C" className="text-gray-900">
+                    Shift C
+                  </option>
+                  <option value="General" className="text-gray-900">
+                    General
+                  </option>
                 </select>
               </div>
             </div>
@@ -426,12 +483,16 @@ export default function Nursing() {
                 <div className="text-center">
                   <Heart className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                   <p className="text-gray-600 font-medium text-xs">
-                    {activeTab === 'pending' ? 'No pending tasks found' : 'No completed tasks found'}
+                    {activeTab === "pending"
+                      ? "No pending tasks found"
+                      : "No completed tasks found"}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {searchTerm ? 'No tasks match your search' :
-                      activeTab === 'pending' ? 'No pending tasks available' : 'No completed tasks available'
-                    }
+                    {searchTerm
+                      ? "No tasks match your search"
+                      : activeTab === "pending"
+                        ? "No pending tasks available"
+                        : "No completed tasks available"}
                   </p>
                 </div>
               </div>
@@ -457,34 +518,62 @@ export default function Nursing() {
                 <table className="w-full text-sm text-left">
                   <thead className="sticky top-0 z-10 bg-gray-100 border-b-2 border-gray-300">
                     <tr>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Task NO</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Patient</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Task</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Shift</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Assigned Nurse</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Ward/Bed</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Task NO
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Patient
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Task
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Shift
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Assigned Nurse
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Ward/Bed
+                      </th>
                       {/* <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Reminder</th> */}
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Planned Time</th>
-                      {activeTab === 'history' && (
-                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actual Time</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Planned Time
+                      </th>
+                      {activeTab === "history" && (
+                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                          Actual Time
+                        </th>
                       )}
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Status</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Status
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {filteredTasks.map((task, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <span className="font-semibold text-green-600">{task.taskNo}</span>
+                          <span className="font-semibold text-green-600">
+                            {task.taskNo}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{task.patientName}</div>
-                          <div className="text-xs text-gray-500">{task.admissionNo}</div>
+                          <div className="font-medium text-gray-900">
+                            {task.patientName}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {task.admissionNo}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{task.taskName}</div>
+                          <div className="font-medium text-gray-900">
+                            {task.taskName}
+                          </div>
                           {task.instructions && (
-                            <div className="text-xs text-gray-500 truncate max-w-xs">{task.instructions}</div>
+                            <div className="text-xs text-gray-500 truncate max-w-xs">
+                              {task.instructions}
+                            </div>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -495,20 +584,24 @@ export default function Nursing() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <User className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-700">{task.nurseName}</span>
+                            <span className="text-gray-700">
+                              {task.nurseName}
+                            </span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm text-gray-700">
                             {task.wardType} {task.room && `/ ${task.room}`}
                           </div>
-                          <div className="text-xs text-gray-500">Bed: {task.bedNo || 'N/A'}</div>
+                          <div className="text-xs text-gray-500">
+                            Bed: {task.bedNo || "N/A"}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {task.plannedTime}
                         </td>
-                        {activeTab === 'history' && (
+                        {activeTab === "history" && (
                           <td className="px-4 py-3 text-sm text-gray-700">
                             {task.actualTime}
                           </td>
@@ -526,12 +619,16 @@ export default function Nursing() {
                 <div className="text-center">
                   <Heart className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                   <p className="text-gray-600 font-medium text-sm">
-                    {activeTab === 'pending' ? 'No pending tasks found' : 'No completed tasks found'}
+                    {activeTab === "pending"
+                      ? "No pending tasks found"
+                      : "No completed tasks found"}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {searchTerm ? 'No tasks match your search' :
-                      activeTab === 'pending' ? 'No pending tasks available' : 'No completed tasks available'
-                    }
+                    {searchTerm
+                      ? "No tasks match your search"
+                      : activeTab === "pending"
+                        ? "No pending tasks available"
+                        : "No completed tasks available"}
                   </p>
                 </div>
               </div>

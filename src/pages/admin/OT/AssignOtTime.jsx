@@ -1,54 +1,67 @@
-import React, { useState, useEffect } from 'react';
-import { Search, CheckCircle, Calendar, Clock, User, MapPin, FileText, ChevronDown, ChevronUp } from 'lucide-react';
-import supabase from '../../../SupabaseClient';
-import { useNotification } from '../../../contexts/NotificationContext';
+import React, { useState, useEffect } from "react";
+import {
+  Search,
+  CheckCircle,
+  Calendar,
+  Clock,
+  User,
+  MapPin,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import supabase from "../../../SupabaseClient";
+import { useNotification } from "../../../contexts/NotificationContext";
 
 const AssignOtTime = () => {
   const [pendingData, setPendingData] = useState([]);
   const [historyData, setHistoryData] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [rmoList, setRmoList] = useState([]);
-  const [activeTab, setActiveTab] = useState('pending');
-  const [ipdSearchTerm, setIpdSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState("pending");
+  const [ipdSearchTerm, setIpdSearchTerm] = useState("");
   const [showIpdDropdown, setShowIpdDropdown] = useState(false);
   const [availableIpdPatients, setAvailableIpdPatients] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedCard, setExpandedCard] = useState(null);
-  const [selectedDoctor, setSelectedDoctor] = useState('');
+  const [selectedDoctor, setSelectedDoctor] = useState("");
+  const [selectedPatientDetails, setSelectedPatientDetails] = useState(null);
   const { showNotification } = useNotification();
 
   // New state for process modal
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [selectedOtRecord, setSelectedOtRecord] = useState(null);
   const [processForm, setProcessForm] = useState({
-    status: '',
-    remark: ''
+    status: "",
+    remark: "",
   });
 
   const [formData, setFormData] = useState({
-    ipd_number: '',
-    ot_date: '',
-    ot_time: '',
-    ot_description: '',
-    doctor: '',
-    rmo: ''
+    ipd_number: "",
+    ot_date: "",
+    ot_time: "",
+    ot_description: "",
+    doctor: "",
+    rmo: "",
   });
 
   // Fetch functions remain the same...
   const fetchPendingData = async () => {
     const { data, error } = await supabase
-      .from('ot_information')
-      .select('*')
-      .not('planned2', 'is', null)
-      .is('actual2', null)
-      .order('planned2', { ascending: true });
+      .from("ot_information")
+      .select("*")
+      .not("planned2", "is", null)
+      .is("actual2", null)
+      .order("planned2", { ascending: true });
 
     if (error) {
-      console.error('Error fetching pending data:', error);
+      console.error("Error fetching pending data:", error);
     } else {
-      const formattedData = (data || []).map(item => ({
+      const formattedData = (data || []).map((item) => ({
         ...item,
-        planned2Formatted: item.planned2 ? `${new Date(item.planned2).toLocaleDateString('en-GB')} ${new Date(item.planned2).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'N/A',
+        planned2Formatted: item.planned2
+          ? `${new Date(item.planned2).toLocaleDateString("en-GB")} ${new Date(item.planned2).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}`
+          : "N/A",
       }));
       setPendingData(formattedData);
     }
@@ -56,19 +69,23 @@ const AssignOtTime = () => {
 
   const fetchHistoryData = async () => {
     const { data, error } = await supabase
-      .from('ot_information')
-      .select('*')
-      .not('planned2', 'is', null)
-      .not('actual2', 'is', null)
-      .order('actual2', { ascending: false });
+      .from("ot_information")
+      .select("*")
+      .not("planned2", "is", null)
+      .not("actual2", "is", null)
+      .order("actual2", { ascending: false });
 
     if (error) {
-      console.error('Error fetching history data:', error);
+      console.error("Error fetching history data:", error);
     } else {
-      const formattedData = (data || []).map(item => ({
+      const formattedData = (data || []).map((item) => ({
         ...item,
-        planned2Formatted: item.planned2 ? `${new Date(item.planned2).toLocaleDateString('en-GB')} ${new Date(item.planned2).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'N/A',
-        actual2Formatted: item.actual2 ? `${new Date(item.actual2).toLocaleDateString('en-GB')} ${new Date(item.actual2).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'N/A'
+        planned2Formatted: item.planned2
+          ? `${new Date(item.planned2).toLocaleDateString("en-GB")} ${new Date(item.planned2).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}`
+          : "N/A",
+        actual2Formatted: item.actual2
+          ? `${new Date(item.actual2).toLocaleDateString("en-GB")} ${new Date(item.actual2).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}`
+          : "N/A",
       }));
       setHistoryData(formattedData);
     }
@@ -76,45 +93,49 @@ const AssignOtTime = () => {
 
   const fetchRmoList = async () => {
     const { data, error } = await supabase
-      .from('all_staff')
-      .select('name')
-      .eq('designation', 'RMO')
-      .order('name');
+      .from("all_staff")
+      .select("name")
+      .in("designation", ["rmo", "RMO", "Rmo"])
+      .order("name");
+
+    console.log(data);
 
     if (error) {
-      console.error('Error fetching RMO list:', error);
+      console.error("Error fetching RMO list:", error);
     } else {
-      setRmoList(data.map(item => item.name));
+      setRmoList(data.map((item) => item.name));
     }
   };
 
   const fetchAvailableIpdPatients = async () => {
     const { data, error } = await supabase
-      .from('ot_information')
-      .select('id, ipd_number, patient_name, patient_location, ward_type, room, bed_no, ot_number, planned1')
-      .not('planned1', 'is', null)
-      .is('actual1', null)
-      .order('patient_name');
+      .from("ot_information")
+      .select(
+        "id, ipd_number, patient_name, patient_location, ward_type, room, bed_no, ot_number, planned1",
+      )
+      .not("planned1", "is", null)
+      .is("actual1", null)
+      .order("patient_name");
 
     if (error) {
-      console.error('Error fetching IPD patients:', error);
+      console.error("Error fetching IPD patients:", error);
     } else {
       const uniquePatients = [];
       const seenIpdNumbers = new Set();
 
-      data.forEach(patient => {
+      data.forEach((patient) => {
         if (patient.ipd_number && !seenIpdNumbers.has(patient.ipd_number)) {
           seenIpdNumbers.add(patient.ipd_number);
           uniquePatients.push({
             id: patient.id,
             ipd_number: patient.ipd_number,
-            patient_name: patient.patient_name || 'Unknown',
-            location: patient.patient_location || 'Not specified',
+            patient_name: patient.patient_name || "Unknown",
+            location: patient.patient_location || "Not specified",
             ward_type: patient.ward_type,
             room: patient.room,
             bed_no: patient.bed_no,
             ot_number: patient.ot_number,
-            planned1: patient.planned1
+            planned1: patient.planned1,
           });
         }
       });
@@ -126,19 +147,19 @@ const AssignOtTime = () => {
   const fetchDoctorFromIpdAdmission = async (ipdNumber) => {
     try {
       const { data, error } = await supabase
-        .from('ipd_admissions')
-        .select('consultant_dr')
-        .eq('ipd_number', ipdNumber)
+        .from("ipd_admissions")
+        .select("consultant_dr")
+        .eq("ipd_number", ipdNumber)
         .single();
 
       if (error) {
-        console.error('Error fetching doctor from ipd_admission:', error);
+        console.error("Error fetching doctor from ipd_admission:", error);
         return null;
       }
 
-      return data?.consultant_dr || '';
+      return data?.consultant_dr || "";
     } catch (error) {
-      console.error('Error in fetchDoctorFromIpdAdmission:', error);
+      console.error("Error in fetchDoctorFromIpdAdmission:", error);
       return null;
     }
   };
@@ -207,8 +228,8 @@ const AssignOtTime = () => {
   const handleProcessClick = (record) => {
     setSelectedOtRecord(record);
     setProcessForm({
-      status: '',
-      remark: ''
+      status: "",
+      remark: "",
     });
     setShowProcessModal(true);
   };
@@ -218,7 +239,7 @@ const AssignOtTime = () => {
     e.preventDefault();
 
     if (!processForm.status) {
-      showNotification('Please select a status', 'error');
+      showNotification("Please select a status", "error");
       return;
     }
 
@@ -227,10 +248,12 @@ const AssignOtTime = () => {
       const updateData = {
         status: processForm.status,
         remark: processForm.remark || null,
-        actual2: new Date().toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        }).replace(',', ''),
+        actual2: new Date()
+          .toLocaleString("en-CA", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          })
+          .replace(",", ""),
       };
 
       // if (processForm.status === 'Complete') {
@@ -238,9 +261,9 @@ const AssignOtTime = () => {
       // }
 
       const { error } = await supabase
-        .from('ot_information')
+        .from("ot_information")
         .update(updateData)
-        .eq('id', selectedOtRecord.id);
+        .eq("id", selectedOtRecord.id);
 
       if (error) throw error;
 
@@ -252,32 +275,66 @@ const AssignOtTime = () => {
       setShowProcessModal(false);
       setSelectedOtRecord(null);
 
-      showNotification(`Status updated to "${processForm.status}" successfully!`, 'success');
+      showNotification(
+        `Status updated to "${processForm.status}" successfully!`,
+        "success",
+      );
     } catch (error) {
-      console.error('Error updating status:', error);
-      showNotification('Error updating status', 'error');
+      console.error("Error updating status:", error);
+      showNotification("Error updating status", "error");
     }
   };
 
   const handleIpdSelect = async (ipdNumber) => {
     setFormData({
       ...formData,
-      ipd_number: ipdNumber
+      ipd_number: ipdNumber,
     });
 
     // Fetch doctor from ipd_admission table
     const doctorName = await fetchDoctorFromIpdAdmission(ipdNumber);
-    setSelectedDoctor(doctorName || '');
+    setSelectedDoctor(doctorName || "");
+
+    // Fetch extra patient details (age, gender) from ipd_admissions
+    try {
+      const { data: admData } = await supabase
+        .from("ipd_admissions")
+        .select("patient_name, age, gender")
+        .eq("ipd_number", ipdNumber)
+        .single();
+
+      // Also grab patient_name from ot_information as fallback
+      const selectedPatient = availableIpdPatients.find(
+        (p) => p.ipd_number === ipdNumber,
+      );
+
+      setSelectedPatientDetails({
+        name: admData?.patient_name || selectedPatient?.patient_name || "N/A",
+        age: admData?.age || "N/A",
+        gender: admData?.gender || "N/A",
+        location: selectedPatient?.location || "N/A",
+      });
+    } catch {
+      const selectedPatient = availableIpdPatients.find(
+        (p) => p.ipd_number === ipdNumber,
+      );
+      setSelectedPatientDetails({
+        name: selectedPatient?.patient_name || "N/A",
+        age: "N/A",
+        gender: "N/A",
+        location: selectedPatient?.location || "N/A",
+      });
+    }
 
     setShowIpdDropdown(false);
-    setIpdSearchTerm('');
+    setIpdSearchTerm("");
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: value
+      [name]: value,
     });
   };
 
@@ -285,7 +342,7 @@ const AssignOtTime = () => {
     const { name, value } = e.target;
     setProcessForm({
       ...processForm,
-      [name]: value
+      [name]: value,
     });
   };
 
@@ -294,8 +351,13 @@ const AssignOtTime = () => {
 
     if (isSubmitting) return;
 
-    if (!formData.ipd_number || !formData.ot_date || !formData.ot_time || !formData.rmo) {
-      showNotification('Please fill in all required fields', 'error');
+    if (
+      !formData.ipd_number ||
+      !formData.ot_date ||
+      !formData.ot_time ||
+      !formData.rmo
+    ) {
+      showNotification("Please fill in all required fields", "error");
       return;
     }
 
@@ -303,17 +365,20 @@ const AssignOtTime = () => {
 
     try {
       const { data: existingRecords, error: fetchError } = await supabase
-        .from('ot_information')
-        .select('*')
-        .eq('ipd_number', formData.ipd_number)
-        .not('planned1', 'is', null)
-        .is('actual1', null)
+        .from("ot_information")
+        .select("*")
+        .eq("ipd_number", formData.ipd_number)
+        .not("planned1", "is", null)
+        .is("actual1", null)
         .limit(1);
 
       if (fetchError) throw fetchError;
 
       if (!existingRecords || existingRecords.length === 0) {
-        showNotification('No matching IPD record found for OT assignment', 'error');
+        showNotification(
+          "No matching IPD record found for OT assignment",
+          "error",
+        );
         setIsSubmitting(false);
         return;
       }
@@ -324,7 +389,7 @@ const AssignOtTime = () => {
       const doctorToUse = selectedDoctor || formData.doctor;
 
       const { error: updateError } = await supabase
-        .from('ot_information')
+        .from("ot_information")
         .update({
           actual1: new Date().toISOString(),
           rmo: formData.rmo,
@@ -334,7 +399,7 @@ const AssignOtTime = () => {
           ot_description: formData.ot_description,
           planned2: new Date().toISOString(),
         })
-        .eq('id', existingRecord.id);
+        .eq("id", existingRecord.id);
 
       if (updateError) throw updateError;
 
@@ -344,7 +409,7 @@ const AssignOtTime = () => {
         patient_location: existingRecord.patient_location,
         ward_type: existingRecord.ward_type,
         room: existingRecord.room,
-        bed_no: existingRecord.bed_no
+        bed_no: existingRecord.bed_no,
       };
 
       // const tasksCreated = await createNurseAssignTasks(
@@ -357,36 +422,37 @@ const AssignOtTime = () => {
       // }
 
       setFormData({
-        ipd_number: '',
-        ot_date: '',
-        ot_time: '',
-        ot_description: '',
-        doctor: '',
-        rmo: ''
+        ipd_number: "",
+        ot_date: "",
+        ot_time: "",
+        ot_description: "",
+        doctor: "",
+        rmo: "",
       });
-      setSelectedDoctor('');
+      setSelectedDoctor("");
+      setSelectedPatientDetails(null);
       setShowForm(false);
-      setIpdSearchTerm('');
+      setIpdSearchTerm("");
       setShowIpdDropdown(false);
 
       fetchPendingData();
       fetchHistoryData();
       fetchAvailableIpdPatients();
 
-      // showNotification(tasksCreated 
-      //   ? 'OT time assigned successfully and nurse tasks created!' 
+      // showNotification(tasksCreated
+      //   ? 'OT time assigned successfully and nurse tasks created!'
       //   : 'OT time assigned but nurse tasks creation failed!',
       //   tasksCreated ? 'success' : 'error'
       // );
     } catch (error) {
-      console.error('Error assigning OT time:', error);
-      showNotification(`Error assigning OT time: ${error.message}`, 'error');
+      console.error("Error assigning OT time:", error);
+      showNotification(`Error assigning OT time: ${error.message}`, "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const filteredIpdPatients = availableIpdPatients.filter(patient => {
+  const filteredIpdPatients = availableIpdPatients.filter((patient) => {
     const searchLower = ipdSearchTerm.toLowerCase();
     return (
       patient.ipd_number.toLowerCase().includes(searchLower) ||
@@ -403,15 +469,24 @@ const AssignOtTime = () => {
         <div className="flex justify-between items-start mb-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="font-bold text-green-600 text-sm">{item.ot_number || 'N/A'}</span>
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${item.status === 'Complete' ? 'bg-green-100 text-green-800' :
-                item.status === 'Cancel' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                {item.status || 'Pending'}
+              <span className="font-bold text-green-600 text-sm">
+                {item.ot_number || "N/A"}
+              </span>
+              <span
+                className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                  item.status === "Complete"
+                    ? "bg-green-100 text-green-800"
+                    : item.status === "Cancel"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-yellow-100 text-yellow-800"
+                }`}
+              >
+                {item.status || "Pending"}
               </span>
             </div>
-            <h3 className="font-medium text-gray-900 text-sm mb-1">{item.patient_name}</h3>
+            <h3 className="font-medium text-gray-900 text-sm mb-1">
+              {item.patient_name}
+            </h3>
             <p className="text-xs text-gray-600">IPD: {item.ipd_number}</p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -436,35 +511,37 @@ const AssignOtTime = () => {
               <Calendar className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">OT Date</span>
             </div>
-            <p className="text-sm font-medium">{item.ot_date || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.ot_date || "N/A"}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-1">
               <Clock className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">OT Time</span>
             </div>
-            <p className="text-sm font-medium">{item.ot_time || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.ot_time || "N/A"}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-1">
               <User className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">RMO</span>
             </div>
-            <p className="text-sm font-medium">{item.rmo || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.rmo || "N/A"}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-1">
               <User className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">Doctor</span>
             </div>
-            <p className="text-sm font-medium">{item.doctor || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.doctor || "N/A"}</p>
           </div>
           <div className="col-span-2">
             <div className="flex items-center gap-1 mb-1">
               <Clock className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">Planned Time</span>
             </div>
-            <p className="text-sm font-medium text-gray-700">{item.planned2Formatted}</p>
+            <p className="text-sm font-medium text-gray-700">
+              {item.planned2Formatted}
+            </p>
           </div>
         </div>
 
@@ -475,7 +552,7 @@ const AssignOtTime = () => {
                 <MapPin className="w-3 h-3 text-green-600" />
                 <span className="text-xs text-gray-500">Location</span>
               </div>
-              <p className="text-sm">{item.patient_location || 'N/A'}</p>
+              <p className="text-sm">{item.patient_location || "N/A"}</p>
             </div>
             {item.remark && (
               <div>
@@ -510,15 +587,24 @@ const AssignOtTime = () => {
         <div className="flex justify-between items-start mb-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="font-bold text-green-600 text-sm">{item.ot_number || 'N/A'}</span>
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${item.status === 'Complete' ? 'bg-green-100 text-green-800' :
-                item.status === 'Cancel' ? 'bg-red-100 text-red-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                {item.status || 'N/A'}
+              <span className="font-bold text-green-600 text-sm">
+                {item.ot_number || "N/A"}
+              </span>
+              <span
+                className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                  item.status === "Complete"
+                    ? "bg-green-100 text-green-800"
+                    : item.status === "Cancel"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-gray-100 text-gray-800"
+                }`}
+              >
+                {item.status || "N/A"}
               </span>
             </div>
-            <h3 className="font-medium text-gray-900 text-sm mb-1">{item.patient_name}</h3>
+            <h3 className="font-medium text-gray-900 text-sm mb-1">
+              {item.patient_name}
+            </h3>
             <p className="text-xs text-gray-600">IPD: {item.ipd_number}</p>
           </div>
           <button
@@ -535,28 +621,28 @@ const AssignOtTime = () => {
               <Calendar className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">OT Date</span>
             </div>
-            <p className="text-sm font-medium">{item.ot_date || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.ot_date || "N/A"}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-1">
               <Clock className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">OT Time</span>
             </div>
-            <p className="text-sm font-medium">{item.ot_time || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.ot_time || "N/A"}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-1">
               <User className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">RMO</span>
             </div>
-            <p className="text-sm font-medium">{item.rmo || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.rmo || "N/A"}</p>
           </div>
           <div>
             <div className="flex items-center gap-1 mb-1">
               <User className="w-3 h-3 text-green-600" />
               <span className="text-xs text-gray-500">Doctor</span>
             </div>
-            <p className="text-sm font-medium">{item.doctor || 'N/A'}</p>
+            <p className="text-sm font-medium">{item.doctor || "N/A"}</p>
           </div>
         </div>
 
@@ -567,7 +653,7 @@ const AssignOtTime = () => {
                 <MapPin className="w-3 h-3 text-green-600" />
                 <span className="text-xs text-gray-500">Location</span>
               </div>
-              <p className="text-sm">{item.patient_location || 'N/A'}</p>
+              <p className="text-sm">{item.patient_location || "N/A"}</p>
             </div>
             {item.remark && (
               <div>
@@ -594,14 +680,18 @@ const AssignOtTime = () => {
                   <Clock className="w-3 h-3 text-green-600" />
                   <span className="text-xs text-gray-500">Planned On</span>
                 </div>
-                <p className="text-xs font-medium text-gray-700">{item.planned2Formatted}</p>
+                <p className="text-xs font-medium text-gray-700">
+                  {item.planned2Formatted}
+                </p>
               </div>
               <div>
                 <div className="flex items-center gap-1 mb-1">
                   <CheckCircle className="w-3 h-3 text-green-600" />
                   <span className="text-xs text-gray-500">Completed On</span>
                 </div>
-                <p className="text-xs font-medium text-green-700">{item.actual2Formatted}</p>
+                <p className="text-xs font-medium text-green-700">
+                  {item.actual2Formatted}
+                </p>
               </div>
             </div>
           </div>
@@ -616,8 +706,12 @@ const AssignOtTime = () => {
       <div className="flex-shrink-0 mb-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-green-600">OT Tasks Management</h1>
-            <p className="text-sm text-gray-600 mt-1">Manage OT tasks and assignments</p>
+            <h1 className="text-xl md:text-2xl font-bold text-green-600">
+              OT Tasks Management
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Manage OT tasks and assignments
+            </p>
           </div>
           <button
             onClick={() => setShowForm(true)}
@@ -630,27 +724,31 @@ const AssignOtTime = () => {
         {/* Tabs Navigation - Fixed Height */}
         <div className="flex mt-6 bg-gray-100 p-1 rounded-lg">
           <button
-            onClick={() => setActiveTab('pending')}
-            className={`flex-1 py-2.5 px-4 font-medium text-sm md:text-base rounded-lg transition-colors ${activeTab === 'pending'
-              ? 'bg-green-600 text-white'
-              : 'bg-transparent text-gray-600 hover:text-green-600'
-              }`}
+            onClick={() => setActiveTab("pending")}
+            className={`flex-1 py-2.5 px-4 font-medium text-sm md:text-base rounded-lg transition-colors ${
+              activeTab === "pending"
+                ? "bg-green-600 text-white"
+                : "bg-transparent text-gray-600 hover:text-green-600"
+            }`}
           >
             <div className="flex flex-col items-center">
-              <span>Pending <span className=" mt-0.5">{pendingData.length}</span></span>
-
+              <span>
+                Pending <span className=" mt-0.5">{pendingData.length}</span>
+              </span>
             </div>
           </button>
           <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2.5 px-4 font-medium text-sm md:text-base rounded-lg transition-colors ${activeTab === 'history'
-              ? 'bg-green-600 text-white'
-              : 'bg-transparent text-gray-600 hover:text-green-600'
-              }`}
+            onClick={() => setActiveTab("history")}
+            className={`flex-1 py-2.5 px-4 font-medium text-sm md:text-base rounded-lg transition-colors ${
+              activeTab === "history"
+                ? "bg-green-600 text-white"
+                : "bg-transparent text-gray-600 hover:text-green-600"
+            }`}
           >
             <div className="flex flex-col items-center">
-              <span>History   <span className=" mt-0.5">{historyData.length}</span></span>
-
+              <span>
+                History <span className=" mt-0.5">{historyData.length}</span>
+              </span>
             </div>
           </button>
         </div>
@@ -660,7 +758,7 @@ const AssignOtTime = () => {
       <div className="flex-1 min-h-0 overflow-hidden">
         {/* Mobile Card View - Scrollable Area */}
         <div className="md:hidden h-full overflow-y-auto pb-4">
-          {activeTab === 'pending' ? (
+          {activeTab === "pending" ? (
             pendingData.length > 0 ? (
               <div className="space-y-3 px-1">
                 {pendingData.map((item) => (
@@ -670,31 +768,37 @@ const AssignOtTime = () => {
             ) : (
               <div className="h-full flex flex-col items-center justify-center p-8">
                 <CheckCircle className="w-16 h-16 text-green-400 mb-4" />
-                <h3 className="text-base font-medium text-green-600 mb-2">No pending OT tasks</h3>
-                <p className="text-sm text-green-500 text-center">All OT tasks are completed!</p>
+                <h3 className="text-base font-medium text-green-600 mb-2">
+                  No pending OT tasks
+                </h3>
+                <p className="text-sm text-green-500 text-center">
+                  All OT tasks are completed!
+                </p>
               </div>
             )
+          ) : historyData.length > 0 ? (
+            <div className="space-y-3 px-1">
+              {historyData.map((item) => (
+                <MobileHistoryCard key={item.id} item={item} />
+              ))}
+            </div>
           ) : (
-            historyData.length > 0 ? (
-              <div className="space-y-3 px-1">
-                {historyData.map((item) => (
-                  <MobileHistoryCard key={item.id} item={item} />
-                ))}
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center p-8">
-                <Calendar className="w-16 h-16 text-green-400 mb-4" />
-                <h3 className="text-base font-medium text-green-600 mb-2">No OT history</h3>
-                <p className="text-sm text-green-500 text-center">Complete some OT tasks to see history</p>
-              </div>
-            )
+            <div className="h-full flex flex-col items-center justify-center p-8">
+              <Calendar className="w-16 h-16 text-green-400 mb-4" />
+              <h3 className="text-base font-medium text-green-600 mb-2">
+                No OT history
+              </h3>
+              <p className="text-sm text-green-500 text-center">
+                Complete some OT tasks to see history
+              </p>
+            </div>
           )}
         </div>
 
         {/* Desktop Table View - Scrollable Area */}
         <div className="hidden md:block h-full overflow-hidden">
           {/* Pending Tasks Table */}
-          {activeTab === 'pending' && (
+          {activeTab === "pending" && (
             <div className="h-full bg-green-50 rounded-lg border border-green-200 flex flex-col">
               {/* <div className="flex-shrink-0 p-5">
                 <h2 className="text-lg font-semibold text-green-700">Pending OT Tasks</h2>
@@ -704,25 +808,49 @@ const AssignOtTime = () => {
                   <table className="min-w-full bg-white">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-green-600 text-white">
-                        <th className="px-4 py-3 text-left font-medium sticky left-0 bg-green-600 whitespace-nowrap">Action</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Status</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Planned Time</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">OT Number</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">IPD Number</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Patient Name</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Location</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">OT Date</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">OT Time</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">RMO</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Doctor</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Remark</th>
+                        <th className="px-4 py-3 text-left font-medium sticky left-0 bg-green-600 whitespace-nowrap">
+                          Action
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Planned Time
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          OT Number
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          IPD Number
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Patient Name
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Location
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          OT Date
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          OT Time
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          RMO
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Doctor
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Remark
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {pendingData.map((item, index) => (
                         <tr
                           key={item.id}
-                          className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-green-50'}`}
+                          className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-green-50"}`}
                         >
                           <td className="px-4 py-3 sticky left-0 bg-white whitespace-nowrap">
                             <button
@@ -733,26 +861,50 @@ const AssignOtTime = () => {
                             </button>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.status === 'Complete' ? 'bg-green-100 text-green-800' :
-                              item.status === 'Cancel' ? 'bg-red-100 text-red-800' :
-                                'bg-yellow-100 text-yellow-800'
-                              }`}>
-                              {item.status || 'Pending'}
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                item.status === "Complete"
+                                  ? "bg-green-100 text-green-800"
+                                  : item.status === "Cancel"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
+                              {item.status || "Pending"}
                             </span>
                           </td>
                           <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap">
                             {item.planned2Formatted}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ot_number || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ipd_number || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.patient_name || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.patient_location || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ot_date || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ot_time || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.rmo || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.doctor || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap" title={item.remark}>
-                            {item.remark || '-'}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ot_number || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ipd_number || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.patient_name || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.patient_location || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ot_date || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ot_time || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.rmo || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.doctor || "N/A"}
+                          </td>
+                          <td
+                            className="px-4 py-3 whitespace-nowrap"
+                            title={item.remark}
+                          >
+                            {item.remark || "-"}
                           </td>
                         </tr>
                       ))}
@@ -761,8 +913,12 @@ const AssignOtTime = () => {
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center p-8">
                     <CheckCircle className="w-16 h-16 text-green-400 mb-4" />
-                    <h3 className="text-lg font-medium text-green-600 mb-2">No pending OT tasks</h3>
-                    <p className="text-green-500">All OT tasks are completed!</p>
+                    <h3 className="text-lg font-medium text-green-600 mb-2">
+                      No pending OT tasks
+                    </h3>
+                    <p className="text-green-500">
+                      All OT tasks are completed!
+                    </p>
                   </div>
                 )}
               </div>
@@ -770,7 +926,7 @@ const AssignOtTime = () => {
           )}
 
           {/* History Table */}
-          {activeTab === 'history' && (
+          {activeTab === "history" && (
             <div className="h-full bg-green-50 rounded-lg border border-green-200 flex flex-col">
               {/* <div className="flex-shrink-0 p-5">
                 <h2 className="text-lg font-semibold text-green-700">OT History</h2>
@@ -780,32 +936,61 @@ const AssignOtTime = () => {
                   <table className="min-w-full bg-white">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-green-600 text-white">
-                        <th className="px-4 py-3 text-left font-medium sticky left-0 bg-green-600 whitespace-nowrap">Status</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Planned Time</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Actual Time</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">OT Number</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">IPD Number</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Patient Name</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Location</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">OT Date</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">OT Time</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">RMO</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Doctor</th>
-                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Remark</th>
+                        <th className="px-4 py-3 text-left font-medium sticky left-0 bg-green-600 whitespace-nowrap">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Planned Time
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Actual Time
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          OT Number
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          IPD Number
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Patient Name
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Location
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          OT Date
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          OT Time
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          RMO
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Doctor
+                        </th>
+                        <th className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                          Remark
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {historyData.map((item, index) => (
                         <tr
                           key={item.id}
-                          className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-green-50'}`}
+                          className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-green-50"}`}
                         >
                           <td className="px-4 py-3 sticky left-0 bg-white whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.status === 'Complete' ? 'bg-green-100 text-green-800' :
-                              item.status === 'Cancel' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                              {item.status || 'N/A'}
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                item.status === "Complete"
+                                  ? "bg-green-100 text-green-800"
+                                  : item.status === "Cancel"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {item.status || "N/A"}
                             </span>
                           </td>
                           <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap">
@@ -814,16 +999,35 @@ const AssignOtTime = () => {
                           <td className="px-4 py-3 font-medium text-green-700 whitespace-nowrap">
                             {item.actual2Formatted}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ot_number || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ipd_number || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.patient_name || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.patient_location || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ot_date || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.ot_time || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.rmo || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{item.doctor || 'N/A'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap" title={item.remark}>
-                            {item.remark || '-'}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ot_number || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ipd_number || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.patient_name || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.patient_location || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ot_date || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.ot_time || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.rmo || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.doctor || "N/A"}
+                          </td>
+                          <td
+                            className="px-4 py-3 whitespace-nowrap"
+                            title={item.remark}
+                          >
+                            {item.remark || "-"}
                           </td>
                         </tr>
                       ))}
@@ -832,8 +1036,12 @@ const AssignOtTime = () => {
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center p-8">
                     <Calendar className="w-16 h-16 text-green-400 mb-4" />
-                    <h3 className="text-lg font-medium text-green-600 mb-2">No OT history available</h3>
-                    <p className="text-green-500">Complete some OT tasks to see history here</p>
+                    <h3 className="text-lg font-medium text-green-600 mb-2">
+                      No OT history available
+                    </h3>
+                    <p className="text-green-500">
+                      Complete some OT tasks to see history here
+                    </p>
                   </div>
                 )}
               </div>
@@ -847,13 +1055,16 @@ const AssignOtTime = () => {
         <div className="fixed inset-0 bg-black/50 flex items-start md:items-center justify-center p-2 md:p-4 z-50">
           <div className="bg-white p-4 md:p-6 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto border-2 border-green-600">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg md:text-xl font-semibold text-green-600">Assign OT Time</h2>
+              <h2 className="text-lg md:text-xl font-semibold text-green-600">
+                Assign OT Time
+              </h2>
               <button
                 onClick={() => {
                   setShowForm(false);
-                  setIpdSearchTerm('');
+                  setIpdSearchTerm("");
                   setShowIpdDropdown(false);
-                  setSelectedDoctor('');
+                  setSelectedDoctor("");
+                  setSelectedPatientDetails(null);
                 }}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
               >
@@ -888,10 +1099,11 @@ const AssignOtTime = () => {
                       <div
                         key={patient.ipd_number}
                         onClick={() => handleIpdSelect(patient.ipd_number)}
-                        className={`p-3 cursor-pointer border-b border-gray-100 transition-colors ${formData.ipd_number === patient.ipd_number
-                          ? 'bg-green-50'
-                          : 'bg-white hover:bg-gray-50'
-                          }`}
+                        className={`p-3 cursor-pointer border-b border-gray-100 transition-colors ${
+                          formData.ipd_number === patient.ipd_number
+                            ? "bg-green-50"
+                            : "bg-white hover:bg-gray-50"
+                        }`}
                       >
                         <div className="font-medium text-green-600 text-sm">
                           {patient.ipd_number}
@@ -906,9 +1118,47 @@ const AssignOtTime = () => {
 
                 <p className="text-xs text-gray-500 mt-2 italic">
                   {availableIpdPatients.length === 0
-                    ? 'No available IPD patients'
+                    ? "No available IPD patients"
                     : `${availableIpdPatients.length} IPD patient(s) available`}
                 </p>
+
+                {/* Patient details card shown after IPD selection */}
+                {selectedPatientDetails && formData.ipd_number && (
+                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs font-semibold text-green-700 mb-2 uppercase tracking-wide">
+                      Patient Details
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="text-xs text-gray-500">Name</p>
+                        <p className="text-sm font-medium text-gray-800 truncate">
+                          {selectedPatientDetails.name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Age</p>
+                        <p className="text-sm font-medium text-gray-800">
+                          {selectedPatientDetails.age}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Gender</p>
+                        <p className="text-sm font-medium text-gray-800">
+                          {selectedPatientDetails.gender}
+                        </p>
+                      </div>
+                    </div>
+                    {selectedPatientDetails.location &&
+                      selectedPatientDetails.location !== "N/A" && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500">Location</p>
+                          <p className="text-sm font-medium text-gray-800">
+                            {selectedPatientDetails.location}
+                          </p>
+                        </div>
+                      )}
+                  </div>
+                )}
               </div>
 
               {/* Form fields */}
@@ -983,7 +1233,9 @@ const AssignOtTime = () => {
                   >
                     <option value="">Select RMO</option>
                     {rmoList.map((rmo, index) => (
-                      <option key={index} value={rmo}>{rmo}</option>
+                      <option key={index} value={rmo}>
+                        {rmo}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -991,30 +1243,33 @@ const AssignOtTime = () => {
 
               <div className="flex gap-3 mt-6">
                 <button
-                  type="submit"
-                  disabled={!formData.ipd_number || isSubmitting}
-                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${formData.ipd_number && !isSubmitting
-                    ? 'bg-green-600 text-white hover:bg-green-700'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                >
-                  {isSubmitting ? 'Assigning...' : 'Assign OT'}
-                </button>
-                <button
                   type="button"
                   onClick={() => {
                     setShowForm(false);
-                    setIpdSearchTerm('');
+                    setIpdSearchTerm("");
                     setShowIpdDropdown(false);
-                    setSelectedDoctor('');
+                    setSelectedDoctor("");
+                    setSelectedPatientDetails(null);
                   }}
                   disabled={isSubmitting}
-                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${isSubmitting
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-gray-600 text-white hover:bg-gray-700'
-                    }`}
+                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${
+                    isSubmitting
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-gray-600 text-white hover:bg-gray-700"
+                  }`}
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!formData.ipd_number || isSubmitting}
+                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${
+                    formData.ipd_number && !isSubmitting
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  {isSubmitting ? "Assigning..." : "Assign OT"}
                 </button>
               </div>
             </form>
@@ -1027,7 +1282,9 @@ const AssignOtTime = () => {
         <div className="fixed inset-0 bg-black/50 flex items-start md:items-center justify-center p-2 md:p-4 z-50">
           <div className="bg-white p-4 md:p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto border-2 border-green-600">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg md:text-xl font-semibold text-green-600">Process OT Task</h2>
+              <h2 className="text-lg md:text-xl font-semibold text-green-600">
+                Process OT Task
+              </h2>
               <button
                 onClick={() => {
                   setShowProcessModal(false);
@@ -1040,11 +1297,25 @@ const AssignOtTime = () => {
             </div>
 
             <div className="mb-6 p-3 bg-green-50 rounded-lg">
-              <h3 className="font-medium text-green-700 mb-2">Patient Information</h3>
-              <p className="text-sm"><span className="font-medium">IPD:</span> {selectedOtRecord.ipd_number}</p>
-              <p className="text-sm"><span className="font-medium">Patient:</span> {selectedOtRecord.patient_name}</p>
-              <p className="text-sm"><span className="font-medium">OT Date:</span> {selectedOtRecord.ot_date}</p>
-              <p className="text-sm"><span className="font-medium">OT Time:</span> {selectedOtRecord.ot_time}</p>
+              <h3 className="font-medium text-green-700 mb-2">
+                Patient Information
+              </h3>
+              <p className="text-sm">
+                <span className="font-medium">IPD:</span>{" "}
+                {selectedOtRecord.ipd_number}
+              </p>
+              <p className="text-sm">
+                <span className="font-medium">Patient:</span>{" "}
+                {selectedOtRecord.patient_name}
+              </p>
+              <p className="text-sm">
+                <span className="font-medium">OT Date:</span>{" "}
+                {selectedOtRecord.ot_date}
+              </p>
+              <p className="text-sm">
+                <span className="font-medium">OT Time:</span>{" "}
+                {selectedOtRecord.ot_time}
+              </p>
             </div>
 
             <form onSubmit={handleProcessSubmit}>

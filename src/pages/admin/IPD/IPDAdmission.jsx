@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Plus,
@@ -12,32 +12,34 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  Bell
-} from 'lucide-react';
-import supabase from '../../../SupabaseClient';
+  Bell,
+} from "lucide-react";
+import supabase from "../../../SupabaseClient";
 
 const PatientAdmissionSystem = () => {
   const [showModal, setShowModal] = useState(false);
   const [patients, setPatients] = useState([]);
   const [ipdPatients, setIpdPatients] = useState([]);
   const [editingPatient, setEditingPatient] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [admissionSearchTerm, setAdmissionSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [admissionSearchTerm, setAdmissionSearchTerm] = useState("");
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // New state for notification popup
   const [showNotification, setShowNotification] = useState(false);
-  const [notificationMessage, setNotificationMessage] = useState('');
-  const [notificationType, setNotificationType] = useState('success'); // 'success' or 'error'
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationType, setNotificationType] = useState("success"); // 'success' or 'error'
 
   // State for dynamic dropdowns
   const [departmentOptions, setDepartmentOptions] = useState([]);
   const [doctorOptions, setDoctorOptions] = useState([]);
   const [filteredDoctorOptions, setFilteredDoctorOptions] = useState([]);
-  const [filteredDepartmentOptions, setFilteredDepartmentOptions] = useState([]);
+  const [filteredDepartmentOptions, setFilteredDepartmentOptions] = useState(
+    [],
+  );
 
   // Bed data states
   const [allBedData, setAllBedData] = useState([]); // All beds from DB
@@ -47,69 +49,69 @@ const PatientAdmissionSystem = () => {
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
 
   // Search terms for dropdowns
-  const [departmentSearch, setDepartmentSearch] = useState('');
-  const [doctorSearch, setDoctorSearch] = useState('');
+  const [departmentSearch, setDepartmentSearch] = useState("");
+  const [doctorSearch, setDoctorSearch] = useState("");
 
   const [formData, setFormData] = useState({
-    registrationNumber: '',
-    patientName: '',
-    fatherHusband: '',
-    age: '',
-    gender: '',
-    dob: '',
-    phoneNumber: '',
-    mobileNumber: '',
-    emailId: '',
-    houseStreet: '',
-    areaColony: '',
-    landmark: '',
-    state: '',
-    city: '',
-    pincode: '',
-    country: 'India',
-    department: '',
-    referByDr: '',
-    consultantDr: '',
-    patCategory: '',
-    patientCase: '',
-    medicalSurgical: '',
-    healthCardNo: '',
-    admissionPurpose: '',
-    locationStatus: '',
-    floor: '',
-    ward: '',
-    room: '',
-    bedNo: '',
-    bedLocation: '',
-    wardType: '',
-    bedTariff: '',
-    kinName: '',
-    kinRelation: '',
-    kinMobile: '',
-    advanceAmount: '',
-    drVisitTariff: '',
-    packageName: '',
-    pkgAmount: '',
-    expTariff: '',
-    otherServices: '',
-    vipDetails: '',
-    religion: '',
-    maritalStatus: '',
-    attempt: '',
-    remarks: '',
+    registrationNumber: "",
+    patientName: "",
+    fatherHusband: "",
+    age: "",
+    gender: "",
+    dob: "",
+    phoneNumber: "",
+    mobileNumber: "",
+    emailId: "",
+    houseStreet: "",
+    areaColony: "",
+    landmark: "",
+    state: "",
+    city: "",
+    pincode: "",
+    country: "India",
+    department: "",
+    referByDr: "",
+    consultantDr: "",
+    patCategory: "",
+    patientCase: "",
+    medicalSurgical: "",
+    healthCardNo: "",
+    admissionPurpose: "",
+    locationStatus: "",
+    floor: "",
+    ward: "",
+    room: "",
+    bedNo: "",
+    bedLocation: "",
+    wardType: "",
+    bedTariff: "",
+    kinName: "",
+    kinRelation: "",
+    kinMobile: "",
+    advanceAmount: "",
+    drVisitTariff: "",
+    packageName: "",
+    pkgAmount: "",
+    expTariff: "",
+    otherServices: "",
+    vipDetails: "",
+    religion: "",
+    maritalStatus: "",
+    attempt: "",
+    remarks: "",
   });
 
   const [dropdownData] = useState({
-    locationStatus: ['General Ward', 'ICU', 'Emergency', 'Private Room'],
-    patCategories: ['General', 'Insurance', 'Corporate', 'VIP'],
-    patientCases: ['Emergency', 'Routine', 'Follow-up', 'Surgery'],
-    otherServices: ['Ambulance', 'Lab Tests', 'X-Ray', 'MRI', 'CT Scan'],
-    drVisitTariffs: ['Standard', 'Premium', 'VIP'],
+    locationStatus: ["General Ward", "ICU", "Emergency", "Private Room"],
+    patCategories: ["General", "Insurance", "Corporate", "VIP"],
+    patientCases: ["Emergency", "Routine", "Follow-up", "Surgery"],
+    otherServices: ["Ambulance", "Lab Tests", "X-Ray", "MRI", "CT Scan"],
+    drVisitTariffs: ["Standard", "Premium", "VIP"],
   });
 
   const [showBedModal, setShowBedModal] = useState(false);
   const [selectedBedId, setSelectedBedId] = useState(null);
-  const [bedFilterTab, setBedFilterTab] = useState('All');
+  const [bedFilterTab, setBedFilterTab] = useState("All");
 
   // Refs for dropdowns
   const departmentDropdownRef = useRef(null);
@@ -127,7 +129,7 @@ const PatientAdmissionSystem = () => {
     }
   }, [showNotification]);
 
-  const showNotificationPopup = (message, type = 'success') => {
+  const showNotificationPopup = (message, type = "success") => {
     setNotificationMessage(message);
     setNotificationType(type);
     setShowNotification(true);
@@ -157,9 +159,9 @@ const PatientAdmissionSystem = () => {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
@@ -167,68 +169,70 @@ const PatientAdmissionSystem = () => {
   const loadDepartments = async () => {
     try {
       const { data, error } = await supabase
-        .from('master')
-        .select('department')
-        .not('department', 'is', null)
-        .order('department');
+        .from("master")
+        .select("department")
+        .not("department", "is", null)
+        .order("department");
 
       if (error) {
-        console.error('Error loading departments:', error);
-        showNotificationPopup('Failed to load departments', 'error');
+        console.error("Error loading departments:", error);
+        showNotificationPopup("Failed to load departments", "error");
         return [];
       }
 
       // Transform data and remove duplicates
       const options = data
-        .map(item => item.department)
-        .filter((value, index, self) =>
-          value && value.trim() !== '' && self.indexOf(value) === index
+        .map((item) => item.department)
+        .filter(
+          (value, index, self) =>
+            value && value.trim() !== "" && self.indexOf(value) === index,
         );
 
       setDepartmentOptions(options);
       setFilteredDepartmentOptions(options);
       return options;
     } catch (error) {
-      console.error('Error loading departments:', error);
-      showNotificationPopup('Failed to load departments', 'error');
+      console.error("Error loading departments:", error);
+      showNotificationPopup("Failed to load departments", "error");
       return [];
     }
   };
 
   // Load doctors from doctors table
-  const loadDoctors = async (searchQuery = '') => {
+  const loadDoctors = async (searchQuery = "") => {
     try {
       let query = supabase
-        .from('doctors')
-        .select('id, name')
-        .not('name', 'is', null)
-        .order('name');
+        .from("doctors")
+        .select("id, name")
+        .not("name", "is", null)
+        .order("name");
 
       if (searchQuery) {
-        query = query.ilike('name', `%${searchQuery}%`);
+        query = query.ilike("name", `%${searchQuery}%`);
       }
 
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error loading doctors:', error);
-        showNotificationPopup('Failed to load doctors', 'error');
+        console.error("Error loading doctors:", error);
+        showNotificationPopup("Failed to load doctors", "error");
         return [];
       }
 
       // Transform data and remove duplicates
       const options = data
-        .map(doctor => doctor.name)
-        .filter((value, index, self) =>
-          value && value.trim() !== '' && self.indexOf(value) === index
+        .map((doctor) => doctor.name)
+        .filter(
+          (value, index, self) =>
+            value && value.trim() !== "" && self.indexOf(value) === index,
         );
 
       setDoctorOptions(options);
       setFilteredDoctorOptions(options);
       return options;
     } catch (error) {
-      console.error('Error loading doctors:', error);
-      showNotificationPopup('Failed to load doctors', 'error');
+      console.error("Error loading doctors:", error);
+      showNotificationPopup("Failed to load doctors", "error");
       return [];
     }
   };
@@ -237,16 +241,16 @@ const PatientAdmissionSystem = () => {
   const loadBedData = async () => {
     try {
       const { data, error } = await supabase
-        .from('all_floor_bed')
-        .select('*')
-        .order('floor', { ascending: true })
-        .order('ward', { ascending: true })
-        .order('room', { ascending: true })
-        .order('bed', { ascending: true });
+        .from("all_floor_bed")
+        .select("*")
+        .order("floor", { ascending: true })
+        .order("ward", { ascending: true })
+        .order("room", { ascending: true })
+        .order("bed", { ascending: true });
 
       if (error) {
-        console.error('Error loading bed data:', error);
-        showNotificationPopup('Failed to load bed data', 'error');
+        console.error("Error loading bed data:", error);
+        showNotificationPopup("Failed to load bed data", "error");
         return;
       }
 
@@ -255,8 +259,8 @@ const PatientAdmissionSystem = () => {
         setAllBedData(data);
       }
     } catch (error) {
-      console.error('Failed to load bed data:', error);
-      showNotificationPopup('Failed to load bed data', 'error');
+      console.error("Failed to load bed data:", error);
+      showNotificationPopup("Failed to load bed data", "error");
     }
   };
 
@@ -272,8 +276,8 @@ const PatientAdmissionSystem = () => {
     if (!searchTerm) {
       setFilteredDoctorOptions(doctorOptions);
     } else {
-      const filtered = doctorOptions.filter(doctor =>
-        doctor.toLowerCase().includes(searchTerm.toLowerCase())
+      const filtered = doctorOptions.filter((doctor) =>
+        doctor.toLowerCase().includes(searchTerm.toLowerCase()),
       );
       setFilteredDoctorOptions(filtered);
     }
@@ -285,8 +289,8 @@ const PatientAdmissionSystem = () => {
     if (!searchTerm) {
       setFilteredDepartmentOptions(departmentOptions);
     } else {
-      const filtered = departmentOptions.filter(dept =>
-        dept.toLowerCase().includes(searchTerm.toLowerCase())
+      const filtered = departmentOptions.filter((dept) =>
+        dept.toLowerCase().includes(searchTerm.toLowerCase()),
       );
       setFilteredDepartmentOptions(filtered);
     }
@@ -294,22 +298,22 @@ const PatientAdmissionSystem = () => {
 
   // Handle department selection
   const handleDepartmentSelect = (department) => {
-    setFormData(prev => ({ ...prev, department }));
-    setDepartmentSearch('');
+    setFormData((prev) => ({ ...prev, department }));
+    setDepartmentSearch("");
     setShowDepartmentDropdown(false);
   };
 
   // Handle doctor selection
   const handleDoctorSelect = (doctor) => {
-    setFormData(prev => ({ ...prev, consultantDr: doctor }));
-    setDoctorSearch('');
+    setFormData((prev) => ({ ...prev, consultantDr: doctor }));
+    setDoctorSearch("");
     setShowDoctorDropdown(false);
   };
 
   // Clear department field
   const clearDepartment = () => {
-    setFormData(prev => ({ ...prev, department: '' }));
-    setDepartmentSearch('');
+    setFormData((prev) => ({ ...prev, department: "" }));
+    setDepartmentSearch("");
     setShowDepartmentDropdown(true);
     setTimeout(() => {
       departmentInputRef.current?.focus();
@@ -318,8 +322,8 @@ const PatientAdmissionSystem = () => {
 
   // Clear doctor field
   const clearDoctor = () => {
-    setFormData(prev => ({ ...prev, consultantDr: '' }));
-    setDoctorSearch('');
+    setFormData((prev) => ({ ...prev, consultantDr: "" }));
+    setDoctorSearch("");
     setShowDoctorDropdown(true);
     setTimeout(() => {
       doctorInputRef.current?.focus();
@@ -361,33 +365,33 @@ const PatientAdmissionSystem = () => {
 
     const setupRealtimeSubscription = () => {
       const channel = supabase
-        .channel('ipd_admission_changes')
+        .channel("ipd_admission_changes")
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
-            table: 'ipd_admissions'
+            event: "*",
+            schema: "public",
+            table: "ipd_admissions",
           },
           () => {
             loadData();
-          }
+          },
         )
         .subscribe();
 
       // Listen to bed status changes so availability updates in real-time
       const bedChannel = supabase
-        .channel('bed_status_changes')
+        .channel("bed_status_changes")
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
-            table: 'all_floor_bed'
+            event: "*",
+            schema: "public",
+            table: "all_floor_bed",
           },
           () => {
             loadBedData();
-          }
+          },
         )
         .subscribe();
 
@@ -419,35 +423,37 @@ const PatientAdmissionSystem = () => {
 
       // Load IPD admission records
       const { data: ipdRecords, error: ipdError } = await supabase
-        .from('ipd_admissions')
-        .select('*')
-        .order('timestamp', { ascending: false });
+        .from("ipd_admissions")
+        .select("*")
+        .order("timestamp", { ascending: false });
 
       if (ipdError) {
-        console.error('Error loading IPD records:', ipdError);
-        showNotificationPopup('Failed to load IPD records', 'error');
+        console.error("Error loading IPD records:", ipdError);
+        showNotificationPopup("Failed to load IPD records", "error");
       } else {
         setPatients(ipdRecords || []);
       }
 
       // Load patients eligible for IPD admission (department='IPD' and status='assigned')
       const { data: patientAdmissionData, error: patientError } = await supabase
-        .from('patient_admission')
-        .select('*')
-        .eq('department', 'IPD')
-        .eq('status', 'assigned')
-        .is('actual2', null)
-        .not('planned2', 'is', null)
-        .order('timestamp', { ascending: false });
+        .from("patient_admission")
+        .select("*")
+        .eq("department", "IPD")
+        .eq("status", "assigned")
+        .is("actual2", null)
+        .not("planned2", "is", null)
+        .order("timestamp", { ascending: false });
 
       if (patientError) {
-        console.error('Error loading patient admission data:', patientError);
-        showNotificationPopup('Failed to load patient data', 'error');
+        console.error("Error loading patient admission data:", patientError);
+        showNotificationPopup("Failed to load patient data", "error");
       } else {
         if (ipdRecords && patientAdmissionData) {
-          const admittedAdmissionNumbers = ipdRecords.map(p => p.admission_no);
+          const admittedAdmissionNumbers = ipdRecords.map(
+            (p) => p.admission_no,
+          );
           const eligiblePatients = patientAdmissionData.filter(
-            p => !admittedAdmissionNumbers.includes(p.admission_no)
+            (p) => !admittedAdmissionNumbers.includes(p.admission_no),
           );
           setIpdPatients(eligiblePatients);
         } else if (patientAdmissionData) {
@@ -455,8 +461,8 @@ const PatientAdmissionSystem = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to load data:', error);
-      showNotificationPopup('Failed to load data', 'error');
+      console.error("Failed to load data:", error);
+      showNotificationPopup("Failed to load data", "error");
     } finally {
       setIsLoading(false);
     }
@@ -466,30 +472,30 @@ const PatientAdmissionSystem = () => {
   const generateIpdNumber = async () => {
     try {
       const { data, error } = await supabase
-        .from('ipd_admissions')
-        .select('ipd_number')
-        .order('timestamp', { ascending: false })
+        .from("ipd_admissions")
+        .select("ipd_number")
+        .order("timestamp", { ascending: false })
         .limit(1);
 
       if (error) {
-        console.error('Error fetching IPD number:', error);
-        return 'IPD-001';
+        console.error("Error fetching IPD number:", error);
+        return "IPD-001";
       }
 
       if (data && data.length > 0) {
         const lastIpdNo = data[0].ipd_number;
-        if (lastIpdNo && lastIpdNo.startsWith('IPD-')) {
-          const lastNumber = parseInt(lastIpdNo.replace('IPD-', ''), 10);
+        if (lastIpdNo && lastIpdNo.startsWith("IPD-")) {
+          const lastNumber = parseInt(lastIpdNo.replace("IPD-", ""), 10);
           if (!isNaN(lastNumber)) {
-            return `IPD-${String(lastNumber + 1).padStart(3, '0')}`;
+            return `IPD-${String(lastNumber + 1).padStart(3, "0")}`;
           }
         }
       }
 
-      return 'IPD-001';
+      return "IPD-001";
     } catch (error) {
-      console.error('Error generating IPD number:', error);
-      return 'IPD-001';
+      console.error("Error generating IPD number:", error);
+      return "IPD-001";
     }
   };
 
@@ -500,25 +506,23 @@ const PatientAdmissionSystem = () => {
 
     if (admissionNo) {
       const selectedPatient = ipdPatients.find(
-        (p) => p.admission_no === admissionNo
+        (p) => p.admission_no === admissionNo,
       );
       if (selectedPatient) {
         setFormData((prev) => ({
           ...prev,
-          patientName: selectedPatient.patient_name || '',
-          phoneNumber: selectedPatient.phone_no || '',
-          mobileNumber: selectedPatient.whatsapp_no || '',
-          fatherHusband: selectedPatient.father_husband_name || '',
-          age: selectedPatient.age || '',
-          gender: selectedPatient.gender || '',
-          dob: selectedPatient.date_of_birth || '',
-          admissionPurpose: selectedPatient.reason_for_visit || '',
+          patientName: selectedPatient.patient_name || "",
+          phoneNumber: selectedPatient.phone_no || "",
+          mobileNumber: selectedPatient.whatsapp_no || "",
+          fatherHusband: selectedPatient.father_husband_name || "",
+          age: selectedPatient.age || "",
+          gender: selectedPatient.gender || "",
+          dob: selectedPatient.date_of_birth || "",
+          admissionPurpose: selectedPatient.reason_for_visit || "",
         }));
       }
     }
   };
-
-
 
   // Handle form submission to Supabase
   const handleSubmit = async (e) => {
@@ -527,7 +531,9 @@ const PatientAdmissionSystem = () => {
     try {
       setIsSaving(true);
 
-      const ipdNumber = editingPatient ? editingPatient.ipd_number : await generateIpdNumber();
+      const ipdNumber = editingPatient
+        ? editingPatient.ipd_number
+        : await generateIpdNumber();
 
       const patientData = {
         ipd_number: ipdNumber,
@@ -561,7 +567,7 @@ const PatientAdmissionSystem = () => {
         room: formData.room,
         bed_no: formData.bedNo,
         bed_location: formData.bedLocation,
-        ward_type: formData.wardType,  // This is the ward_type field
+        ward_type: formData.wardType, // This is the ward_type field
         bed_tariff: formData.bedTariff,
         kin_name: formData.kinName.trim(),
         kin_relation: formData.kinRelation.trim(),
@@ -577,15 +583,19 @@ const PatientAdmissionSystem = () => {
         marital_status: formData.maritalStatus,
         attempt: formData.attempt,
         remarks: formData.remarks.trim(),
-        timestamp: new Date().toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        }).replace(',', ''),
-        planned1: new Date().toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        }).replace(',', ''),
-        status: 'active'
+        timestamp: new Date()
+          .toLocaleString("en-CA", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          })
+          .replace(",", ""),
+        planned1: new Date()
+          .toLocaleString("en-CA", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          })
+          .replace(",", ""),
+        status: "active",
       };
 
       let result;
@@ -593,16 +603,16 @@ const PatientAdmissionSystem = () => {
       // FIRST: Save to ipd_admissions
       if (editingPatient) {
         const { data, error } = await supabase
-          .from('ipd_admissions')
+          .from("ipd_admissions")
           .update(patientData)
-          .eq('id', editingPatient.id)
+          .eq("id", editingPatient.id)
           .select();
 
         if (error) throw error;
         result = data;
       } else {
         const { data, error } = await supabase
-          .from('ipd_admissions')
+          .from("ipd_admissions")
           .insert(patientData)
           .select();
 
@@ -613,30 +623,32 @@ const PatientAdmissionSystem = () => {
       if (result && result.length > 0) {
         // Mark the current bed as Occupied
         await supabase
-          .from('all_floor_bed')
-          .update({ status: 'Occupied' })
-          .eq('floor', patientData.floor)
-          .eq('ward', patientData.ward_type)
-          .eq('room', patientData.room)
-          .eq('bed', patientData.bed_no);
+          .from("all_floor_bed")
+          .update({ status: "Occupied" })
+          .eq("floor", patientData.floor)
+          .eq("ward", patientData.ward_type)
+          .eq("room", patientData.room)
+          .eq("bed", patientData.bed_no);
 
         // Update patient_admission table for new admissions
         if (!editingPatient && result && result.length > 0) {
           await supabase
-            .from('patient_admission')
+            .from("patient_admission")
             .update({
-              actual2: new Date().toLocaleString("en-CA", {
-                timeZone: "Asia/Kolkata",
-                hour12: false
-              }).replace(',', '')
+              actual2: new Date()
+                .toLocaleString("en-CA", {
+                  timeZone: "Asia/Kolkata",
+                  hour12: false,
+                })
+                .replace(",", ""),
             })
-            .eq('admission_no', formData.registrationNumber);
+            .eq("admission_no", formData.registrationNumber);
         }
 
         // Show success notification
         showNotificationPopup(
-          `Patient ${editingPatient ? 'updated' : 'admitted'} successfully! IPD Number: ${patientData.ipd_number}`,
-          'success'
+          `Patient ${editingPatient ? "updated" : "admitted"} successfully! IPD Number: ${patientData.ipd_number}`,
+          "success",
         );
 
         await loadData();
@@ -645,12 +657,11 @@ const PatientAdmissionSystem = () => {
         setEditingPatient(null);
         setSelectedBedId(null);
       }
-
     } catch (error) {
-      console.error('Error saving patient:', error);
+      console.error("Error saving patient:", error);
       showNotificationPopup(
-        `Failed to ${editingPatient ? 'update' : 'admit'} patient: ${error.message}`,
-        'error'
+        `Failed to ${editingPatient ? "update" : "admit"} patient: ${error.message}`,
+        "error",
       );
     } finally {
       setIsSaving(false);
@@ -658,58 +669,58 @@ const PatientAdmissionSystem = () => {
   };
 
   const handleReset = () => {
-    setAdmissionSearchTerm('');
+    setAdmissionSearchTerm("");
     setShowAdmissionDropdown(false);
     setFormData({
-      registrationNumber: '',
-      patientName: '',
-      fatherHusband: '',
-      age: '',
-      gender: '',
-      dob: '',
-      phoneNumber: '',
-      mobileNumber: '',
-      emailId: '',
-      houseStreet: '',
-      areaColony: '',
-      landmark: '',
-      state: '',
-      city: '',
-      pincode: '',
-      country: 'India',
-      department: '',
-      referByDr: '',
-      consultantDr: '',
-      patCategory: '',
-      patientCase: '',
-      medicalSurgical: '',
-      healthCardNo: '',
-      admissionPurpose: '',
-      locationStatus: '',
-      floor: '',
-      ward: '',
-      room: '',
-      bedNo: '',
-      bedLocation: '',
-      wardType: '',
-      bedTariff: '',
-      kinName: '',
-      kinRelation: '',
-      kinMobile: '',
-      advanceAmount: '',
-      drVisitTariff: '',
-      packageName: '',
-      pkgAmount: '',
-      expTariff: '',
-      otherServices: '',
-      vipDetails: '',
-      religion: '',
-      maritalStatus: '',
-      attempt: '',
-      remarks: '',
+      registrationNumber: "",
+      patientName: "",
+      fatherHusband: "",
+      age: "",
+      gender: "",
+      dob: "",
+      phoneNumber: "",
+      mobileNumber: "",
+      emailId: "",
+      houseStreet: "",
+      areaColony: "",
+      landmark: "",
+      state: "",
+      city: "",
+      pincode: "",
+      country: "India",
+      department: "",
+      referByDr: "",
+      consultantDr: "",
+      patCategory: "",
+      patientCase: "",
+      medicalSurgical: "",
+      healthCardNo: "",
+      admissionPurpose: "",
+      locationStatus: "",
+      floor: "",
+      ward: "",
+      room: "",
+      bedNo: "",
+      bedLocation: "",
+      wardType: "",
+      bedTariff: "",
+      kinName: "",
+      kinRelation: "",
+      kinMobile: "",
+      advanceAmount: "",
+      drVisitTariff: "",
+      packageName: "",
+      pkgAmount: "",
+      expTariff: "",
+      otherServices: "",
+      vipDetails: "",
+      religion: "",
+      maritalStatus: "",
+      attempt: "",
+      remarks: "",
     });
-    setDepartmentSearch('');
-    setDoctorSearch('');
+    setDepartmentSearch("");
+    setDoctorSearch("");
     setShowDepartmentDropdown(false);
     setShowDoctorDropdown(false);
     setSelectedBedId(null);
@@ -717,54 +728,54 @@ const PatientAdmissionSystem = () => {
 
   const handleEdit = (patient) => {
     setEditingPatient(patient);
-    setAdmissionSearchTerm(patient.admission_no || '');
+    setAdmissionSearchTerm(patient.admission_no || "");
     setFormData({
-      registrationNumber: patient.admission_no || '',
-      patientName: patient.patient_name || '',
-      fatherHusband: patient.father_husband_name || '',
-      age: patient.age || '',
-      gender: patient.gender || '',
-      dob: patient.date_of_birth || '',
-      phoneNumber: patient.phone_no || '',
-      mobileNumber: patient.whatsapp_no || '',
-      emailId: patient.email_id || '',
-      houseStreet: patient.house_no_street || '',
-      areaColony: patient.area_colony || '',
-      landmark: patient.landmark || '',
-      state: patient.state || '',
-      city: patient.city || '',
-      pincode: patient.pincode || '',
-      country: patient.country || 'India',
-      department: patient.department || '',
-      referByDr: patient.refer_by_dr || '',
-      consultantDr: patient.consultant_dr || '',
-      patCategory: patient.pat_category || '',
-      patientCase: patient.patient_case || '',
-      medicalSurgical: patient.medical_surgical || '',
-      healthCardNo: patient.health_card_no || '',
-      admissionPurpose: patient.adm_purpose || '',
-      locationStatus: patient.location_status || '',
-      floor: patient.floor || '',
-      ward: patient.ward || '',
-      room: patient.room || '',
-      bedNo: patient.bed_no || '',
-      bedLocation: patient.bed_location || '',
-      wardType: patient.ward_type || '',
-      bedTariff: patient.bed_tariff || '',
-      kinName: patient.kin_name || '',
-      kinRelation: patient.kin_relation || '',
-      kinMobile: patient.kin_mobile_no || '',
-      advanceAmount: patient.advance_amount || '',
-      drVisitTariff: patient.dr_visit_tariff || '',
-      packageName: patient.package_name || '',
-      pkgAmount: patient.pkg_amount || '',
-      expTariff: patient.exp_tariff || '',
-      otherServices: patient.other_services || '',
-      vipDetails: patient.vip_details || '',
-      religion: patient.religion || '',
-      maritalStatus: patient.marital_status || '',
-      attempt: patient.attempt || '',
-      remarks: patient.remarks || '',
+      registrationNumber: patient.admission_no || "",
+      patientName: patient.patient_name || "",
+      fatherHusband: patient.father_husband_name || "",
+      age: patient.age || "",
+      gender: patient.gender || "",
+      dob: patient.date_of_birth || "",
+      phoneNumber: patient.phone_no || "",
+      mobileNumber: patient.whatsapp_no || "",
+      emailId: patient.email_id || "",
+      houseStreet: patient.house_no_street || "",
+      areaColony: patient.area_colony || "",
+      landmark: patient.landmark || "",
+      state: patient.state || "",
+      city: patient.city || "",
+      pincode: patient.pincode || "",
+      country: patient.country || "India",
+      department: patient.department || "",
+      referByDr: patient.refer_by_dr || "",
+      consultantDr: patient.consultant_dr || "",
+      patCategory: patient.pat_category || "",
+      patientCase: patient.patient_case || "",
+      medicalSurgical: patient.medical_surgical || "",
+      healthCardNo: patient.health_card_no || "",
+      admissionPurpose: patient.adm_purpose || "",
+      locationStatus: patient.location_status || "",
+      floor: patient.floor || "",
+      ward: patient.ward || "",
+      room: patient.room || "",
+      bedNo: patient.bed_no || "",
+      bedLocation: patient.bed_location || "",
+      wardType: patient.ward_type || "",
+      bedTariff: patient.bed_tariff || "",
+      kinName: patient.kin_name || "",
+      kinRelation: patient.kin_relation || "",
+      kinMobile: patient.kin_mobile_no || "",
+      advanceAmount: patient.advance_amount || "",
+      drVisitTariff: patient.dr_visit_tariff || "",
+      packageName: patient.package_name || "",
+      pkgAmount: patient.pkg_amount || "",
+      expTariff: patient.exp_tariff || "",
+      otherServices: patient.other_services || "",
+      vipDetails: patient.vip_details || "",
+      religion: patient.religion || "",
+      maritalStatus: patient.marital_status || "",
+      attempt: patient.attempt || "",
+      remarks: patient.remarks || "",
     });
     setShowModal(true);
   };
@@ -794,12 +805,14 @@ const PatientAdmissionSystem = () => {
       patient.admission_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       patient.ipd_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       patient.phone_no?.includes(searchTerm) ||
-      patient.whatsapp_no?.includes(searchTerm)
+      patient.whatsapp_no?.includes(searchTerm),
   );
 
   const NoDataComponent = () => (
     <div className="px-4 py-8 text-center text-gray-500">
-      {isLoading ? 'Loading IPD patient records...' : 'No IPD patient records found. Click "Patient Admission" to create one.'}
+      {isLoading
+        ? "Loading IPD patient records..."
+        : 'No IPD patient records found. Click "Patient Admission" to create one.'}
     </div>
   );
 
@@ -818,34 +831,58 @@ const PatientAdmissionSystem = () => {
 
         {/* Notification Popup */}
         {showNotification && (
-          <div className={`fixed top-4 right-4 z-50 max-w-md animate-slide-in ${notificationType === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-            } border rounded-lg shadow-lg`}>
+          <div
+            className={`fixed top-4 right-4 z-50 max-w-md animate-slide-in ${
+              notificationType === "success"
+                ? "bg-green-50 border-green-200"
+                : "bg-red-50 border-red-200"
+            } border rounded-lg shadow-lg`}
+          >
             <div className="p-4">
               <div className="flex items-start">
-                <div className={`flex-shrink-0 p-1 rounded-full ${notificationType === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
-                  }`}>
+                <div
+                  className={`flex-shrink-0 p-1 rounded-full ${
+                    notificationType === "success"
+                      ? "bg-green-100 text-green-600"
+                      : "bg-red-100 text-red-600"
+                  }`}
+                >
                   <Bell className="w-5 h-5" />
                 </div>
                 <div className="ml-3">
-                  <p className={`text-sm font-medium ${notificationType === 'success' ? 'text-green-800' : 'text-red-800'
-                    }`}>
+                  <p
+                    className={`text-sm font-medium ${
+                      notificationType === "success"
+                        ? "text-green-800"
+                        : "text-red-800"
+                    }`}
+                  >
                     {notificationMessage}
                   </p>
                 </div>
                 <button
                   onClick={() => setShowNotification(false)}
-                  className={`ml-4 flex-shrink-0 ${notificationType === 'success' ? 'text-green-400 hover:text-green-600' : 'text-red-400 hover:text-red-600'
-                    }`}
+                  className={`ml-4 flex-shrink-0 ${
+                    notificationType === "success"
+                      ? "text-green-400 hover:text-green-600"
+                      : "text-red-400 hover:text-red-600"
+                  }`}
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
             {/* Progress bar */}
-            <div className={`h-1 w-full ${notificationType === 'success' ? 'bg-green-200' : 'bg-red-200'
-              }`}>
-              <div className={`h-full ${notificationType === 'success' ? 'bg-green-500' : 'bg-red-500'
-                } animate-progress`}></div>
+            <div
+              className={`h-1 w-full ${
+                notificationType === "success" ? "bg-green-200" : "bg-red-200"
+              }`}
+            >
+              <div
+                className={`h-full ${
+                  notificationType === "success" ? "bg-green-500" : "bg-red-500"
+                } animate-progress`}
+              ></div>
             </div>
           </div>
         )}
@@ -854,7 +891,9 @@ const PatientAdmissionSystem = () => {
           {/* Header Section */}
           <div className="mb-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900">IPD Patient Admission</h1>
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+                IPD Patient Admission
+              </h1>
               <button
                 onClick={() => {
                   setEditingPatient(null);
@@ -904,7 +943,6 @@ const PatientAdmissionSystem = () => {
               <div className="overflow-x-auto overflow-y-auto max-h-[60vh]">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 whitespace-nowrap ">
-
                     <tr>
                       <th className="px-4 py-3  text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Action
@@ -945,7 +983,6 @@ const PatientAdmissionSystem = () => {
                       <th className="px-12 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider hidden lg:table-cell">
                         Bed No
                       </th>
-
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -981,9 +1018,17 @@ const PatientAdmissionSystem = () => {
                             </button>
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
-                            {patient.planned1 ? new Date(patient.planned1).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {patient.planned1
+                              ? new Date(patient.planned1).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-green-600">
                             {patient.ipd_number}
@@ -995,30 +1040,29 @@ const PatientAdmissionSystem = () => {
                             {patient.patient_name}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden md:table-cell">
-                            {patient.phone_no || '-'}
+                            {patient.phone_no || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden lg:table-cell">
-                            {patient.father_husband_name || '-'}
+                            {patient.father_husband_name || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden lg:table-cell">
-                            {patient.whatsapp_no || '-'}
+                            {patient.whatsapp_no || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden lg:table-cell">
-                            {patient.adm_purpose || '-'}
+                            {patient.adm_purpose || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden md:table-cell">
-                            {patient.date_of_birth || '-'}
+                            {patient.date_of_birth || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden lg:table-cell">
-                            {patient.age || '-'}
+                            {patient.age || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 hidden lg:table-cell">
-                            {patient.gender || '-'}
+                            {patient.gender || "-"}
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-green-600 hidden lg:table-cell">
-                            {patient.bed_no || 'Not Assigned'}
+                            {patient.bed_no || "Not Assigned"}
                           </td>
-
                         </tr>
                       ))
                     )}
@@ -1056,7 +1100,7 @@ const PatientAdmissionSystem = () => {
                             Adm No: {patient.admission_no}
                           </p>
                           <p className="text-sm font-semibold text-green-600 mt-1">
-                            Bed: {patient.bed_no || 'Not Assigned'}
+                            Bed: {patient.bed_no || "Not Assigned"}
                           </p>
                         </div>
                         <button
@@ -1081,7 +1125,7 @@ const PatientAdmissionSystem = () => {
                             Location
                           </span>
                           <p className="text-base font-semibold text-green-700">
-                            {patient.bed_no || 'Not Assigned'}
+                            {patient.bed_no || "Not Assigned"}
                           </p>
                           <p className="text-sm text-gray-700">
                             {patient.floor} - {patient.ward} / {patient.room}
@@ -1111,7 +1155,7 @@ const PatientAdmissionSystem = () => {
                               Mobile
                             </span>
                             <p className="text-sm font-semibold text-gray-800">
-                              {patient.whatsapp_no || '-'}
+                              {patient.whatsapp_no || "-"}
                             </p>
                           </div>
                         </div>
@@ -1122,7 +1166,7 @@ const PatientAdmissionSystem = () => {
                               Consultant
                             </span>
                             <p className="text-sm font-semibold text-gray-800">
-                              {patient.consultant_dr || 'N/A'}
+                              {patient.consultant_dr || "N/A"}
                             </p>
                           </div>
                         </div>
@@ -1154,12 +1198,14 @@ const PatientAdmissionSystem = () => {
                   <div className="flex justify-between items-center">
                     <div>
                       <h2 className="text-xl md:text-2xl font-bold">
-                        {editingPatient ? 'Edit IPD Patient' : 'IPD Patient Admission'}
+                        {editingPatient
+                          ? "Edit IPD Patient"
+                          : "IPD Patient Admission"}
                       </h2>
                       <p className="text-green-100 text-sm mt-1">
                         {editingPatient
-                          ? 'Update IPD patient information'
-                          : 'Register IPD patients from department selection'}
+                          ? "Update IPD patient information"
+                          : "Register IPD patients from department selection"}
                       </p>
                     </div>
                     <button
@@ -1192,52 +1238,70 @@ const PatientAdmissionSystem = () => {
                           <input
                             type="text"
                             name="registrationNumber"
-                            value={editingPatient ? formData.registrationNumber : admissionSearchTerm}
+                            autoComplete="off"
+                            value={
+                              editingPatient
+                                ? formData.registrationNumber
+                                : admissionSearchTerm
+                            }
                             onChange={(e) => {
                               if (!editingPatient) {
                                 setAdmissionSearchTerm(e.target.value);
                                 setShowAdmissionDropdown(true);
                               }
                             }}
-                            onFocus={() => !editingPatient && setShowAdmissionDropdown(true)}
+                            onFocus={() =>
+                              !editingPatient && setShowAdmissionDropdown(true)
+                            }
                             placeholder="Search admission number or patient name..."
                             disabled={editingPatient !== null || isSaving}
                             className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           />
                           <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                         </div>
-                        {showAdmissionDropdown && !editingPatient && ipdPatients.length > 0 && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {ipdPatients
-                              .filter((patient) => {
-                                const searchLower = admissionSearchTerm.toLowerCase();
-                                return (
-                                  patient.admission_no.toLowerCase().includes(searchLower) ||
-                                  patient.patient_name.toLowerCase().includes(searchLower)
-                                );
-                              })
-                              .map((patient) => (
-                                <div
-                                  key={patient.id}
-                                  onClick={() => handleRegistrationChange(patient.admission_no)}
-                                  className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                >
-                                  <div className="font-semibold text-green-600">
-                                    {patient.admission_no}
+                        {showAdmissionDropdown &&
+                          !editingPatient &&
+                          ipdPatients.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                              {ipdPatients
+                                .filter((patient) => {
+                                  const searchLower =
+                                    admissionSearchTerm.toLowerCase();
+                                  return (
+                                    patient.admission_no
+                                      .toLowerCase()
+                                      .includes(searchLower) ||
+                                    patient.patient_name
+                                      .toLowerCase()
+                                      .includes(searchLower)
+                                  );
+                                })
+                                .map((patient) => (
+                                  <div
+                                    key={patient.id}
+                                    onClick={() =>
+                                      handleRegistrationChange(
+                                        patient.admission_no,
+                                      )
+                                    }
+                                    className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                  >
+                                    <div className="font-semibold text-green-600">
+                                      {patient.admission_no}
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                      {patient.patient_name}
+                                    </div>
                                   </div>
-                                  <div className="text-sm text-gray-600">
-                                    {patient.patient_name}
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        )}
+                                ))}
+                            </div>
+                          )}
                         <p className="text-xs text-gray-500 mt-1">
                           {editingPatient
-                            ? 'Admission number cannot be changed for existing IPD records'
+                            ? "Admission number cannot be changed for existing IPD records"
                             : ipdPatients.length === 0
-                              ? 'No available IPD patients. All patients have been admitted.'
-                              : 'Type to search and select from available IPD patients'}
+                              ? "No available IPD patients. All patients have been admitted."
+                              : "Type to search and select from available IPD patients"}
                         </p>
                       </div>
 
@@ -1554,7 +1618,9 @@ const PatientAdmissionSystem = () => {
                                     onClick={() => handleDepartmentSelect(dept)}
                                     className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                                   >
-                                    <div className="font-medium text-gray-800">{dept}</div>
+                                    <div className="font-medium text-gray-800">
+                                      {dept}
+                                    </div>
                                   </div>
                                 ))
                               )}
@@ -1626,7 +1692,9 @@ const PatientAdmissionSystem = () => {
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                               {filteredDoctorOptions.length === 0 ? (
                                 <div className="px-3 py-2 text-gray-500 text-sm">
-                                  {doctorSearch ? 'No doctors found' : 'Type to search doctors'}
+                                  {doctorSearch
+                                    ? "No doctors found"
+                                    : "Type to search doctors"}
                                 </div>
                               ) : (
                                 filteredDoctorOptions.map((doctor, index) => (
@@ -1635,7 +1703,9 @@ const PatientAdmissionSystem = () => {
                                     onClick={() => handleDoctorSelect(doctor)}
                                     className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                                   >
-                                    <div className="font-medium text-gray-800">{doctor}</div>
+                                    <div className="font-medium text-gray-800">
+                                      {doctor}
+                                    </div>
                                   </div>
                                 ))
                               )}
@@ -2114,10 +2184,12 @@ const PatientAdmissionSystem = () => {
                       {isSaving ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          {editingPatient ? 'Updating...' : 'Saving...'}
+                          {editingPatient ? "Updating..." : "Saving..."}
                         </>
+                      ) : editingPatient ? (
+                        "Update"
                       ) : (
-                        editingPatient ? 'Update' : 'Save'
+                        "Save"
                       )}
                     </button>
                     <button
@@ -2163,14 +2235,24 @@ const PatientAdmissionSystem = () => {
                 <div className="p-4 md:p-6 overflow-y-auto flex-1">
                   {/* Bed Filtering Tabs */}
                   <div className="flex flex-wrap gap-3 mb-8 p-3 bg-blue-50/50 rounded-xl border border-blue-100 items-center">
-                    {['All', 'Male General Ward', 'Female General Ward', 'ICU', 'Private Ward', 'PICU', 'NICU', 'HDU'].map((tab) => (
+                    {[
+                      "All",
+                      "Male General Ward",
+                      "Female General Ward",
+                      "ICU",
+                      "Private Ward",
+                      "PICU",
+                      "NICU",
+                      "HDU",
+                    ].map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setBedFilterTab(tab)}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 transform active:scale-95 ${bedFilterTab === tab
-                          ? 'bg-green-600 text-white shadow-lg shadow-green-200'
-                          : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm'
-                          }`}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 transform active:scale-95 ${
+                          bedFilterTab === tab
+                            ? "bg-green-600 text-white shadow-lg shadow-green-200"
+                            : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm"
+                        }`}
                       >
                         {tab}
                       </button>
@@ -2243,17 +2325,23 @@ const PatientAdmissionSystem = () => {
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {allBedData
-                        .filter(bed => bedFilterTab === 'All' || bed.ward === bedFilterTab)
+                        .filter(
+                          (bed) =>
+                            bedFilterTab === "All" || bed.ward === bedFilterTab,
+                        )
                         .map((bed) => (
                           <div
                             key={bed.id}
-                            onClick={() => bed.status === null && selectBed(bed)}
-                            className={`p-4 rounded-lg border-2 transition-all ${bed.status === null
-                              ? selectedBedId === bed.id
-                                ? 'border-green-600 bg-green-50 shadow-lg transform scale-105'
-                                : 'border-green-500 bg-green-50 hover:shadow-lg hover:-translate-y-1 cursor-pointer'
-                              : 'border-red-500 bg-red-50 opacity-70 cursor-not-allowed'
-                              } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onClick={() =>
+                              bed.status === null && selectBed(bed)
+                            }
+                            className={`p-4 rounded-lg border-2 transition-all ${
+                              bed.status === null
+                                ? selectedBedId === bed.id
+                                  ? "border-green-600 bg-green-50 shadow-lg transform scale-105"
+                                  : "border-green-500 bg-green-50 hover:shadow-lg hover:-translate-y-1 cursor-pointer"
+                                : "border-red-500 bg-red-50 opacity-70 cursor-not-allowed"
+                            } ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
                           >
                             <div className="font-semibold text-gray-900 mb-1 flex items-center justify-between">
                               <span>{bed.bed}</span>
@@ -2298,7 +2386,8 @@ const PatientAdmissionSystem = () => {
                     <div>
                       {selectedBedId ? (
                         <p className="text-sm text-green-600 font-medium">
-                          Bed selected: <span className="font-bold">{formData.bedNo}</span>
+                          Bed selected:{" "}
+                          <span className="font-bold">{formData.bedNo}</span>
                         </p>
                       ) : (
                         <p className="text-sm text-gray-600">

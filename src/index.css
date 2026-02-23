@@ -50,3 +50,18 @@ textarea:focus {
     display: none !important;
   }
 }
+
+/* ── Global: Disable browser autofill on all <select> elements ── */
+/* autocomplete="off" is applied via JS in App.jsx (MutationObserver) */
+
+/* Remove yellow autofill background on phone inputs */
+input[type="tel"]:-webkit-autofill,
+input[name*="phone"]:-webkit-autofill,
+input[name*="mobile"]:-webkit-autofill,
+input[name*="contact"]:-webkit-autofill,
+input[placeholder*="phone" i]:-webkit-autofill,
+input[placeholder*="mobile" i]:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px white inset !important;
+  box-shadow: 0 0 0px 1000px white inset !important;
+  -webkit-text-fill-color: inherit !important;
+}
