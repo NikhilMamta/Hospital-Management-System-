@@ -10,7 +10,7 @@ const MAYTAPI_PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
 const MAYTAPI_PHONE_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
 const MAYTAPI_TOKEN = import.meta.env.VITE_MAYTAPI_TOKEN;
 // ⬇️  Hardcoded recipient – change this number as needed
-const APPROVAL_PHONE_NUMBER = "919981175504"; // e.g. 919876543210
+const APPROVAL_PHONE_NUMBER = "916267799443"; // e.g. 919876543210
 
 /**
  * Build the approval WhatsApp message for a pharmacy indent.
