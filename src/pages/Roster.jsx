@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import useRealtimeTable from "../hooks/useRealtimeTable";
 import supabase from "../SupabaseClient";
 
 const Roster = () => {
@@ -590,98 +591,103 @@ const Roster = () => {
     }
   }, [viewMode, rosterSets, staffData, staffOnLeave]);
 
-  // Fetch staff data and roster data from Supabase
+  // reusable function to fetch staff list and latest roster
+  const fetchStaffAndRoster = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch all staff at once with their designations
+      const { data: allStaff, error: fetchError } = await supabase
+        .from("all_staff")
+        .select("*")
+        .order("name");
+
+      if (fetchError) throw fetchError;
+
+      // Filter staff by designation
+      const nurses = allStaff
+        .filter((staff) => {
+          const designation = staff.designation?.toLowerCase().trim();
+          return designation === "staff nurse" || designation === "nurse";
+        })
+        .map((staff) =>
+          (staff.name || `${staff.first_name} ${staff.last_name}`).trim(),
+        );
+
+      const rmos = allStaff
+        .filter((staff) => {
+          const designation = staff.designation?.toLowerCase().trim();
+          return designation === "rmo";
+        })
+        .map((staff) =>
+          (staff.name || `${staff.first_name} ${staff.last_name}`).trim(),
+        );
+
+      const otStaff = allStaff
+        .filter((staff) => {
+          const designation = staff.designation?.toLowerCase().trim();
+          return designation === "ot" || designation === "ot staff";
+        })
+        .map((staff) =>
+          (staff.name || `${staff.first_name} ${staff.last_name}`).trim(),
+        );
+
+      const newStaffData = {
+        nurses,
+        rmos,
+        otStaff,
+      };
+
+      setStaffData(newStaffData);
+
+      // Fetch leave data BEFORE parsing roster
+      const currentStaffOnLeave = await fetchLeaveData();
+
+      // Fetch the latest roster data
+      await fetchLatestRosterData(newStaffData, currentStaffOnLeave);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Failed to load data. Please try again.");
+      showToast("Failed to load data", "error");
+
+      // Fallback to sample data
+      const fallbackStaffData = {
+        nurses: [
+          "Sarah Johnson",
+          "Michael Chen",
+          "Priya Patel",
+          "David Wilson",
+        ],
+        rmos: ["Dr. Ahmed Khan", "Dr. Sophia Williams", "Dr. Kevin Li"],
+        otStaff: ["Alex Turner", "Jessica Moore", "Brian Miller"],
+      };
+
+      setStaffData(fallbackStaffData);
+
+      // Initialize empty assignments for fallback
+      const initialAssignments = {};
+      wards.forEach((ward) => {
+        initialAssignments[ward] = {
+          "Shift A": [],
+          "Shift B": [],
+          "Shift C": [],
+        };
+      });
+      setAssignments(initialAssignments);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // initial fetch on mount
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Fetch all staff at once with their designations
-        const { data: allStaff, error: fetchError } = await supabase
-          .from("all_staff")
-          .select("*")
-          .order("name");
-
-        if (fetchError) throw fetchError;
-
-        // Filter staff by designation
-        const nurses = allStaff
-          .filter((staff) => {
-            const designation = staff.designation?.toLowerCase().trim();
-            return designation === "staff nurse" || designation === "nurse";
-          })
-          .map((staff) =>
-            (staff.name || `${staff.first_name} ${staff.last_name}`).trim(),
-          );
-
-        const rmos = allStaff
-          .filter((staff) => {
-            const designation = staff.designation?.toLowerCase().trim();
-            return designation === "rmo";
-          })
-          .map((staff) =>
-            (staff.name || `${staff.first_name} ${staff.last_name}`).trim(),
-          );
-
-        const otStaff = allStaff
-          .filter((staff) => {
-            const designation = staff.designation?.toLowerCase().trim();
-            return designation === "ot" || designation === "ot staff";
-          })
-          .map((staff) =>
-            (staff.name || `${staff.first_name} ${staff.last_name}`).trim(),
-          );
-
-        const newStaffData = {
-          nurses,
-          rmos,
-          otStaff,
-        };
-
-        setStaffData(newStaffData);
-
-        // Fetch leave data BEFORE parsing roster
-        const currentStaffOnLeave = await fetchLeaveData();
-
-        // Fetch the latest roster data
-        await fetchLatestRosterData(newStaffData, currentStaffOnLeave);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to load data. Please try again.");
-        showToast("Failed to load data", "error");
-
-        // Fallback to sample data
-        const fallbackStaffData = {
-          nurses: [
-            "Sarah Johnson",
-            "Michael Chen",
-            "Priya Patel",
-            "David Wilson",
-          ],
-          rmos: ["Dr. Ahmed Khan", "Dr. Sophia Williams", "Dr. Kevin Li"],
-          otStaff: ["Alex Turner", "Jessica Moore", "Brian Miller"],
-        };
-
-        setStaffData(fallbackStaffData);
-
-        // Initialize empty assignments for fallback
-        const initialAssignments = {};
-        wards.forEach((ward) => {
-          initialAssignments[ward] = {
-            "Shift A": [],
-            "Shift B": [],
-            "Shift C": [],
-          };
-        });
-        setAssignments(initialAssignments);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    fetchStaffAndRoster();
   }, []);
+
+  // refresh roster when staff table changes (delete/add) so assignments for removed
+  // users disappear immediately from the UI
+  useRealtimeTable("all_staff", fetchStaffAndRoster);
 
   // Initialize start date with today
   useEffect(() => {

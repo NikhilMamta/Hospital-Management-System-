@@ -252,6 +252,62 @@ const ManageUsers = () => {
     setModalVisible(true);
   };
 
+  // remove references to a staff member inside every roster row
+  const cleanupRosterForStaff = async (staffName) => {
+    try {
+      // pull all roster rows; since history is small this is okay
+      const { data: rows, error: fetchError } = await supabase
+        .from("roster")
+        .select("*");
+      if (fetchError) throw fetchError;
+
+      const wardCols = [
+        "male_general_ward",
+        "female_general_ward",
+        "icu",
+        "hdu",
+        "private_ward",
+        "nicu",
+        "picu",
+      ];
+
+      if (rows) {
+        for (const row of rows) {
+          let updates = {};
+          let changed = false;
+
+          wardCols.forEach((col) => {
+            if (row[col]) {
+              try {
+                const obj = JSON.parse(row[col]);
+                ["nurse", "rmo", "ot"].forEach((type) => {
+                  if (Array.isArray(obj[type])) {
+                    const idx = obj[type].indexOf(staffName);
+                    if (idx !== -1) {
+                      obj[type].splice(idx, 1);
+                      changed = true;
+                    }
+                  }
+                });
+                if (changed) {
+                  updates[col] = JSON.stringify(obj);
+                }
+              } catch (e) {
+                console.warn("Failed to parse roster column", col, e);
+              }
+            }
+          });
+
+          if (changed) {
+            await supabase.from("roster").update(updates).eq("id", row.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error cleaning roster for deleted user", err);
+    }
+  };
+
   const handleDeleteUser = async (userId) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
       try {
@@ -268,6 +324,9 @@ const ManageUsers = () => {
             .from("all_staff")
             .delete()
             .eq("name", userToDelete.name);
+
+          // also remove them from any existing roster snapshots
+          await cleanupRosterForStaff(userToDelete.name);
         }
 
         showNotification("User deleted successfully", "success");
@@ -620,17 +679,17 @@ const ManageUsers = () => {
     <div className="p-4 md:p-6">
       {/* Header */}
       <div className="mb-4 md:mb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center md:gap-4">
           <div>
             <div className="flex items-center gap-2 md:gap-3">
               <div className="p-1.5 md:p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-lg">
                 <Users size={20} className="text-white md:w-6 md:h-6" />
               </div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+                <h1 className="text-xl font-bold text-gray-900 md:text-2xl">
                   User Management
                 </h1>
-                <p className="hidden md:block text-gray-600">
+                <p className="hidden text-gray-600 md:block">
                   Manage system users and their permissions
                 </p>
               </div>
@@ -639,7 +698,7 @@ const ManageUsers = () => {
           {isAdmin && (
             <button
               onClick={handleAddUser}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg text-sm md:text-base"
+              className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white transition-all duration-200 rounded-lg shadow-md bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 hover:shadow-lg md:text-base"
             >
               <Plus size={18} className="md:w-5 md:h-5" />
               Add New User
@@ -649,12 +708,12 @@ const ManageUsers = () => {
       </div>
 
       {/* Search and Stats */}
-      <div className="mb-4 md:mb-6 bg-white rounded-xl border border-gray-200 p-3 md:p-4 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+      <div className="p-3 mb-4 bg-white border border-gray-200 shadow-sm md:mb-6 rounded-xl md:p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:gap-4">
           <div className="flex-1">
             <div className="relative">
               <Search
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                className="absolute text-gray-400 transform -translate-y-1/2 left-3 top-1/2"
                 size={18}
               />
               <input
@@ -662,13 +721,13 @@ const ManageUsers = () => {
                 placeholder="Search users..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 md:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm md:text-base"
+                className="w-full py-2 pl-10 pr-4 text-sm border border-gray-300 rounded-lg md:py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent md:text-base"
               />
             </div>
           </div>
-          <div className="flex items-center justify-between md:justify-start gap-4">
+          <div className="flex items-center justify-between gap-4 md:justify-start">
             <div className="bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
-              <span className="text-xs md:text-sm text-gray-600">
+              <span className="text-xs text-gray-600 md:text-sm">
                 <span className="font-bold text-gray-900">
                   {filteredUsers.length}
                 </span>
@@ -689,34 +748,34 @@ const ManageUsers = () => {
       </div>
 
       {/* Mobile View: Cards */}
-      <div className="md:hidden space-y-3">
+      <div className="space-y-3 md:hidden">
         {loading ? (
-          <div className="bg-white p-12 text-center rounded-xl border border-gray-200 shadow-sm">
+          <div className="p-12 text-center bg-white border border-gray-200 shadow-sm rounded-xl">
             <RefreshCw
-              className="animate-spin text-green-600 mx-auto"
+              className="mx-auto text-green-600 animate-spin"
               size={24}
             />
-            <p className="mt-2 text-gray-500 text-sm">Loading users...</p>
+            <p className="mt-2 text-sm text-gray-500">Loading users...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
-          <div className="bg-white p-12 text-center rounded-xl border border-gray-200 shadow-sm">
+          <div className="p-12 text-center bg-white border border-gray-200 shadow-sm rounded-xl">
             <Users className="mx-auto text-gray-400" size={32} />
-            <p className="mt-2 text-gray-500 text-sm">No users found</p>
+            <p className="mt-2 text-sm text-gray-500">No users found</p>
           </div>
         ) : (
           filteredUsers.map((user) => (
             <div
               key={user.id}
-              className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm p-3"
+              className="p-3 overflow-hidden bg-white border border-gray-200 shadow-sm rounded-xl"
             >
-              <div className="flex justify-between items-start mb-3">
+              <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     {user.profile_image ? (
                       <img
                         src={user.profile_image}
                         alt={user.name}
-                        className="w-10 h-10 rounded-full object-cover border border-gray-100 shadow-sm"
+                        className="object-cover w-10 h-10 border border-gray-100 rounded-full shadow-sm"
                         onError={(e) => {
                           e.target.onerror = null;
                           e.target.src =
@@ -724,13 +783,13 @@ const ManageUsers = () => {
                         }}
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100">
+                      <div className="flex items-center justify-center w-10 h-10 border border-blue-100 rounded-full bg-blue-50">
                         <User size={18} className="text-blue-600" />
                       </div>
                     )}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold text-gray-900 text-sm leading-tight truncate">
+                    <h3 className="text-sm font-bold leading-tight text-gray-900 truncate">
                       {user.name || user.user_name || "No Name"}
                     </h3>
                     <p className="text-[10px] text-gray-500 font-medium">
@@ -821,33 +880,33 @@ const ManageUsers = () => {
       </div>
 
       {/* Desktop View: Table */}
-      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="hidden overflow-hidden bg-white border border-gray-200 shadow-sm md:block rounded-xl">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   User Info
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Password
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Contact
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Access Pages
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Profile Image
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Actions
                 </th>
               </tr>
@@ -858,7 +917,7 @@ const ManageUsers = () => {
                   <td colSpan="6" className="px-6 py-12 text-center">
                     <div className="flex justify-center">
                       <RefreshCw
-                        className="animate-spin text-blue-600"
+                        className="text-blue-600 animate-spin"
                         size={24}
                       />
                     </div>
@@ -876,9 +935,9 @@ const ManageUsers = () => {
                 filteredUsers.map((user) => (
                   <tr
                     key={user.id}
-                    className="hover:bg-gray-50 transition-colors"
+                    className="transition-colors hover:bg-gray-50"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
                       #{user.id}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -892,7 +951,7 @@ const ManageUsers = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-mono text-gray-700">
+                      <span className="font-mono text-sm text-gray-700">
                         {user.password ? user.password : "N/A"}
                       </span>
                     </td>
@@ -961,8 +1020,8 @@ const ManageUsers = () => {
                                       {pageInfo.label}
                                     </span>
                                     {pageInfo.description && (
-                                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded p-2 whitespace-nowrap z-10">
-                                        <div className="font-medium mb-1">
+                                      <div className="absolute left-0 z-10 hidden p-2 mb-2 text-xs text-white bg-gray-900 rounded bottom-full group-hover:block whitespace-nowrap">
+                                        <div className="mb-1 font-medium">
                                           {pageInfo.label}
                                         </div>
                                         <div className="text-gray-300">
@@ -975,14 +1034,14 @@ const ManageUsers = () => {
                               })}
                             </div>
                             {user.pages.length > 3 && (
-                              <div className="text-xs text-gray-500 flex items-center gap-1">
+                              <div className="flex items-center gap-1 text-xs text-gray-500">
                                 <ChevronRight size={12} />
                                 <span>+{user.pages.length - 3} more pages</span>
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-gray-400 text-sm">
+                          <span className="text-sm text-gray-400">
                             No pages assigned
                           </span>
                         )}
@@ -995,19 +1054,19 @@ const ManageUsers = () => {
                             <img
                               src={user.profile_image}
                               alt={`${user.name || user.user_name}'s profile`}
-                              className="w-12 h-12 rounded-full object-cover border border-gray-300 shadow-sm transition-transform duration-200 group-hover:scale-110"
+                              className="object-cover w-12 h-12 transition-transform duration-200 border border-gray-300 rounded-full shadow-sm group-hover:scale-110"
                               onError={(e) => {
                                 e.target.onerror = null;
                                 e.target.src =
                                   "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyNCIgZmlsbD0iI0VFRUVFRSIvPjxwYXRoIGQ9Ik0zMSAyMUMzMSAyNS40MTgzIDI4LjQxODMgMjggMjQgMjhDMTkuNTgxNyAyOCAxNyAyNS40MTgzIDE3IDIxQzE3IDE2LjU4MTcgMTkuNTgxNyAxNCAyNCAxNEMyOC40MTgzIDE0IDMxIDE2LjU4MTcgMzEgMjFaIiBmaWxsPSIjOTk5OTk5Ii8+PC9zdmc+";
                               }}
                             />
-                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-full transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <div className="absolute inset-0 flex items-center justify-center transition-all duration-200 bg-black bg-opacity-0 rounded-full opacity-0 group-hover:bg-opacity-20 group-hover:opacity-100">
                               <Camera size={16} className="text-white" />
                             </div>
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-blue-50 border border-blue-200 flex items-center justify-center">
+                          <div className="flex items-center justify-center w-12 h-12 border border-blue-200 rounded-full bg-gradient-to-br from-blue-100 to-blue-50">
                             <User size={24} className="text-blue-600" />
                           </div>
                         )}
@@ -1017,7 +1076,7 @@ const ManageUsers = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleEditUser(user)}
-                          className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-2 text-blue-600 transition-colors rounded-lg hover:text-blue-800 hover:bg-blue-50"
                           title="Edit user"
                         >
                           <Edit size={18} />
@@ -1025,7 +1084,7 @@ const ManageUsers = () => {
                         {isAdmin && (
                           <button
                             onClick={() => handleDeleteUser(user.id)}
-                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-2 text-red-600 transition-colors rounded-lg hover:text-red-800 hover:bg-red-50"
                             title="Delete user"
                           >
                             <Trash2 size={18} />
@@ -1043,10 +1102,10 @@ const ManageUsers = () => {
 
       {/* User Modal */}
       {modalVisible && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="border-b border-gray-200 p-6">
+            <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div
@@ -1071,7 +1130,7 @@ const ManageUsers = () => {
                 </div>
                 <button
                   onClick={() => setModalVisible(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 transition-colors rounded-lg hover:bg-gray-100"
                 >
                   <X size={24} />
                 </button>
@@ -1080,10 +1139,10 @@ const ManageUsers = () => {
 
             {/* Modal Body */}
             <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {/* Username */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     <div className="flex items-center gap-2">
                       <User size={16} className="text-gray-400" />
                       <span>Username *</span>
@@ -1102,7 +1161,7 @@ const ManageUsers = () => {
 
                 {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     Full Name *
                   </label>
                   <input
@@ -1118,7 +1177,7 @@ const ManageUsers = () => {
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     <div className="flex items-center gap-2">
                       <Mail size={16} className="text-gray-400" />
                       <span>Email *</span>
@@ -1137,7 +1196,7 @@ const ManageUsers = () => {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     <div className="flex items-center gap-2">
                       <Lock size={16} className="text-gray-400" />
                       <span>
@@ -1163,14 +1222,14 @@ const ManageUsers = () => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute text-gray-400 transform -translate-y-1/2 right-3 top-1/2 hover:text-gray-600"
                     >
                       {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
                   </div>
 
                   {editingUser && (
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="mt-1 text-xs text-gray-500">
                       Leave empty if you don’t want to change the password
                     </p>
                   )}
@@ -1178,7 +1237,7 @@ const ManageUsers = () => {
 
                 {/* Phone */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     <div className="flex items-center gap-2">
                       <Phone size={16} className="text-gray-400" />
                       <span>Phone Number *</span>
@@ -1197,7 +1256,7 @@ const ManageUsers = () => {
 
                 {/* Role */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     <div className="flex items-center gap-2">
                       <Shield size={16} className="text-gray-400" />
                       <span>Role *</span>
@@ -1222,7 +1281,7 @@ const ManageUsers = () => {
                 {/* Department – only for new user */}
                 {!editingUser && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">
                       <div className="flex items-center gap-2">
                         <Briefcase size={16} className="text-gray-400" />
                         <span>Department *</span>
@@ -1248,31 +1307,31 @@ const ManageUsers = () => {
 
                 {/* Profile Image - Now spans full width for better display */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
                     <div className="flex items-center gap-2">
                       <ImageIcon size={16} className="text-gray-400" />
                       <span>Profile Image</span>
                     </div>
                   </label>
-                  <div className="flex flex-col md:flex-row items-center gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex flex-col items-center gap-6 p-4 border border-gray-200 rounded-lg md:flex-row bg-gray-50">
                     <div className="flex-shrink-0">
                       {formData.profile_image ? (
                         <div className="relative">
                           <img
                             src={formData.profile_image}
                             alt="Profile preview"
-                            className="w-32 h-32 rounded-lg object-cover border border-gray-300 shadow-sm"
+                            className="object-cover w-32 h-32 border border-gray-300 rounded-lg shadow-sm"
                           />
                           <button
                             type="button"
                             onClick={handleRemoveImage}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                            className="absolute p-1 text-white transition-colors bg-red-500 rounded-full -top-2 -right-2 hover:bg-red-600"
                           >
                             <X size={16} />
                           </button>
                         </div>
                       ) : (
-                        <div className="w-32 h-32 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-white">
+                        <div className="flex items-center justify-center w-32 h-32 bg-white border-2 border-gray-300 border-dashed rounded-lg">
                           <User size={48} className="text-gray-400" />
                         </div>
                       )}
@@ -1280,7 +1339,7 @@ const ManageUsers = () => {
                     <div className="flex-1">
                       <div className="space-y-4">
                         <div>
-                          <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium transition-colors cursor-pointer hover:bg-gray-50 hover:border-gray-400">
+                          <label className="flex items-center justify-center gap-2 px-4 py-3 font-medium text-gray-700 transition-colors bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 hover:border-gray-400">
                             <Upload size={20} />
                             <span>
                               {uploading
@@ -1295,17 +1354,17 @@ const ManageUsers = () => {
                               disabled={uploading}
                             />
                           </label>
-                          <p className="text-xs text-gray-500 mt-2 text-center">
+                          <p className="mt-2 text-xs text-center text-gray-500">
                             Recommended: Square image, JPG or PNG, max 2MB
                           </p>
                         </div>
                         {imageFile && (
-                          <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded border border-blue-200">
+                          <div className="p-3 text-sm text-blue-600 border border-blue-200 rounded bg-blue-50">
                             <div className="flex items-center gap-2">
                               <Check size={16} />
                               <span>Selected: {imageFile.name}</span>
                             </div>
-                            <p className="text-xs text-blue-500 mt-1">
+                            <p className="mt-1 text-xs text-blue-500">
                               Image will be uploaded when you save the user
                             </p>
                           </div>
@@ -1317,25 +1376,25 @@ const ManageUsers = () => {
               </div>
 
               {/* Access Permissions Section */}
-              <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="pt-6 mt-8 border-t border-gray-200">
                 <div className="flex items-center gap-2 mb-4">
                   <Key size={20} className="text-gray-700" />
                   <h3 className="text-lg font-semibold text-gray-900">
                     Access Permissions
                   </h3>
                 </div>
-                <p className="text-gray-600 mb-4">
+                <p className="mb-4 text-gray-600">
                   Select which pages this user can access
                 </p>
 
                 {/* Select All Checkbox */}
                 <div className="mb-4">
-                  <label className="flex items-center gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors">
+                  <label className="flex items-center gap-3 p-3 transition-colors border border-blue-200 rounded-lg cursor-pointer bg-blue-50 hover:bg-blue-100">
                     <input
                       type="checkbox"
                       checked={selectAll}
                       onChange={handleSelectAll}
-                      className="rounded text-blue-600 focus:ring-blue-500"
+                      className="text-blue-600 rounded focus:ring-blue-500"
                     />
                     <div className="flex items-center gap-2">
                       <CheckCircle size={18} className="text-blue-600" />
@@ -1348,7 +1407,7 @@ const ManageUsers = () => {
 
                 {!selectAll && (
                   <>
-                    <p className="text-sm text-gray-600 mb-3">
+                    <p className="mb-3 text-sm text-gray-600">
                       Or select individual pages by department:
                     </p>
                     <div className="space-y-4">
@@ -1356,9 +1415,9 @@ const ManageUsers = () => {
                         ([department, pages]) => (
                           <div
                             key={department}
-                            className="border border-gray-200 rounded-lg overflow-hidden"
+                            className="overflow-hidden border border-gray-200 rounded-lg"
                           >
-                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
                               <div className="flex items-center gap-2">
                                 {department === "Nurse Station" && (
                                   <UserCog
@@ -1399,7 +1458,7 @@ const ManageUsers = () => {
                                 </span>
                               </div>
                             </div>
-                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-3">
                               {pages.map((page) => (
                                 <label
                                   key={page.key}
@@ -1413,7 +1472,7 @@ const ManageUsers = () => {
                                     type="checkbox"
                                     checked={selectedPages.includes(page.key)}
                                     onChange={() => handlePageToggle(page.key)}
-                                    className="mt-1 rounded text-blue-600 focus:ring-blue-500"
+                                    className="mt-1 text-blue-600 rounded focus:ring-blue-500"
                                   />
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
@@ -1448,7 +1507,7 @@ const ManageUsers = () => {
 
                 {/* Selected Pages Summary */}
                 {(selectAll || selectedPages.length > 0) && (
-                  <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                  <div className="p-4 mt-6 border border-blue-100 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <CheckSquare size={18} className="text-blue-600" />
@@ -1458,14 +1517,14 @@ const ManageUsers = () => {
                             : `Selected Pages (${selectedPages.length})`}
                         </span>
                       </div>
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                      <span className="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full">
                         {selectAll
                           ? "All Access"
                           : `${selectedPages.length} pages`}
                       </span>
                     </div>
                     {selectAll ? (
-                      <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                      <div className="flex items-center gap-2 px-3 py-2 text-green-600 rounded-lg bg-green-50">
                         <CheckCircle size={16} />
                         <span className="text-sm font-medium">
                           User will have access to all system pages
@@ -1483,7 +1542,7 @@ const ManageUsers = () => {
                             return (
                               <div
                                 key={page}
-                                className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border shadow-sm"
+                                className="flex items-center gap-2 px-3 py-2 bg-white border rounded-lg shadow-sm"
                                 style={{
                                   borderColor: isNurse
                                     ? "#d1fae5"
@@ -1512,7 +1571,7 @@ const ManageUsers = () => {
                             );
                           })}
                           {selectedPages.length > 6 && (
-                            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-100 shadow-sm">
+                            <div className="flex items-center gap-2 px-3 py-2 bg-white border border-blue-100 rounded-lg shadow-sm">
                               <span className="text-sm font-medium text-blue-600">
                                 +{selectedPages.length - 6} more
                               </span>
@@ -1527,7 +1586,7 @@ const ManageUsers = () => {
                               p.startsWith("nurse-station-"),
                             ) && (
                               <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                                 <span>Nurse Station</span>
                               </div>
                             )}
@@ -1535,13 +1594,13 @@ const ManageUsers = () => {
                               p.startsWith("rmo-"),
                             ) && (
                               <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                                <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
                                 <span>RMO</span>
                               </div>
                             )}
                             {selectedPages.some((p) => p.startsWith("ot-")) && ( // OT department summary
                               <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 rounded-full bg-pink-500"></div>
+                                <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
                                 <span>OT (Operation Theater)</span>
                               </div>
                             )}
@@ -1555,18 +1614,18 @@ const ManageUsers = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="border-t border-gray-200 p-6">
+            <div className="p-6 border-t border-gray-200">
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setModalVisible(false)}
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  className="px-6 py-3 font-medium text-gray-700 transition-colors border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleModalSubmit}
                   disabled={uploading}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-6 py-3 font-medium text-white transition-all rounded-lg shadow-md bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {uploading ? (
                     <RefreshCw className="animate-spin" size={18} />
