@@ -15,7 +15,7 @@ import {
 import { useOutletContext, useNavigate } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
-import { sendIndentApprovalNotification } from "../../../utils/whatsappService";
+// import { sendIndentApprovalNotification } from "../../../utils/whatsappService"; // moved to PharmacyIndent.jsx
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -722,10 +722,7 @@ export default function Pharmacy() {
         savedRow = data;
         showNotification("Indent created successfully!");
 
-        // Send WhatsApp approval notification (fire-and-forget)
-        sendIndentApprovalNotification(savedRow, medicines, requestTypes).catch(
-          (err) => console.error("[WhatsApp] Notification error:", err),
-        );
+        // notification is now handled in PharmacyIndent.jsx
       }
 
       await fetchIndents();
@@ -893,17 +890,17 @@ export default function Pharmacy() {
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 300px)" }}>
       {/* Header Section - FIXED DASHBOARD VIEW */}
-      <div className="bg-green-600 text-white p-4 rounded-lg shadow-md flex-shrink-0">
+      <div className="flex-shrink-0 p-4 text-white bg-green-600 rounded-lg shadow-md">
         {/* Desktop View - Everything inline in one row */}
-        <div className="hidden md:flex items-center justify-between">
+        <div className="items-center justify-between hidden md:flex">
           {/* Left side: Title and icon */}
           <div className="flex items-center gap-3">
             <Pill className="w-8 h-8" />
             <div>
-              <h1 className="text-xl md:text-2xl font-bold">
+              <h1 className="text-xl font-bold md:text-2xl">
                 Pharmacy Indents
               </h1>
-              <p className="text-xs opacity-90 mt-1">
+              <p className="mt-1 text-xs opacity-90">
                 {currentIpdNumber && currentIpdNumber !== "N/A"
                   ? `${data.personalInfo.name} - IPD: ${currentIpdNumber}`
                   : data.personalInfo.name}
@@ -919,20 +916,20 @@ export default function Pharmacy() {
                 resetForm();
                 setShowModal(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-green-600 rounded-lg font-medium hover:bg-green-50 transition-colors shadow-sm text-sm"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-600 transition-colors bg-white rounded-lg shadow-sm hover:bg-green-50"
             >
               <Plus className="w-4 h-4" />
               Create Indent
             </button>
             {/* Search Input */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-green-300 w-4 h-4" />
+              <Search className="absolute w-4 h-4 text-green-300 transform -translate-y-1/2 left-3 top-1/2" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-48 pl-9 pr-3 py-2 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent placeholder-green-300 text-white text-sm"
+                className="w-48 py-2 pr-3 text-sm text-white placeholder-green-300 border border-green-400 rounded-lg pl-9 bg-white/10 focus:ring-2 focus:ring-white focus:border-transparent"
               />
             </div>
 
@@ -940,7 +937,7 @@ export default function Pharmacy() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-sm"
+              className="px-3 py-2 text-sm text-white border border-green-400 rounded-lg bg-white/10 focus:ring-2 focus:ring-white focus:border-transparent"
             >
               <option value="all" className="text-gray-900">
                 All Status
@@ -966,7 +963,7 @@ export default function Pharmacy() {
               <Pill className="w-8 h-8" />
               <div className="flex-1">
                 <h1 className="text-xl font-bold">Pharmacy Indents</h1>
-                <p className="text-xs opacity-90 mt-1">
+                <p className="mt-1 text-xs opacity-90">
                   {currentIpdNumber && currentIpdNumber !== "N/A"
                     ? `${data.personalInfo.name} - IPD: ${currentIpdNumber}`
                     : data.personalInfo.name}
@@ -986,7 +983,7 @@ export default function Pharmacy() {
                 <Plus className="w-4 h-4" />
               </button>
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-green-300 w-3 h-3" />
+                <Search className="absolute w-3 h-3 text-green-300 transform -translate-y-1/2 left-3 top-1/2" />
                 <input
                   type="text"
                   placeholder="Search..."
@@ -1020,29 +1017,29 @@ export default function Pharmacy() {
       </div>
 
       {/* Mobile Card View - UNCHANGED */}
-      <div className="md:hidden flex-1 min-h-0 mt-2">
-        <div className="h-full bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="flex-1 min-h-0 mt-2 md:hidden">
+        <div className="h-full overflow-hidden bg-white border border-gray-200 rounded-lg">
           {loading ? (
-            <div className="h-full flex items-center justify-center">
+            <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mb-4"></div>
+                <div className="inline-block w-8 h-8 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                 <p className="text-gray-600">Loading pharmacy indents...</p>
               </div>
             </div>
           ) : filteredIndents.length > 0 ? (
-            <div className="h-full overflow-y-auto p-4">
+            <div className="h-full p-4 overflow-y-auto">
               <div className="space-y-4">
                 {filteredIndents.map((indent) => (
                   <div
                     key={indent.indentNumber}
-                    className="bg-white border border-gray-200 rounded-lg shadow-sm p-4"
+                    className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
                   >
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="font-bold text-green-600 text-sm">
+                        <h3 className="text-sm font-bold text-green-600">
                           {indent.indentNumber}
                         </h3>
-                        <p className="text-sm font-medium text-gray-900 mt-1">
+                        <p className="mt-1 text-sm font-medium text-gray-900">
                           {indent.patientName}
                         </p>
                         <p className="text-xs text-gray-500">
@@ -1070,22 +1067,22 @@ export default function Pharmacy() {
                         </span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {indent.requestTypes.medicineSlip && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Medicine
                             </span>
                           )}
                           {indent.requestTypes.investigation && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Investigation
                             </span>
                           )}
                           {indent.requestTypes.package && (
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                               Package
                             </span>
                           )}
                           {indent.requestTypes.nonPackage && (
-                            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                               Non-Package
                             </span>
                           )}
@@ -1122,21 +1119,21 @@ export default function Pharmacy() {
                         <div className="grid grid-cols-3 gap-2">
                           <button
                             onClick={() => handleView(indent)}
-                            className="flex items-center justify-center gap-1 px-2 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs"
+                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-blue-600 rounded-md hover:bg-blue-700"
                           >
                             <Eye className="w-3 h-3" />
                             <span>View</span>
                           </button>
                           <button
                             onClick={() => handleEdit(indent)}
-                            className="flex items-center justify-center gap-1 px-2 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs"
+                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-blue-600 rounded-md hover:bg-blue-700"
                           >
                             <Edit className="w-3 h-3" />
                             <span>Edit</span>
                           </button>
                           <button
                             onClick={() => handleDelete(indent.indentNumber)}
-                            className="flex items-center justify-center gap-1 px-2 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs"
+                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-red-600 rounded-md hover:bg-red-700"
                           >
                             <Trash2 className="w-3 h-3" />
                             <span>Delete</span>
@@ -1149,13 +1146,13 @@ export default function Pharmacy() {
               </div>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center p-8">
+            <div className="flex items-center justify-center h-full p-8">
               <div className="text-center">
-                <Pill className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                <p className="text-gray-600 font-medium text-sm">
+                <Pill className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm font-medium text-gray-600">
                   No pharmacy indents found
                 </p>
-                <p className="text-gray-500 text-xs mt-1">
+                <p className="mt-1 text-xs text-gray-500">
                   {currentIpdNumber && currentIpdNumber !== "N/A"
                     ? `No indents found for IPD: ${currentIpdNumber}`
                     : searchTerm
@@ -1169,15 +1166,15 @@ export default function Pharmacy() {
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden md:block flex-1 min-h-0 mt-2">
-        <div className="h-full bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="flex-1 hidden min-h-0 mt-2 md:block">
+        <div className="h-full overflow-hidden bg-white border border-gray-200 rounded-lg">
           {loading ? (
-            <div className="h-full flex items-center justify-center">
+            <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mb-4"></div>
+                <div className="inline-block w-8 h-8 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                 <p className="text-gray-600">Loading pharmacy indents...</p>
                 {currentIpdNumber && (
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="mt-1 text-sm text-gray-500">
                     For IPD: {currentIpdNumber}
                   </p>
                 )}
@@ -1188,31 +1185,31 @@ export default function Pharmacy() {
               <table className="w-full text-sm text-left">
                 <thead className="sticky top-0 z-10 bg-gray-100 border-b-2 border-gray-300">
                   <tr>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Indent No
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Patient
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       IPD No
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Planned Time
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Diagnosis
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Request Type
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Approval
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Indent Status
                     </th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Actions
                     </th>
                   </tr>
@@ -1244,29 +1241,29 @@ export default function Pharmacy() {
                         {indent.plannedTime}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-gray-500 truncate max-w-xs">
+                        <div className="max-w-xs text-xs text-gray-500 truncate">
                           {indent.diagnosis}
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {indent.requestTypes.medicineSlip && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Medicine
                             </span>
                           )}
                           {indent.requestTypes.investigation && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Investigation
                             </span>
                           )}
                           {indent.requestTypes.package && (
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                               Package
                             </span>
                           )}
                           {indent.requestTypes.nonPackage && (
-                            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                               Non-Package
                             </span>
                           )}
@@ -1277,15 +1274,15 @@ export default function Pharmacy() {
                       </td>
                       <td className="px-4 py-3">
                         {indent.actual2 ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                          <span className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
                             Complete
                           </span>
                         ) : indent.status?.toLowerCase() === "rejected" ? (
-                          <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+                          <span className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
                             Rejected
                           </span>
                         ) : (
-                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full font-medium">
+                          <span className="px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-100 rounded-full">
                             Pending
                           </span>
                         )}
@@ -1321,13 +1318,13 @@ export default function Pharmacy() {
               </table>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center p-8">
+            <div className="flex items-center justify-center h-full p-8">
               <div className="text-center">
-                <Pill className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                <p className="text-gray-600 font-medium text-sm">
+                <Pill className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm font-medium text-gray-600">
                   No pharmacy indents found
                 </p>
-                <p className="text-gray-500 text-xs mt-1">
+                <p className="mt-1 text-xs text-gray-500">
                   {currentIpdNumber && currentIpdNumber !== "N/A"
                     ? `No indents found for IPD: ${currentIpdNumber}`
                     : searchTerm
@@ -1342,10 +1339,10 @@ export default function Pharmacy() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center z-10">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 text-white bg-green-600">
               <h2 className="text-xl font-bold">
                 {editMode ? "Edit Indent" : "Create New Indent"}
               </h2>
@@ -1355,7 +1352,7 @@ export default function Pharmacy() {
                   resetForm();
                   setEditMode(false);
                 }}
-                className="text-white hover:bg-green-700 rounded-full p-1 transition-colors"
+                className="p-1 text-white transition-colors rounded-full hover:bg-green-700"
                 disabled={loading}
               >
                 <X className="w-6 h-6" />
@@ -1365,25 +1362,25 @@ export default function Pharmacy() {
             <div className="p-6">
               {/* Patient Information */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Patient Information
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Patient Name
                     </label>
                     <input
                       type="text"
                       value={formData.patientName}
                       readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       UHID Number
                     </label>
                     <input
@@ -1396,45 +1393,45 @@ export default function Pharmacy() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       IPD/Admission No
                     </label>
                     <input
                       type="text"
                       value={currentIpdNumber}
                       readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Age
                     </label>
                     <input
                       type="text"
                       value={formData.age}
                       readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Gender
                     </label>
                     <input
                       type="text"
                       value={formData.gender}
                       readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Ward Location
                     </label>
                     <input
@@ -1442,22 +1439,22 @@ export default function Pharmacy() {
                       name="wardLocation"
                       value={formData.wardLocation}
                       readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                       placeholder="Ward Location"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Staff Name (Nurse)
                     </label>
                     <input
                       type="text"
                       value={formData.staffName}
                       readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg cursor-not-allowed"
                     />
                     <p className="mt-1 text-xs text-green-600">
                       Auto-filled from login
@@ -1465,7 +1462,7 @@ export default function Pharmacy() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Diagnosis <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1483,10 +1480,10 @@ export default function Pharmacy() {
 
               {/* Request Type */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Request Type
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                   {[
                     { id: "medicineSlip", label: "Medicine Slip" },
                     { id: "investigation", label: "Investigation" },
@@ -1495,7 +1492,7 @@ export default function Pharmacy() {
                   ].map((type) => (
                     <label
                       key={type.id}
-                      className="flex items-center cursor-pointer p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="flex items-center p-2 transition-colors rounded-lg cursor-pointer hover:bg-gray-50"
                     >
                       <input
                         type="checkbox"
@@ -1515,28 +1512,28 @@ export default function Pharmacy() {
               {/* Medicines Section with Search */}
               {requestTypes.medicineSlip && (
                 <div className="mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="pb-2 text-lg font-semibold text-gray-800 border-b">
                       Medicines
                     </h3>
                   </div>
 
-                  <div className="space-y-3 mb-4">
+                  <div className="mb-4 space-y-3">
                     {medicines.map((medicine, index) => (
                       <div
                         key={medicine.id}
-                        className="flex gap-3 items-end p-3 bg-gray-50 rounded-lg border border-gray-100"
+                        className="flex items-end gap-3 p-3 border border-gray-100 rounded-lg bg-gray-50"
                       >
-                        <div className="w-8 h-10 flex items-center justify-center bg-green-600 text-white rounded font-semibold text-sm">
+                        <div className="flex items-center justify-center w-8 h-10 text-sm font-semibold text-white bg-green-600 rounded">
                           {index + 1}
                         </div>
                         <div className="flex-1 medicine-dropdown-container">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Medicine Name
                           </label>
                           <div className="relative">
                             <div className="flex items-center">
-                              <Search className="absolute left-3 w-4 h-4 text-gray-400" />
+                              <Search className="absolute w-4 h-4 text-gray-400 left-3" />
                               <input
                                 type="text"
                                 value={medicine.name}
@@ -1551,14 +1548,14 @@ export default function Pharmacy() {
                                   setShowMedicineDropdown(medicine.id)
                                 }
                                 placeholder="Search for medicine..."
-                                className="px-3 py-2 pl-10 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                               />
                             </div>
 
                             {/* Medicine dropdown */}
                             {showMedicineDropdown === medicine.id && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                <div className="p-2 border-b bg-gray-50 sticky top-0">
+                              <div className="absolute z-50 w-full mt-1 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-xl max-h-60">
+                                <div className="sticky top-0 p-2 border-b bg-gray-50">
                                   <div className="relative">
                                     <Search className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
                                     <input
@@ -1573,7 +1570,7 @@ export default function Pharmacy() {
                                     />
                                   </div>
                                 </div>
-                                <div className="max-h-48 overflow-y-auto">
+                                <div className="overflow-y-auto max-h-48">
                                   {medicinesList
                                     .filter(
                                       (med) =>
@@ -1596,7 +1593,7 @@ export default function Pharmacy() {
                                           setShowMedicineDropdown(null);
                                           setMedicineSearchTerm("");
                                         }}
-                                        className="px-4 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 text-sm transition-colors"
+                                        className="px-4 py-2 text-sm transition-colors border-b border-gray-100 cursor-pointer hover:bg-green-50 last:border-b-0"
                                       >
                                         {med}
                                       </div>
@@ -1610,7 +1607,7 @@ export default function Pharmacy() {
                                           medicineSearchTerm.toLowerCase(),
                                         ),
                                   ).length === 0 && (
-                                    <div className="px-4 py-3 text-center text-gray-500 text-sm">
+                                    <div className="px-4 py-3 text-sm text-center text-gray-500">
                                       No medicines found
                                     </div>
                                   )}
@@ -1620,7 +1617,7 @@ export default function Pharmacy() {
                           </div>
                         </div>
                         <div className="w-32">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Quantity
                           </label>
                           <input
@@ -1651,7 +1648,7 @@ export default function Pharmacy() {
                         <button
                           onClick={() => removeMedicine(medicine.id)}
                           disabled={loading}
-                          className="px-3 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 rounded-lg h-10 transition-colors"
+                          className="h-10 px-3 py-2 text-red-500 transition-colors bg-white border border-red-200 rounded-lg hover:bg-red-50 hover:border-red-300"
                           title="Remove Medicine"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1663,7 +1660,7 @@ export default function Pharmacy() {
                   <button
                     onClick={addMedicine}
                     disabled={loading}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm w-full justify-center disabled:bg-green-300 transition-colors"
+                    className="flex items-center justify-center w-full gap-2 px-4 py-2 text-sm text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-green-300"
                   >
                     <Plus className="w-4 h-4" />
                     Add Medicine
@@ -1674,14 +1671,14 @@ export default function Pharmacy() {
               {/* Investigation Advice Section */}
               {requestTypes.investigation && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                  <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                     Investigation Advice
                   </h3>
 
-                  <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 space-y-4 border border-green-200 rounded-lg bg-green-50">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Priority *
                         </label>
                         <select
@@ -1689,7 +1686,7 @@ export default function Pharmacy() {
                           value={investigationAdvice.priority}
                           onChange={handleInvestigationAdviceChange}
                           disabled={loading}
-                          className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                         >
                           <option value="High">High</option>
                           <option value="Medium">Medium</option>
@@ -1698,7 +1695,7 @@ export default function Pharmacy() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Pathology & Radiology *
                         </label>
                         <select
@@ -1706,7 +1703,7 @@ export default function Pharmacy() {
                           value={investigationAdvice.adviceCategory}
                           onChange={handleInvestigationAdviceChange}
                           disabled={loading}
-                          className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                         >
                           <option value="">Select Category</option>
                           <option value="Pathology">Pathology</option>
@@ -1718,17 +1715,17 @@ export default function Pharmacy() {
                     {/* Pathology Tests */}
                     {investigationAdvice.adviceCategory === "Pathology" && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
                           Select Pathology Tests * (
                           {investigationAdvice.pathologyTests.length} selected)
                         </label>
-                        <div className="p-4 max-h-60 overflow-y-auto bg-white rounded-lg border border-gray-300">
+                        <div className="p-4 overflow-y-auto bg-white border border-gray-300 rounded-lg max-h-60">
                           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                             {(investigationTests.Pathology || []).map(
                               (test) => (
                                 <label
                                   key={test}
-                                  className="flex items-start gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                                  className="flex items-start gap-2 p-1 rounded cursor-pointer hover:bg-gray-50"
                                 >
                                   <input
                                     type="checkbox"
@@ -1742,7 +1739,7 @@ export default function Pharmacy() {
                                       )
                                     }
                                     disabled={loading}
-                                    className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                    className="mt-1 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                   />
                                   <span className="text-sm text-gray-700">
                                     {test}
@@ -1759,7 +1756,7 @@ export default function Pharmacy() {
                     {investigationAdvice.adviceCategory === "Radiology" && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Radiology Type *
                           </label>
                           <select
@@ -1767,7 +1764,7 @@ export default function Pharmacy() {
                             value={investigationAdvice.radiologyType}
                             onChange={handleInvestigationAdviceChange}
                             disabled={loading}
-                            className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           >
                             <option value="">Select Type</option>
                             <option value="X-ray">X-ray</option>
@@ -1778,17 +1775,17 @@ export default function Pharmacy() {
 
                         {investigationAdvice.radiologyType && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">
                               Select {investigationAdvice.radiologyType} Tests *
                               ({investigationAdvice.radiologyTests.length}{" "}
                               selected)
                             </label>
-                            <div className="p-4 max-h-60 overflow-y-auto bg-white rounded-lg border border-gray-300">
+                            <div className="p-4 overflow-y-auto bg-white border border-gray-300 rounded-lg max-h-60">
                               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                                 {getRadiologyTests().map((test) => (
                                   <label
                                     key={test}
-                                    className="flex items-start gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                                    className="flex items-start gap-2 p-1 rounded cursor-pointer hover:bg-gray-50"
                                   >
                                     <input
                                       type="checkbox"
@@ -1802,7 +1799,7 @@ export default function Pharmacy() {
                                         )
                                       }
                                       disabled={loading}
-                                      className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                      className="mt-1 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                     />
                                     <span className="text-sm text-gray-700">
                                       {test}
@@ -1818,7 +1815,7 @@ export default function Pharmacy() {
 
                     {/* Remarks */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block mb-1 text-sm font-medium text-gray-700">
                         Remarks
                       </label>
                       <textarea
@@ -1828,7 +1825,7 @@ export default function Pharmacy() {
                         rows="3"
                         placeholder="Add any additional notes or instructions..."
                         disabled={loading}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
                     </div>
                   </div>
@@ -1838,25 +1835,25 @@ export default function Pharmacy() {
               {/* Medicine Summary Section */}
               {requestTypes.medicineSlip && summaryData.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                  <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                     Medicine Summary
                   </h3>
-                  <div className="bg-green-50 rounded-lg overflow-hidden border border-green-200">
+                  <div className="overflow-hidden border border-green-200 rounded-lg bg-green-50">
                     <table className="min-w-full">
-                      <thead className="bg-green-600 text-white">
+                      <thead className="text-white bg-green-600">
                         <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                          <th className="px-4 py-3 text-sm font-semibold text-left">
                             Sr No
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                          <th className="px-4 py-3 text-sm font-semibold text-left">
                             Medicine Name
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                          <th className="px-4 py-3 text-sm font-semibold text-left">
                             Quantity
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-green-200 bg-white">
+                      <tbody className="bg-white divide-y divide-green-200">
                         {summaryData.map((item) => (
                           <tr key={item.srNo}>
                             <td className="px-4 py-3 text-sm">{item.srNo}</td>
@@ -1896,18 +1893,18 @@ export default function Pharmacy() {
                     setEditMode(false);
                   }}
                   disabled={loading}
-                  className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium disabled:bg-gray-100 transition-colors"
+                  className="px-6 py-2 font-medium text-gray-700 transition-colors bg-gray-200 rounded-lg hover:bg-gray-300 disabled:bg-gray-100"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
-                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:bg-green-300 transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-6 py-2 font-medium text-white transition-colors bg-green-600 rounded-lg shadow-sm hover:bg-green-700 disabled:bg-green-300"
                 >
                   {loading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <div className="w-4 h-4 border-b-2 border-white rounded-full animate-spin"></div>
                       {editMode ? "Updating..." : "Submitting..."}
                     </>
                   ) : (
@@ -1925,18 +1922,18 @@ export default function Pharmacy() {
 
       {/* Success Modal */}
       {successModal && successData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="bg-green-600 text-white px-6 py-4 rounded-t-lg flex items-center gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="w-full max-w-md bg-white rounded-lg shadow-xl">
+            <div className="flex items-center gap-3 px-6 py-4 text-white bg-green-600 rounded-t-lg">
               <CheckCircle className="w-6 h-6" />
               <h2 className="text-xl font-bold">Success!</h2>
             </div>
             <div className="p-6">
-              <p className="text-gray-700 mb-6">
+              <p className="mb-6 text-gray-700">
                 Your indent has been {editMode ? "updated" : "submitted"}{" "}
                 successfully!
               </p>
-              <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+              <div className="p-4 space-y-3 rounded-lg bg-gray-50">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Indent Number:</span>
                   <span className="text-sm font-bold text-green-600">
@@ -1961,7 +1958,7 @@ export default function Pharmacy() {
                   onClick={() => {
                     setSuccessModal(false);
                   }}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                  className="flex-1 px-4 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
                 >
                   Done
                 </button>
@@ -1971,7 +1968,7 @@ export default function Pharmacy() {
                     resetForm();
                     setShowModal(true);
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium"
+                  className="flex-1 px-4 py-2 font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                 >
                   Create New
                 </button> */}
@@ -1984,10 +1981,10 @@ export default function Pharmacy() {
       {/* View Modal */}
       {/* View Modal */}
       {viewModal && selectedIndent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center z-10">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 text-white bg-green-600">
               <h2 className="text-xl font-bold">
                 Indent Details - {selectedIndent.indentNumber}
               </h2>
@@ -1996,7 +1993,7 @@ export default function Pharmacy() {
                   setViewModal(false);
                   setSelectedIndent(null);
                 }}
-                className="text-white hover:bg-green-700 rounded-full p-1 transition-colors"
+                className="p-1 text-white transition-colors rounded-full hover:bg-green-700"
                 title="Close"
               >
                 <X className="w-6 h-6" />
@@ -2007,10 +2004,10 @@ export default function Pharmacy() {
             <div className="p-6">
               {/* Patient Information */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Patient Information
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
                   <div>
                     <p className="text-gray-500">Indent Number</p>
                     <p className="font-medium text-gray-900">
@@ -2076,27 +2073,27 @@ export default function Pharmacy() {
 
               {/* Request Types */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Request Types
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {selectedIndent.requestTypes?.medicineSlip && (
-                    <span className="px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg">
                       Medicine Slip
                     </span>
                   )}
                   {selectedIndent.requestTypes?.investigation && (
-                    <span className="px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg">
                       Investigation
                     </span>
                   )}
                   {selectedIndent.requestTypes?.package && (
-                    <span className="px-3 py-2 bg-purple-100 text-purple-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg">
                       Package
                     </span>
                   )}
                   {selectedIndent.requestTypes?.nonPackage && (
-                    <span className="px-3 py-2 bg-orange-100 text-orange-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-orange-700 bg-orange-100 rounded-lg">
                       Non-Package
                     </span>
                   )}
@@ -2107,20 +2104,20 @@ export default function Pharmacy() {
               {selectedIndent.requestTypes?.medicineSlip &&
                 selectedIndent.medicines?.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                    <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                       Medicines
                     </h3>
-                    <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
+                    <div className="overflow-hidden bg-white border border-gray-200 rounded-lg">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-green-600">
                           <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                            <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-white uppercase">
                               #
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                            <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-white uppercase">
                               Medicine Name
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                            <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-white uppercase">
                               Quantity
                             </th>
                           </tr>
@@ -2131,7 +2128,7 @@ export default function Pharmacy() {
                               <td className="px-4 py-3 text-sm text-gray-900">
                                 {index + 1}
                               </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">
                                 {medicine.name}
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-900">
@@ -2149,12 +2146,12 @@ export default function Pharmacy() {
               {selectedIndent.requestTypes?.investigation &&
                 selectedIndent.investigationAdvice && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                    <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                       Investigation Advice
                     </h3>
-                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="p-4 border border-green-200 rounded-lg bg-green-50">
                       <div className="space-y-4 text-sm">
-                        <div className="flex justify-between items-center border-b border-green-200 pb-2">
+                        <div className="flex items-center justify-between pb-2 border-b border-green-200">
                           <span className="text-gray-600">Priority:</span>
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -2172,7 +2169,7 @@ export default function Pharmacy() {
                         </div>
 
                         <div>
-                          <span className="text-gray-600 block mb-1">
+                          <span className="block mb-1 text-gray-600">
                             Category:
                           </span>
                           <div className="font-medium text-gray-900">
@@ -2186,7 +2183,7 @@ export default function Pharmacy() {
                           selectedIndent.investigationAdvice.pathologyTests
                             ?.length > 0 && (
                             <div>
-                              <span className="text-gray-600 block mb-1">
+                              <span className="block mb-1 text-gray-600">
                                 Pathology Tests:
                               </span>
                               <div className="flex flex-wrap gap-2">
@@ -2194,7 +2191,7 @@ export default function Pharmacy() {
                                   (test, index) => (
                                     <span
                                       key={index}
-                                      className="px-2 py-1 text-xs bg-white border border-green-200 text-green-700 rounded-full shadow-sm"
+                                      className="px-2 py-1 text-xs text-green-700 bg-white border border-green-200 rounded-full shadow-sm"
                                     >
                                       {test}
                                     </span>
@@ -2209,7 +2206,7 @@ export default function Pharmacy() {
                           "Radiology" && (
                           <>
                             <div>
-                              <span className="text-gray-600 block mb-1">
+                              <span className="block mb-1 text-gray-600">
                                 Radiology Type:
                               </span>
                               <div className="font-medium text-gray-900">
@@ -2222,7 +2219,7 @@ export default function Pharmacy() {
                             {selectedIndent.investigationAdvice.radiologyTests
                               ?.length > 0 && (
                               <div>
-                                <span className="text-gray-600 block mb-1">
+                                <span className="block mb-1 text-gray-600">
                                   Tests:
                                 </span>
                                 <div className="flex flex-wrap gap-2">
@@ -2230,7 +2227,7 @@ export default function Pharmacy() {
                                     (test, index) => (
                                       <span
                                         key={index}
-                                        className="px-2 py-1 text-xs bg-white border border-purple-200 text-purple-700 rounded-full shadow-sm"
+                                        className="px-2 py-1 text-xs text-purple-700 bg-white border border-purple-200 rounded-full shadow-sm"
                                       >
                                         {test}
                                       </span>
@@ -2244,11 +2241,11 @@ export default function Pharmacy() {
 
                         {/* Remarks */}
                         {selectedIndent.investigationAdvice.remarks && (
-                          <div className="pt-2 border-t border-green-200 mt-2">
-                            <span className="text-gray-600 block mb-1">
+                          <div className="pt-2 mt-2 border-t border-green-200">
+                            <span className="block mb-1 text-gray-600">
                               Remarks:
                             </span>
-                            <div className="p-2 bg-white rounded border border-green-100 text-gray-700 italic">
+                            <div className="p-2 italic text-gray-700 bg-white border border-green-100 rounded">
                               {selectedIndent.investigationAdvice.remarks}
                             </div>
                           </div>
@@ -2259,7 +2256,7 @@ export default function Pharmacy() {
                 )}
 
               {/* Timestamp and Footer */}
-              <div className="flex justify-between items-center pt-6 border-t mt-6">
+              <div className="flex items-center justify-between pt-6 mt-6 border-t">
                 <div className="text-sm text-gray-500">
                   Submitted:{" "}
                   {new Date(
@@ -2271,7 +2268,7 @@ export default function Pharmacy() {
                     setViewModal(false);
                     setSelectedIndent(null);
                   }}
-                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                  className="px-6 py-2 font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700"
                 >
                   Close
                 </button>

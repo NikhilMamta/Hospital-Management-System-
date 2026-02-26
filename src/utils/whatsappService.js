@@ -9,8 +9,14 @@
 const MAYTAPI_PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
 const MAYTAPI_PHONE_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
 const MAYTAPI_TOKEN = import.meta.env.VITE_MAYTAPI_TOKEN;
-// ⬇️  Hardcoded recipient – change this number as needed
-const APPROVAL_PHONE_NUMBER = "916267799443"; // e.g. 919876543210
+// ⬇️ Hardcoded recipients – change these numbers as needed
+// Numbers should include country code, no + or spaces (e.g. "919876543210")
+const APPROVAL_PHONE_NUMBERS = [
+  "917089161648",
+  "917000520856",
+  "919340821622",
+  "916267799443",
+];
 
 /**
  * Build the approval WhatsApp message for a pharmacy indent.
@@ -121,6 +127,26 @@ export const sendWhatsAppMessage = async (toNumber, message) => {
 };
 
 /**
+ * Send the same WhatsApp message to multiple numbers in parallel.
+ * Returns an array of result objects { number, success }.
+ */
+export const sendWhatsAppMessages = async (numbers, message) => {
+  if (!Array.isArray(numbers) || numbers.length === 0) return [];
+
+  const promises = numbers.map(async (num) => {
+    try {
+      const ok = await sendWhatsAppMessage(num, message);
+      return { number: num, success: !!ok };
+    } catch (err) {
+      console.error("[WhatsApp] Error sending to", num, err);
+      return { number: num, success: false };
+    }
+  });
+
+  return Promise.all(promises);
+};
+
+/**
  * High-level helper: send the pharmacy indent approval notification.
  *
  * @param {Object} indent      - Inserted pharmacy record from Supabase
@@ -144,20 +170,25 @@ export const sendIndentApprovalNotification = async (
       approvalUrl,
     );
 
-    const success = await sendWhatsAppMessage(APPROVAL_PHONE_NUMBER, message);
+    const results = await sendWhatsAppMessages(APPROVAL_PHONE_NUMBERS, message);
 
-    if (success) {
+    const successful = results.filter((r) => r.success).map((r) => r.number);
+    const failed = results.filter((r) => !r.success).map((r) => r.number);
+
+    if (successful.length > 0) {
       console.log(
         "[WhatsApp] Indent approval notification sent to",
-        APPROVAL_PHONE_NUMBER,
+        successful.join(", "),
       );
-    } else {
+    }
+    if (failed.length > 0) {
       console.warn(
-        "[WhatsApp] Indent approval notification could not be sent.",
+        "[WhatsApp] Failed to send indent approval notification to",
+        failed.join(", "),
       );
     }
 
-    return success;
+    return successful.length === APPROVAL_PHONE_NUMBERS.length;
   } catch (error) {
     console.error("[WhatsApp] sendIndentApprovalNotification error:", error);
     return false;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { sendIndentApprovalNotification } from "../../../utils/whatsappService";
 import {
   Plus,
   X,
@@ -783,8 +784,16 @@ const PharmacyIndents = () => {
         if (error) throw error;
         insertedData = data;
         showPopup("Indent created successfully!");
+
+        // fire and forget WhatsApp notification for new indents
+        sendIndentApprovalNotification(
+          insertedData,
+          medicines,
+          requestTypes,
+        ).catch((err) => console.error("[WhatsApp] Notification error:", err));
       }
       console.log(insertedData);
+
       const totalMedicines = requestTypes.medicineSlip
         ? medicines.reduce((sum, med) => sum + parseInt(med.quantity || 0), 0)
         : 0;
@@ -943,14 +952,14 @@ const PharmacyIndents = () => {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Fixed Section: Header and Search */}
-      <div className="flex-none shrink-0 border-b bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6">
+      <div className="flex-none bg-white border-b shrink-0">
+        <div className="px-4 py-3 mx-auto max-w-7xl sm:px-6">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">
+              <h1 className="text-xl font-bold text-gray-800 sm:text-2xl lg:text-3xl">
                 Pharmacy Indents
               </h1>
               <p className="hidden sm:block text-sm text-gray-600 mt-0.5">
@@ -962,7 +971,7 @@ const PharmacyIndents = () => {
                 resetForm();
                 setShowModal(true);
               }}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-sm"
+              className="flex items-center justify-center w-full gap-2 px-4 py-2 font-medium text-white transition-all bg-green-600 rounded-lg shadow-sm sm:w-auto hover:bg-green-700"
               disabled={loading}
             >
               <Plus className="w-5 h-5" />
@@ -971,56 +980,56 @@ const PharmacyIndents = () => {
           </div>
 
           {/* Search Bar - Condensed */}
-          <div className="mt-3 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <div className="relative mt-3">
+            <Search className="absolute w-4 h-4 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
             <input
               type="text"
               placeholder="Search indents, patients, or diagnosis..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all outline-none text-sm"
+              className="w-full py-2 pr-4 text-sm transition-all border border-gray-200 rounded-lg outline-none pl-9 focus:ring-2 focus:ring-green-500 focus:border-transparent"
             />
           </div>
         </div>
       </div>
 
       {/* Main Content Area - Scrollable */}
-      <div className="flex-1 overflow-hidden p-3 md:p-4">
-        <div className="max-w-7xl mx-auto h-full flex flex-col">
+      <div className="flex-1 p-3 overflow-hidden md:p-4">
+        <div className="flex flex-col h-full mx-auto max-w-7xl">
           {/* Desktop Table */}
-          <div className="bg-white rounded-lg shadow hidden md:block flex-1 flex flex-col min-h-0">
-            <div className="overflow-auto flex-1">
+          <div className="flex flex-col flex-1 hidden min-h-0 bg-white rounded-lg shadow md:block">
+            <div className="flex-1 overflow-auto">
               <table className="min-w-full border-separate border-spacing-0">
-                <thead className="bg-green-600 text-white sticky top-0 z-10">
+                <thead className="sticky top-0 z-10 text-white bg-green-600">
                   <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Indent No
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Admission No
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Patient Name
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       IPD No
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Staff Name
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Diagnosis
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Request Type
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Status
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Date
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Actions
                     </th>
                   </tr>
@@ -1030,7 +1039,7 @@ const PharmacyIndents = () => {
                     <tr>
                       <td colSpan="10" className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
-                          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
+                          <div className="w-10 h-10 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                           <p className="text-gray-700">Loading indents...</p>
                         </div>
                       </td>
@@ -1063,22 +1072,22 @@ const PharmacyIndents = () => {
                           <td className="px-4 py-2 text-sm">
                             <div className="flex flex-wrap gap-1">
                               {requestTypesData?.medicineSlip && (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                                   Medicine
                                 </span>
                               )}
                               {requestTypesData?.investigation && (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                                   Investigation
                                 </span>
                               )}
                               {requestTypesData?.package && (
-                                <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                                   Package
                                 </span>
                               )}
                               {requestTypesData?.nonPackage && (
-                                <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                                   Non-Package
                                 </span>
                               )}
@@ -1117,7 +1126,7 @@ const PharmacyIndents = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleView(indent)}
-                                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                                className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600"
                                 title="View Details"
                                 disabled={loading}
                               >
@@ -1125,7 +1134,7 @@ const PharmacyIndents = () => {
                               </button>
                               <button
                                 onClick={() => handleEdit(indent)}
-                                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                                className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600"
                                 title="Edit Indent"
                                 disabled={loading}
                               >
@@ -1139,11 +1148,11 @@ const PharmacyIndents = () => {
                   ) : (
                     <tr>
                       <td colSpan="9" className="px-6 py-12 text-center">
-                        <Pill className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-500 font-medium">
+                        <Pill className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p className="font-medium text-gray-500">
                           No indents created yet
                         </p>
-                        <p className="text-gray-400 text-sm mt-1">
+                        <p className="mt-1 text-sm text-gray-400">
                           Click "New Indent" to create one
                         </p>
                       </td>
@@ -1155,11 +1164,11 @@ const PharmacyIndents = () => {
           </div>
 
           {/* Mobile Card View */}
-          <div className="md:hidden flex-1 overflow-auto space-y-4 pb-4">
+          <div className="flex-1 pb-4 space-y-4 overflow-auto md:hidden">
             {loading ? (
-              <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-3"></div>
-                <p className="text-gray-500 font-medium">Loading indents...</p>
+              <div className="py-12 text-center bg-white border border-gray-100 shadow-sm rounded-xl">
+                <div className="w-10 h-10 mx-auto mb-3 border-b-2 border-green-600 rounded-full animate-spin"></div>
+                <p className="font-medium text-gray-500">Loading indents...</p>
               </div>
             ) : filteredIndents.length > 0 ? (
               filteredIndents.map((indent) => {
@@ -1167,11 +1176,11 @@ const PharmacyIndents = () => {
                 return (
                   <div
                     key={indent.id}
-                    className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+                    className="overflow-hidden bg-white border border-gray-100 shadow-sm rounded-xl"
                   >
-                    <div className="bg-gray-50/50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
                       <div className="flex flex-col">
-                        <span className="text-green-700 font-bold text-sm tracking-tight">
+                        <span className="text-sm font-bold tracking-tight text-green-700">
                           {indent.indent_no}
                         </span>
                         <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
@@ -1213,7 +1222,7 @@ const PharmacyIndents = () => {
                           <span className="text-[10px] text-gray-400 font-bold uppercase">
                             Diagnosis
                           </span>
-                          <p className="text-sm font-medium text-gray-700 line-clamp-1 italic">
+                          <p className="text-sm italic font-medium text-gray-700 line-clamp-1">
                             "{indent.diagnosis}"
                           </p>
                         </div>
@@ -1235,8 +1244,8 @@ const PharmacyIndents = () => {
                               : "-"}
                           </p>
                         </div>
-                        <div className="space-y-1 flex flex-col justify-end items-end">
-                          <div className="flex flex-wrap gap-1 justify-end">
+                        <div className="flex flex-col items-end justify-end space-y-1">
+                          <div className="flex flex-wrap justify-end gap-1">
                             {requestTypesData.medicineSlip && (
                               <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-[10px] font-bold rounded border border-sky-100">
                                 MED
@@ -1279,11 +1288,11 @@ const PharmacyIndents = () => {
                 );
               })
             ) : (
-              <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="mx-auto w-16 h-16 text-gray-200 mb-3">
+              <div className="py-12 text-center bg-white border border-gray-100 shadow-sm rounded-xl">
+                <div className="w-16 h-16 mx-auto mb-3 text-gray-200">
                   <AlertCircle className="w-full h-full" />
                 </div>
-                <p className="text-gray-500 font-medium">
+                <p className="font-medium text-gray-500">
                   No results matching your search
                 </p>
               </div>
@@ -1294,10 +1303,10 @@ const PharmacyIndents = () => {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 z-40 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
+            <div className="sticky top-0 z-40 flex items-center justify-between px-6 py-4 text-white bg-green-600">
               <h2 className="text-xl font-bold">
                 {editMode ? "Edit Indent" : "Create New Indent"}
               </h2>
@@ -1307,7 +1316,7 @@ const PharmacyIndents = () => {
                   resetForm();
                   setEditMode(false);
                 }}
-                className="text-white hover:bg-green-700 rounded-full p-1"
+                className="p-1 text-white rounded-full hover:bg-green-700"
                 disabled={loading}
               >
                 <X className="w-6 h-6" />
@@ -1317,18 +1326,18 @@ const PharmacyIndents = () => {
             <div className="p-6">
               {/* Patient Information */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Patient Information
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2 md:grid-cols-3">
                   <div className="relative">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Admission Number <span className="text-red-500">*</span>
                     </label>
 
                     <div ref={dropdownRef} className="relative z-10">
-                      <Search className="absolute z-0 left-3 top-3 w-4 h-4 text-gray-400" />
+                      <Search className="absolute z-0 w-4 h-4 text-gray-400 left-3 top-3" />
                       <input
                         type="text"
                         value={admissionSearch}
@@ -1344,7 +1353,7 @@ const PharmacyIndents = () => {
 
                       {/* Dropdown */}
                       {showAdmissionDropdown && (
-                        <div className="absolute z-50 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        <div className="absolute z-50 w-full mt-1 overflow-y-auto bg-white border rounded-lg shadow-lg max-h-60">
                           {admissionPatients
                             .filter(
                               (p) =>
@@ -1366,7 +1375,7 @@ const PharmacyIndents = () => {
                                   setShowAdmissionDropdown(false);
                                   handleAdmissionSelect(patient.admission_no);
                                 }}
-                                className="px-4 py-2 hover:bg-green-50 cursor-pointer text-sm"
+                                className="px-4 py-2 text-sm cursor-pointer hover:bg-green-50"
                               >
                                 <div className="font-medium">
                                   {patient.admission_no}
@@ -1382,7 +1391,7 @@ const PharmacyIndents = () => {
                               ?.toLowerCase()
                               .includes(admissionSearch.toLowerCase()),
                           ).length === 0 && (
-                            <div className="px-4 py-1 text-sm text-gray-500 text-center">
+                            <div className="px-4 py-1 text-sm text-center text-gray-500">
                               No matching admission found
                             </div>
                           )}
@@ -1392,7 +1401,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Patient Name
                     </label>
                     <input
@@ -1404,7 +1413,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div className="sm:col-span-2 md:col-span-1">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       UHID Number
                     </label>
                     <input
@@ -1418,9 +1427,9 @@ const PharmacyIndents = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-4 mb-4 sm:grid-cols-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Age
                     </label>
                     <input
@@ -1432,7 +1441,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Gender
                     </label>
                     <input
@@ -1444,7 +1453,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Category
                     </label>
                     <select
@@ -1461,7 +1470,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Room
                     </label>
                     <input
@@ -1475,10 +1484,10 @@ const PharmacyIndents = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                   {/* Updated Staff Name Field - Auto-filled from localStorage */}
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Staff Name
                     </label>
                     <input
@@ -1491,7 +1500,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Ward Location
                     </label>
                     <input
@@ -1505,7 +1514,7 @@ const PharmacyIndents = () => {
                   </div>
 
                   <div className="sm:col-span-2 md:col-span-1">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Diagnosis <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1523,10 +1532,10 @@ const PharmacyIndents = () => {
 
               {/* Request Type */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Request Type
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {[
                     { id: "medicineSlip", label: "Medicine Slip" },
                     { id: "investigation", label: "Investigation" },
@@ -1542,7 +1551,7 @@ const PharmacyIndents = () => {
                         checked={requestTypes[type.id]}
                         onChange={() => handleCheckboxChange(type.id)}
                         disabled={loading}
-                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500 border-gray-300"
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                       />
                       <span
                         className={`ml-2 text-sm font-medium ${requestTypes[type.id] ? "text-green-700" : "text-gray-600"}`}
@@ -1557,31 +1566,31 @@ const PharmacyIndents = () => {
               {/* Medicines Section with Search */}
               {requestTypes.medicineSlip && (
                 <div className="mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="pb-2 text-lg font-semibold text-gray-800 border-b">
                       Medicines
                     </h3>
                   </div>
 
-                  <div className="space-y-3 mb-4">
+                  <div className="mb-4 space-y-3">
                     {medicines.map((medicine, index) => (
                       <div
                         key={medicine.id}
-                        className="p-3 sm:p-0 bg-gray-50 sm:bg-transparent rounded-lg sm:rounded-none border sm:border-0 border-gray-200 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"
+                        className="flex flex-col items-stretch gap-3 p-3 border border-gray-200 rounded-lg sm:p-0 bg-gray-50 sm:bg-transparent sm:rounded-none sm:border-0 sm:flex-row sm:items-end"
                       >
-                        <div className="hidden sm:flex w-8 h-10 items-center justify-center bg-green-600 text-white rounded font-semibold shrink-0">
+                        <div className="items-center justify-center hidden w-8 h-10 font-semibold text-white bg-green-600 rounded sm:flex shrink-0">
                           {index + 1}
                         </div>
                         <div className="flex-1 medicine-dropdown-container">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            <span className="sm:hidden text-green-600 font-bold mr-2">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
+                            <span className="mr-2 font-bold text-green-600 sm:hidden">
                               #{index + 1}
                             </span>
                             Medicine Name
                           </label>
                           <div className="relative">
                             <div className="flex items-center">
-                              <Search className="absolute left-3 w-4 h-4 text-gray-400" />
+                              <Search className="absolute w-4 h-4 text-gray-400 left-3" />
                               <input
                                 type="text"
                                 value={medicine.name}
@@ -1596,14 +1605,14 @@ const PharmacyIndents = () => {
                                   setShowMedicineDropdown(medicine.id)
                                 }
                                 placeholder="Search for medicine..."
-                                className="px-3 py-2 pl-10 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                                className="w-full px-3 py-2 pl-10 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                               />
                             </div>
 
                             {/* Medicine dropdown */}
                             {showMedicineDropdown === medicine.id && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                <div className="p-2 border-b sticky top-0 bg-white z-10">
+                              <div className="absolute z-50 w-full mt-1 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-xl max-h-60">
+                                <div className="sticky top-0 z-10 p-2 bg-white border-b">
                                   <div className="relative">
                                     <Search className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
                                     <input
@@ -1655,7 +1664,7 @@ const PharmacyIndents = () => {
                                           medicineSearchTerm.toLowerCase(),
                                         ),
                                   ).length === 0 && (
-                                    <div className="px-4 py-4 text-center text-gray-500 text-sm italic">
+                                    <div className="px-4 py-4 text-sm italic text-center text-gray-500">
                                       No matching medicines found
                                     </div>
                                   )}
@@ -1664,9 +1673,9 @@ const PharmacyIndents = () => {
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2 items-end">
+                        <div className="flex items-end gap-2">
                           <div className="flex-1 sm:w-32">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block mb-1 text-sm font-medium text-gray-700">
                               Quantity
                             </label>
                             <input
@@ -1690,14 +1699,14 @@ const PharmacyIndents = () => {
                                 )
                               }
                               disabled={loading}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                               placeholder="0"
                             />
                           </div>
                           <button
                             onClick={() => removeMedicine(medicine.id)}
                             disabled={loading}
-                            className="px-3 py-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg h-10 transition-colors border border-red-100 shrink-0"
+                            className="h-10 px-3 py-2 text-red-500 transition-colors border border-red-100 rounded-lg bg-red-50 hover:bg-red-100 shrink-0"
                             title="Remove item"
                           >
                             <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -1710,7 +1719,7 @@ const PharmacyIndents = () => {
                   <button
                     onClick={addMedicine}
                     disabled={loading}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm w-full justify-center disabled:bg-green-300"
+                    className="flex items-center justify-center w-full gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-green-300"
                   >
                     <Plus className="w-4 h-4" />
                     Add Medicine
@@ -1721,14 +1730,14 @@ const PharmacyIndents = () => {
               {/* Investigation Advice Section */}
               {requestTypes.investigation && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                  <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                     Investigation Advice
                   </h3>
 
-                  <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 space-y-4 border border-green-200 rounded-lg bg-green-50">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Priority *
                         </label>
                         <select
@@ -1736,7 +1745,7 @@ const PharmacyIndents = () => {
                           value={investigationAdvice.priority}
                           onChange={handleInvestigationAdviceChange}
                           disabled={loading}
-                          className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                         >
                           <option value="High">High</option>
                           <option value="Medium">Medium</option>
@@ -1745,7 +1754,7 @@ const PharmacyIndents = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Pathology & Radiology *
                         </label>
                         <select
@@ -1753,7 +1762,7 @@ const PharmacyIndents = () => {
                           value={investigationAdvice.adviceCategory}
                           onChange={handleInvestigationAdviceChange}
                           disabled={loading}
-                          className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                         >
                           <option value="">Select Category</option>
                           <option value="Pathology">Pathology</option>
@@ -1765,12 +1774,12 @@ const PharmacyIndents = () => {
                     {/* Pathology Tests */}
                     {investigationAdvice.adviceCategory === "Pathology" && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
                           Select Pathology Tests * (
                           {investigationAdvice.pathologyTests.length} selected)
                         </label>
-                        <div className="p-3 max-h-60 overflow-y-auto bg-white rounded-lg border border-gray-200">
-                          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                        <div className="p-3 overflow-y-auto bg-white border border-gray-200 rounded-lg max-h-60">
+                          <div className="grid grid-cols-1 gap-2 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                             {investigationTests.Pathology.map((test) => (
                               <label
                                 key={test}
@@ -1788,9 +1797,9 @@ const PharmacyIndents = () => {
                                     )
                                   }
                                   disabled={loading}
-                                  className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                  className="mt-1 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                 />
-                                <span className="text-xs font-medium text-gray-700 leading-tight">
+                                <span className="text-xs font-medium leading-tight text-gray-700">
                                   {test}
                                 </span>
                               </label>
@@ -1804,7 +1813,7 @@ const PharmacyIndents = () => {
                     {investigationAdvice.adviceCategory === "Radiology" && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Radiology Type *
                           </label>
                           <select
@@ -1812,7 +1821,7 @@ const PharmacyIndents = () => {
                             value={investigationAdvice.radiologyType}
                             onChange={handleInvestigationAdviceChange}
                             disabled={loading}
-                            className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           >
                             <option value="">Select Type</option>
                             <option value="X-ray">X-ray</option>
@@ -1823,13 +1832,13 @@ const PharmacyIndents = () => {
 
                         {investigationAdvice.radiologyType && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block mb-2 text-sm font-medium text-gray-700">
                               Select {investigationAdvice.radiologyType} Tests *
                               ({investigationAdvice.radiologyTests.length}{" "}
                               selected)
                             </label>
-                            <div className="p-3 max-h-60 overflow-y-auto bg-white rounded-lg border border-gray-200">
-                              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2">
+                            <div className="p-3 overflow-y-auto bg-white border border-gray-200 rounded-lg max-h-60">
+                              <div className="grid grid-cols-1 gap-2 xs:grid-cols-2 sm:grid-cols-3">
                                 {getRadiologyTests().map((test) => (
                                   <label
                                     key={test}
@@ -1847,9 +1856,9 @@ const PharmacyIndents = () => {
                                         )
                                       }
                                       disabled={loading}
-                                      className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                      className="mt-1 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                     />
-                                    <span className="text-xs font-medium text-gray-700 leading-tight">
+                                    <span className="text-xs font-medium leading-tight text-gray-700">
                                       {test}
                                     </span>
                                   </label>
@@ -1863,7 +1872,7 @@ const PharmacyIndents = () => {
 
                     {/* Remarks */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block mb-1 text-sm font-medium text-gray-700">
                         Remarks
                       </label>
                       <textarea
@@ -1873,7 +1882,7 @@ const PharmacyIndents = () => {
                         rows="3"
                         placeholder="Add any additional notes or instructions..."
                         disabled={loading}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
                     </div>
                   </div>
@@ -1883,25 +1892,25 @@ const PharmacyIndents = () => {
               {/* Medicine Summary Section */}
               {requestTypes.medicineSlip && summaryData.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                  <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                     Medicine Summary
                   </h3>
-                  <div className="bg-green-50 rounded-lg overflow-hidden border border-green-200">
+                  <div className="overflow-hidden border border-green-200 rounded-lg bg-green-50">
                     <table className="min-w-full">
-                      <thead className="bg-green-600 text-white">
+                      <thead className="text-white bg-green-600">
                         <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                          <th className="px-4 py-3 text-sm font-semibold text-left">
                             Sr No
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                          <th className="px-4 py-3 text-sm font-semibold text-left">
                             Medicine Name
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                          <th className="px-4 py-3 text-sm font-semibold text-left">
                             Quantity
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-green-200 bg-white">
+                      <tbody className="bg-white divide-y divide-green-200">
                         {summaryData.map((item) => (
                           <tr key={item.srNo}>
                             <td className="px-4 py-3 text-sm">{item.srNo}</td>
@@ -1941,18 +1950,18 @@ const PharmacyIndents = () => {
                     setEditMode(false);
                   }}
                   disabled={loading}
-                  className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium disabled:bg-gray-100"
+                  className="px-6 py-2 font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:bg-gray-100"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
-                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:bg-green-300"
+                  className="flex items-center gap-2 px-6 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-green-300"
                 >
                   {loading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <div className="w-4 h-4 border-b-2 border-white rounded-full animate-spin"></div>
                       {editMode ? "Updating..." : "Submitting..."}
                     </>
                   ) : (
@@ -1970,21 +1979,21 @@ const PharmacyIndents = () => {
 
       {/* Success Modal */}
       {successModal && successData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="w-full max-w-md bg-white rounded-lg shadow-xl">
             {/* Success Header */}
-            <div className="bg-green-600 text-white px-6 py-4 rounded-t-lg flex items-center gap-3">
+            <div className="flex items-center gap-3 px-6 py-4 text-white bg-green-600 rounded-t-lg">
               <CheckCircle className="w-6 h-6" />
               <h2 className="text-xl font-bold">Success!</h2>
             </div>
 
             {/* Success Body */}
             <div className="p-6">
-              <p className="text-gray-700 mb-6">
+              <p className="mb-6 text-gray-700">
                 Your indent has been submitted successfully!
               </p>
 
-              <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+              <div className="p-4 space-y-3 rounded-lg bg-gray-50">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Indent Number:</span>
                   <span className="text-sm font-bold text-green-600">
@@ -2027,7 +2036,7 @@ const PharmacyIndents = () => {
                       handleView(indent);
                     }
                   }}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                  className="flex-1 px-4 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
                 >
                   View Details
                 </button>
@@ -2037,7 +2046,7 @@ const PharmacyIndents = () => {
                     resetForm();
                     setShowModal(true);
                   }}
-                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                  className="flex-1 px-4 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
                 >
                   Create New Indent
                 </button> */}
@@ -2049,10 +2058,10 @@ const PharmacyIndents = () => {
 
       {/* View Modal */}
       {viewModal && selectedIndent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
+            <div className="sticky top-0 flex items-center justify-between px-6 py-4 text-white bg-green-600">
               <h2 className="text-xl font-bold">
                 Indent Details - {selectedIndent.indent_no}
               </h2>
@@ -2061,7 +2070,7 @@ const PharmacyIndents = () => {
                   setViewModal(false);
                   setSelectedIndent(null);
                 }}
-                className="text-white hover:bg-green-700 rounded-full p-1"
+                className="p-1 text-white rounded-full hover:bg-green-700"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -2071,75 +2080,75 @@ const PharmacyIndents = () => {
             <div className="p-4 sm:p-6">
               {/* Patient Information */}
               <div className="mb-8">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                <h3 className="flex items-center gap-2 pb-2 mb-4 text-lg font-bold text-gray-800 border-b border-green-100">
                   <div className="w-1.5 h-6 bg-green-600 rounded-full"></div>
                   Patient Information
                 </h3>
                 <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Indent & Adm No
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm">
+                    <p className="text-sm font-semibold text-gray-800">
                       {selectedIndent.indent_no}{" "}
-                      <span className="text-gray-400 mx-1">|</span>{" "}
+                      <span className="mx-1 text-gray-400">|</span>{" "}
                       {selectedIndent.admission_number}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       IPD Number
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm">
+                    <p className="text-sm font-semibold text-gray-800">
                       {selectedIndent.ipd_number}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Patient Name
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm">
+                    <p className="text-sm font-semibold text-gray-800">
                       {selectedIndent.patient_name}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       UHID Number
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm">
+                    <p className="text-sm font-semibold text-gray-800">
                       {selectedIndent.uhid_number || "N/A"}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Age / Gender
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm">
+                    <p className="text-sm font-semibold text-gray-800">
                       {selectedIndent.age} / {selectedIndent.gender}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Category / Ward
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm truncate">
+                    <p className="text-sm font-semibold text-gray-800 truncate">
                       {selectedIndent.category || "General"} -{" "}
                       {selectedIndent.ward_location}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Staff Name
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm truncate">
+                    <p className="text-sm font-semibold text-gray-800 truncate">
                       {selectedIndent.staff_name}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 sm:col-span-1 md:col-span-2">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50 sm:col-span-1 md:col-span-2">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Diagnosis
                     </p>
-                    <p className="font-semibold text-gray-800 text-sm italic">
+                    <p className="text-sm italic font-semibold text-gray-800">
                       "{selectedIndent.diagnosis}"
                     </p>
                   </div>
@@ -2148,7 +2157,7 @@ const PharmacyIndents = () => {
 
               {/* Request Types */}
               <div className="mb-8">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                <h3 className="flex items-center gap-2 pb-2 mb-4 text-lg font-bold text-gray-800 border-b border-green-100">
                   <div className="w-1.5 h-6 bg-green-600 rounded-full"></div>
                   Request Types
                 </h3>
@@ -2182,14 +2191,14 @@ const PharmacyIndents = () => {
               {parseJsonField(selectedIndent.request_types)?.medicineSlip &&
                 parseJsonField(selectedIndent.medicines)?.length > 0 && (
                   <div className="mb-8">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                    <h3 className="flex items-center gap-2 pb-2 mb-4 text-lg font-bold text-gray-800 border-b border-green-100">
                       <div className="w-1.5 h-6 bg-green-600 rounded-full"></div>
                       Medicines List
                     </h3>
-                    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+                    <div className="overflow-hidden bg-white border border-gray-100 shadow-sm rounded-xl">
                       <div className="overflow-x-auto">
                         <table className="min-w-full">
-                          <thead className="bg-green-600 text-white">
+                          <thead className="text-white bg-green-600">
                             <tr>
                               <th className="px-4 py-3 text-left text-[10px] uppercase font-bold tracking-wider">
                                 #
@@ -2207,9 +2216,9 @@ const PharmacyIndents = () => {
                               (medicine, index) => (
                                 <tr
                                   key={medicine.id || index}
-                                  className="hover:bg-gray-50 transition-colors"
+                                  className="transition-colors hover:bg-gray-50"
                                 >
-                                  <td className="px-4 py-3 text-sm text-gray-400 font-mono">
+                                  <td className="px-4 py-3 font-mono text-sm text-gray-400">
                                     {index + 1}
                                   </td>
                                   <td className="px-4 py-3 text-sm font-semibold text-gray-700">
@@ -2232,18 +2241,18 @@ const PharmacyIndents = () => {
               {parseJsonField(selectedIndent.request_types)?.investigation &&
                 selectedIndent.investigation_advice && (
                   <div className="mb-8">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                    <h3 className="flex items-center gap-2 pb-2 mb-4 text-lg font-bold text-gray-800 border-b border-green-100">
                       <div className="w-1.5 h-6 bg-green-600 rounded-full"></div>
                       Investigation Advice
                     </h3>
-                    <div className="p-5 bg-green-50/50 rounded-xl border border-green-100 space-y-5">
+                    <div className="p-5 space-y-5 border border-green-100 bg-green-50/50 rounded-xl">
                       {(() => {
                         const adviceData = parseJsonField(
                           selectedIndent.investigation_advice,
                         );
                         return (
                           <>
-                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                               <div>
                                 <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                                   Priority
@@ -2333,7 +2342,7 @@ const PharmacyIndents = () => {
                                 <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                                   Additional Remarks
                                 </p>
-                                <div className="text-sm text-gray-700 bg-white p-3 rounded-lg border border-green-100 italic">
+                                <div className="p-3 text-sm italic text-gray-700 bg-white border border-green-100 rounded-lg">
                                   "{adviceData.remarks}"
                                 </div>
                               </div>
@@ -2347,16 +2356,16 @@ const PharmacyIndents = () => {
 
               {/* Submission Details */}
               <div className="mb-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-green-100 pb-2 flex items-center gap-2">
+                <h3 className="flex items-center gap-2 pb-2 mb-4 text-lg font-bold text-gray-800 border-b border-green-100">
                   <div className="w-1.5 h-6 bg-green-600 rounded-full"></div>
                   Submission Info
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Submitted At
                     </p>
-                    <p className="font-semibold text-gray-600 text-xs">
+                    <p className="text-xs font-semibold text-gray-600">
                       {new Date(selectedIndent.timestamp).toLocaleString(
                         "en-GB",
                         {
@@ -2369,7 +2378,7 @@ const PharmacyIndents = () => {
                       )}
                     </p>
                   </div>
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
                     <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
                       Current Status
                     </p>
@@ -2395,7 +2404,7 @@ const PharmacyIndents = () => {
                     setViewModal(false);
                     setSelectedIndent(null);
                   }}
-                  className="w-full sm:w-auto px-8 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
+                  className="w-full px-8 py-3 font-bold text-white transition-all bg-green-600 shadow-sm sm:w-auto hover:bg-green-700 rounded-xl hover:shadow-md active:scale-95"
                 >
                   Close Details
                 </button>
