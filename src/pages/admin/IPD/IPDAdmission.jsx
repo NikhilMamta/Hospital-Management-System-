@@ -479,7 +479,7 @@ const PatientAdmissionSystem = () => {
 
       if (error) {
         console.error("Error fetching IPD number:", error);
-        return "IPD-001";
+        return "IPD-5000";
       }
 
       if (data && data.length > 0) {
@@ -487,15 +487,17 @@ const PatientAdmissionSystem = () => {
         if (lastIpdNo && lastIpdNo.startsWith("IPD-")) {
           const lastNumber = parseInt(lastIpdNo.replace("IPD-", ""), 10);
           if (!isNaN(lastNumber)) {
-            return `IPD-${String(lastNumber + 1).padStart(3, "0")}`;
+            let next = lastNumber + 1;
+            if (next < 5000) next = 5000;
+            return `IPD-${String(next).padStart(4, "0")}`;
           }
         }
       }
 
-      return "IPD-001";
+      return "IPD-5000";
     } catch (error) {
       console.error("Error generating IPD number:", error);
-      return "IPD-001";
+      return "IPD-5000";
     }
   };
 

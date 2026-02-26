@@ -653,9 +653,35 @@ const PharmacyIndents = () => {
     }
   };
 
-  const generateIndentNumber = () => {
-    const timestamp = Date.now().toString().slice(-9);
-    return `IND-${timestamp}`;
+  // generate a sequential indent number, starting at 15000 for new records
+  const generateIndentNumber = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("pharmacy")
+        .select("indent_no")
+        .order("timestamp", { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error("Error fetching last indent number:", error);
+        return "IND-15000";
+      }
+
+      if (data && data.length > 0) {
+        const last = data[0].indent_no;
+        if (last && last.startsWith("IND-")) {
+          const num = parseInt(last.replace("IND-", ""), 10);
+          if (!isNaN(num)) {
+            const next = num >= 15000 ? num + 1 : 15000;
+            return `IND-${next}`;
+          }
+        }
+      }
+      return "IND-15000";
+    } catch (err) {
+      console.error("Exception generating indent number:", err);
+      return "IND-15000";
+    }
   };
 
   const handleSubmit = async () => {
@@ -734,7 +760,10 @@ const PharmacyIndents = () => {
             hour12: false,
           })
           .replace(",", ""),
-        // indent_number: editMode && selectedIndent ? selectedIndent.indent_number : generateIndentNumber(),
+        indent_number:
+          editMode && selectedIndent
+            ? selectedIndent.indent_no
+            : await generateIndentNumber(),
         admission_number: formData.admissionNumber,
         ipd_number: selectedPatient?.ipd_number || "",
         staff_name: formData.staffName,

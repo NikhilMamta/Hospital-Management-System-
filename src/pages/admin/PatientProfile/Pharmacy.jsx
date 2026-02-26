@@ -600,9 +600,35 @@ export default function Pharmacy() {
     }
   };
 
-  const generateIndentNumber = () => {
-    const timestamp = Date.now().toString().slice(-9);
-    return `IND-${timestamp}`;
+  // when the database trigger is unavailable we still generate an indent sequence
+  const generateIndentNumber = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("pharmacy")
+        .select("indent_no")
+        .order("timestamp", { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error("Error fetching last indent number:", error);
+        return "IND-15000";
+      }
+
+      if (data && data.length > 0) {
+        const last = data[0].indent_no;
+        if (last && last.startsWith("IND-")) {
+          const num = parseInt(last.replace("IND-", ""), 10);
+          if (!isNaN(num)) {
+            const next = num >= 15000 ? num + 1 : 15000;
+            return `IND-${next}`;
+          }
+        }
+      }
+      return "IND-15000";
+    } catch (err) {
+      console.error("Exception generating indent number:", err);
+      return "IND-15000";
+    }
   };
 
   const handleSubmit = async () => {
@@ -671,7 +697,10 @@ export default function Pharmacy() {
             hour12: false,
           })
           .replace(",", ""),
-        // indent_number provided by insert trigger or generated here
+        indent_number:
+          editMode && selectedIndent
+            ? selectedIndent.indentNumber
+            : await generateIndentNumber(),
 
         admission_number: formData.admissionNumber || "",
         ipd_number: currentIpdNumber || "",
