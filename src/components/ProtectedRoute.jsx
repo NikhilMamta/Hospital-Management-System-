@@ -1,8 +1,10 @@
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 const ProtectedRoute = ({ children, requiredPage }) => {
-  const { user, hasPageAccess } = useAuth();
+  const { user, loading, hasPageAccess } = useAuth();
+
+  if (loading) return null;
 
   // If no user, redirect to login
   if (!user) {
