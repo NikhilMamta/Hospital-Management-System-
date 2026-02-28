@@ -36,6 +36,7 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
   const [assignedNurses, setAssignedNurses] = useState([]);
   const [currentShift, setCurrentShift] = useState("");
   const [otDays, setOtDays] = useState(null);
+  const [otDaysLabel, setOtDaysLabel] = useState("OT Days:");
 
   // Function to calculate time in ward
   const calculateTimeInWard = (admissionDate) => {
@@ -114,7 +115,10 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
     fetchNurses();
   }, [patient.ipd_number, patient.admission_no]);
 
-  // Fetch OT Days: from ot_date (assigned OT date) till today
+  // Fetch OT Days:
+  //  - If OT is cancelled (status === "Cancel") → hide field.
+  //  - If OT is completed (actual2 is set) → show days since completion.
+  //  - Otherwise → hide field.
   useEffect(() => {
     const fetchOTDays = async () => {
       const ipd = patient.ipd_number || patient.admission_no;
@@ -122,22 +126,41 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
       try {
         const { data, error } = await supabase
           .from("ot_information")
-          .select("ot_date")
+          .select("ot_date, actual2, status")
           .eq("ipd_number", ipd)
           .not("ot_date", "is", null)
           .order("ot_date", { ascending: true })
           .limit(1);
 
         if (!error && data && data.length > 0) {
-          const otDate = new Date(data[0].ot_date);
+          const record = data[0];
+
+          // If OT was cancelled — hide the field entirely
+          if (record.status === "Cancel") {
+            setOtDays(null);
+            setOtDaysLabel("Days Since OT Done:");
+            return;
+          }
+
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          otDate.setHours(0, 0, 0, 0);
-          const diffMs = today - otDate;
-          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-          setOtDays(diffDays < 0 ? 0 : diffDays);
+
+          if (record.actual2) {
+            // OT is completed — count days since completion
+            const completedDate = new Date(record.actual2);
+            completedDate.setHours(0, 0, 0, 0);
+            const diffMs = today - completedDate;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            setOtDays(diffDays < 0 ? 0 : diffDays);
+            setOtDaysLabel("Days Since OT Done:");
+          } else {
+            // OT not yet completed — hide the field
+            setOtDays(null);
+            setOtDaysLabel("Days Since OT Done:");
+          }
         } else {
           setOtDays(null); // null = no OT record → field hidden
+          setOtDaysLabel("Days Since OT Done:");
         }
       } catch (err) {
         setOtDays(null);
@@ -248,10 +271,10 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
         </div>
         {otDays !== null && (
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">OT Days:</span>
+            <span className="text-gray-600">{otDaysLabel}</span>
             <span className="font-semibold text-purple-600">
               {otDays === 0
-                ? "Less than 1 day"
+                ? "Today"
                 : `${otDays} day${otDays !== 1 ? "s" : ""}`}
             </span>
           </div>

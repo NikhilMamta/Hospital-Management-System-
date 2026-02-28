@@ -36,6 +36,15 @@ const AssignOtTime = () => {
     remark: "",
   });
 
+  // New state for update OT date modal
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [selectedUpdateRecord, setSelectedUpdateRecord] = useState(null);
+  const [updateForm, setUpdateForm] = useState({
+    ot_date: "",
+    ot_time: "",
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+
   const [formData, setFormData] = useState({
     ipd_number: "",
     ot_date: "",
@@ -223,6 +232,48 @@ const AssignOtTime = () => {
     fetchRmoList();
     fetchAvailableIpdPatients();
   }, []);
+
+  // Open update OT date modal
+  const handleUpdateClick = (record) => {
+    setSelectedUpdateRecord(record);
+    setUpdateForm({
+      ot_date: record.ot_date || "",
+      ot_time: record.ot_time || "",
+    });
+    setShowUpdateModal(true);
+  };
+
+  // Submit updated OT date/time
+  const handleUpdateSubmit = async (e) => {
+    e.preventDefault();
+    if (!updateForm.ot_date || !updateForm.ot_time) {
+      showNotification("Please select both date and time", "error");
+      return;
+    }
+    try {
+      setIsUpdating(true);
+      const { error } = await supabase
+        .from("ot_information")
+        .update({
+          ot_date: updateForm.ot_date,
+          ot_time: updateForm.ot_time,
+        })
+        .eq("id", selectedUpdateRecord.id);
+
+      if (error) throw error;
+
+      showNotification("OT date updated successfully!", "success");
+      setShowUpdateModal(false);
+      setSelectedUpdateRecord(null);
+      fetchPendingData();
+      fetchHistoryData();
+    } catch (error) {
+      console.error("Error updating OT date:", error);
+      showNotification("Error updating OT date", "error");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   // Open process modal
   const handleProcessClick = (record) => {
@@ -495,6 +546,12 @@ const AssignOtTime = () => {
               className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
             >
               Process
+            </button>
+            <button
+              onClick={() => handleUpdateClick(item)}
+              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+            >
+              Update
             </button>
             <button
               onClick={() => setExpandedCard(isExpanded ? null : item.id)}
@@ -853,12 +910,20 @@ const AssignOtTime = () => {
                           className={`border-b ${index % 2 === 0 ? "bg-white" : "bg-green-50"}`}
                         >
                           <td className="px-4 py-3 sticky left-0 bg-white whitespace-nowrap">
-                            <button
-                              onClick={() => handleProcessClick(item)}
-                              className="px-4 py-1.5 bg-green-600 text-white rounded font-medium hover:bg-green-700 transition-colors whitespace-nowrap"
-                            >
-                              Process
-                            </button>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleProcessClick(item)}
+                                className="px-4 py-1.5 bg-green-600 text-white rounded font-medium hover:bg-green-700 transition-colors whitespace-nowrap"
+                              >
+                                Process
+                              </button>
+                              <button
+                                onClick={() => handleUpdateClick(item)}
+                                className="px-4 py-1.5 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
+                              >
+                                Update
+                              </button>
+                            </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <span
@@ -1365,6 +1430,106 @@ const AssignOtTime = () => {
                   className="flex-1 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm"
                 >
                   Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Update OT Date Modal */}
+      {showUpdateModal && selectedUpdateRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-start md:items-center justify-center p-2 md:p-4 z-50">
+          <div className="bg-white p-4 md:p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto border-2 border-blue-500">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg md:text-xl font-semibold text-blue-600">
+                Update OT Date
+              </h2>
+              <button
+                onClick={() => {
+                  setShowUpdateModal(false);
+                  setSelectedUpdateRecord(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Patient info summary */}
+            <div className="mb-5 p-3 bg-blue-50 rounded-lg border border-blue-100">
+              <p className="text-sm">
+                <span className="font-medium text-blue-700">IPD:</span>{" "}
+                {selectedUpdateRecord.ipd_number}
+              </p>
+              <p className="text-sm">
+                <span className="font-medium text-blue-700">Patient:</span>{" "}
+                {selectedUpdateRecord.patient_name}
+              </p>
+              <p className="text-sm">
+                <span className="font-medium text-blue-700">
+                  Current OT Date:
+                </span>{" "}
+                {selectedUpdateRecord.ot_date || "N/A"}{" "}
+                {selectedUpdateRecord.ot_time || ""}
+              </p>
+            </div>
+
+            <form onSubmit={handleUpdateSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="block mb-2 text-blue-600 font-medium text-sm">
+                    New OT Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={updateForm.ot_date}
+                    onChange={(e) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        ot_date: e.target.value,
+                      }))
+                    }
+                    required
+                    className="w-full px-3 py-2.5 rounded-lg border border-blue-400 outline-none text-sm focus:ring-2 focus:ring-blue-300"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-2 text-blue-600 font-medium text-sm">
+                    New OT Time *
+                  </label>
+                  <input
+                    type="time"
+                    value={updateForm.ot_time}
+                    onChange={(e) =>
+                      setUpdateForm((prev) => ({
+                        ...prev,
+                        ot_time: e.target.value,
+                      }))
+                    }
+                    required
+                    className="w-full px-3 py-2.5 rounded-lg border border-blue-400 outline-none text-sm focus:ring-2 focus:ring-blue-300"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUpdateModal(false);
+                    setSelectedUpdateRecord(null);
+                  }}
+                  disabled={isUpdating}
+                  className="flex-1 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm disabled:opacity-50"
+                >
+                  {isUpdating ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>

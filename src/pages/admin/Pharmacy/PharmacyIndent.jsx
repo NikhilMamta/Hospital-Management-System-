@@ -23,6 +23,7 @@ const PharmacyIndents = () => {
   const [editMode, setEditMode] = useState(false);
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [indents, setIndents] = useState([]);
+  const [otDaysMap, setOtDaysMap] = useState({}); // { ipd_number: daysNumber }
   const [admissionPatients, setAdmissionPatients] = useState([]);
   const [activePatientsData, setactivePatientsData] = useState([]);
   const [medicinesList, setMedicinesList] = useState([]);
@@ -228,6 +229,52 @@ const PharmacyIndents = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMedicineDropdown]);
 
+  // Fetch OT completion days for each unique IPD number in the given indents list.
+  // Only considers ot_information rows where actual2 IS set (OT completed).
+  const loadOtDaysForIndents = async (indentsList) => {
+    try {
+      const uniqueIpds = [
+        ...new Set(
+          (indentsList || []).map((i) => i.ipd_number).filter(Boolean),
+        ),
+      ];
+      if (uniqueIpds.length === 0) return;
+
+      const { data, error } = await supabase
+        .from("ot_information")
+        .select("ipd_number, actual2, status")
+        .in("ipd_number", uniqueIpds)
+        .not("actual2", "is", null);
+
+      if (error || !data) return;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const map = {};
+      data.forEach((row) => {
+        // Skip cancelled OT records — no value should be shown
+        if (row.status === "Cancel") return;
+
+        const completedDate = new Date(row.actual2);
+        completedDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.floor(
+          (today - completedDate) / (1000 * 60 * 60 * 24),
+        );
+        // Keep the smallest (earliest) completion gap if multiple rows exist
+        if (
+          map[row.ipd_number] === undefined ||
+          diffDays < map[row.ipd_number]
+        ) {
+          map[row.ipd_number] = diffDays < 0 ? 0 : diffDays;
+        }
+      });
+      setOtDaysMap(map);
+    } catch (err) {
+      console.error("Error loading OT days:", err);
+    }
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -240,6 +287,9 @@ const PharmacyIndents = () => {
 
       if (indentsError) throw indentsError;
       setIndents(indentsData || []);
+
+      // Load OT completion days for the fetched indents
+      await loadOtDaysForIndents(indentsData || []);
 
       // Load admission patients from ipd_admissions
       const { data: patientsData, error: patientsError } = await supabase
@@ -760,7 +810,7 @@ const PharmacyIndents = () => {
             hour12: false,
           })
           .replace(",", ""),
-        indent_number:
+        indent_no:
           editMode && selectedIndent
             ? selectedIndent.indent_no
             : await generateIndentNumber(),
@@ -815,11 +865,11 @@ const PharmacyIndents = () => {
         showPopup("Indent created successfully!");
 
         // fire and forget WhatsApp notification for new indents
-        sendIndentApprovalNotification(
-          insertedData,
-          medicines,
-          requestTypes,
-        ).catch((err) => console.error("[WhatsApp] Notification error:", err));
+        // sendIndentApprovalNotification(
+        //   insertedData,
+        //   medicines,
+        //   requestTypes,
+        // ).catch((err) => console.error("[WhatsApp] Notification error:", err));
       }
       console.log(insertedData);
 
@@ -1059,6 +1109,9 @@ const PharmacyIndents = () => {
                       Date
                     </th>
                     <th className="px-4 py-3 text-sm font-semibold text-left">
+                      OT Done
+                    </th>
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Actions
                     </th>
                   </tr>
@@ -1150,6 +1203,18 @@ const PharmacyIndents = () => {
                                   },
                                 )
                               : "-"}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            {indent.ipd_number &&
+                            otDaysMap[indent.ipd_number] !== undefined ? (
+                              <span className="px-2 py-1 text-xs font-semibold text-purple-700 bg-purple-100 rounded-full">
+                                {otDaysMap[indent.ipd_number] === 0
+                                  ? "Today"
+                                  : `${otDaysMap[indent.ipd_number]} day${otDaysMap[indent.ipd_number] !== 1 ? "s" : ""}`}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-2 text-sm">
                             <div className="flex gap-2">
@@ -1273,6 +1338,19 @@ const PharmacyIndents = () => {
                               : "-"}
                           </p>
                         </div>
+                        {indent.ipd_number &&
+                          otDaysMap[indent.ipd_number] !== undefined && (
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-gray-400 font-bold uppercase">
+                                OT Done
+                              </span>
+                              <p className="text-xs font-semibold text-purple-700">
+                                {otDaysMap[indent.ipd_number] === 0
+                                  ? "Today"
+                                  : `${otDaysMap[indent.ipd_number]} day${otDaysMap[indent.ipd_number] !== 1 ? "s" : ""}`}
+                              </p>
+                            </div>
+                          )}
                         <div className="flex flex-col items-end justify-end space-y-1">
                           <div className="flex flex-wrap justify-end gap-1">
                             {requestTypesData.medicineSlip && (
