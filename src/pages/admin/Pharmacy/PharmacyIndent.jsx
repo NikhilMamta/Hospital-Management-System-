@@ -865,11 +865,11 @@ const PharmacyIndents = () => {
         showPopup("Indent created successfully!");
 
         // fire and forget WhatsApp notification for new indents
-        // sendIndentApprovalNotification(
-        //   insertedData,
-        //   medicines,
-        //   requestTypes,
-        // ).catch((err) => console.error("[WhatsApp] Notification error:", err));
+        sendIndentApprovalNotification(
+          insertedData,
+          medicines,
+          requestTypes,
+        ).catch((err) => console.error("[WhatsApp] Notification error:", err));
       }
       console.log(insertedData);
 
