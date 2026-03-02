@@ -55,6 +55,23 @@ const Roster = () => {
   });
   const [currentSetDate, setCurrentSetDate] = useState(null);
 
+  // Date pickers for Previous / Next views
+  const getTodayStr = () =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const getYesterdayStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  };
+  const getTomorrowStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  };
+  const [previousSelectedDate, setPreviousSelectedDate] = useState("");
+  const [nextSelectedDate, setNextSelectedDate] = useState("");
+  const [dateRosterLoading, setDateRosterLoading] = useState(false);
+
   // Leave management state
   const [staffOnLeave, setStaffOnLeave] = useState({
     nurses: new Set(),
@@ -559,37 +576,108 @@ const Roster = () => {
     }
   };
 
-  // Effect to handle View Mode Switch
-  useEffect(() => {
-    // When viewMode changes, reload assignments from the stored rosterSets
-    // But ONLY if rosterSets is populated (avoid running on initial mount before fetch)
-    if (rosterSets.current || rosterSets.previous || rosterSets.next) {
-      let set = null;
-      if (viewMode === "current") set = rosterSets.current;
-      else if (viewMode === "previous") set = rosterSets.previous;
-      else if (viewMode === "next") set = rosterSets.next;
+  // Helper: produce a blank assignments skeleton
+  const getBlankAssignments = () => {
+    const blank = {};
+    wards.forEach((ward) => {
+      blank[ward] = { "Shift A": [], "Shift B": [], "Shift C": [] };
+    });
+    return blank;
+  };
 
-      if (set) {
-        const parsed = parseRosterData(set, staffData, staffOnLeave);
-        setAssignments(parsed);
-        setLastSaveTime(set[0].timestamp);
-        setCurrentSetDate(set[0].timestamp);
-      } else {
-        // Initialize empty if no set for this view
-        const initialAssignments = {};
-        wards.forEach((ward) => {
-          initialAssignments[ward] = {
-            "Shift A": [],
-            "Shift B": [],
-            "Shift C": [],
-          };
+  // Fetch roster rows for a specific start_date (used by Previous / Next date pickers)
+  const fetchRosterForDate = async (dateStr) => {
+    try {
+      setDateRosterLoading(true);
+      const { data, error } = await supabase
+        .from("roster")
+        .select("*")
+        .eq("start_date", dateStr)
+        .order("timestamp", { ascending: false });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Group by timestamp and pick the latest group
+        const grouped = {};
+        data.forEach((row) => {
+          if (!grouped[row.timestamp]) grouped[row.timestamp] = [];
+          grouped[row.timestamp].push(row);
         });
-        setAssignments(initialAssignments);
+        const sortedGroups = Object.values(grouped).sort(
+          (a, b) => new Date(b[0].timestamp) - new Date(a[0].timestamp),
+        );
+        const latestGroup = sortedGroups[0];
+        const parsed = parseRosterData(latestGroup, staffData, staffOnLeave);
+        setAssignments(parsed);
+        setLastSaveTime(latestGroup[0].timestamp);
+        setCurrentSetDate(latestGroup[0].timestamp);
+      } else {
+        // No roster saved for this date — show blank
+        setAssignments(getBlankAssignments());
         setLastSaveTime(null);
         setCurrentSetDate(null);
       }
+    } catch (err) {
+      console.error("Error fetching roster for date:", err);
+      showToast("Failed to load roster for selected date", "error");
+      setAssignments(getBlankAssignments());
+    } finally {
+      setDateRosterLoading(false);
     }
-  }, [viewMode, rosterSets, staffData, staffOnLeave]);
+  };
+
+  // Effect to handle View Mode Switch (for 'current' only; previous/next use date pickers)
+  useEffect(() => {
+    if (viewMode === "current") {
+      if (rosterSets.current || rosterSets.previous || rosterSets.next) {
+        const set = rosterSets.current;
+        if (set) {
+          const parsed = parseRosterData(set, staffData, staffOnLeave);
+          setAssignments(parsed);
+          setLastSaveTime(set[0].timestamp);
+          setCurrentSetDate(set[0].timestamp);
+        } else {
+          setAssignments(getBlankAssignments());
+          setLastSaveTime(null);
+          setCurrentSetDate(null);
+        }
+      }
+    } else if (viewMode === "previous") {
+      // When switching TO previous, load the date-picker roster (or blank)
+      if (previousSelectedDate) {
+        fetchRosterForDate(previousSelectedDate);
+      } else {
+        // Default: yesterday
+        const yday = getYesterdayStr();
+        setPreviousSelectedDate(yday);
+        fetchRosterForDate(yday);
+      }
+    } else if (viewMode === "next") {
+      if (nextSelectedDate) {
+        fetchRosterForDate(nextSelectedDate);
+      } else {
+        // Default: tomorrow
+        const tmrw = getTomorrowStr();
+        setNextSelectedDate(tmrw);
+        fetchRosterForDate(tmrw);
+      }
+    }
+  }, [viewMode]);
+
+  // Re-fetch when the previous date picker value changes
+  useEffect(() => {
+    if (viewMode === "previous" && previousSelectedDate) {
+      fetchRosterForDate(previousSelectedDate);
+    }
+  }, [previousSelectedDate]);
+
+  // Re-fetch when the next date picker value changes
+  useEffect(() => {
+    if (viewMode === "next" && nextSelectedDate) {
+      fetchRosterForDate(nextSelectedDate);
+    }
+  }, [nextSelectedDate]);
 
   // reusable function to fetch staff list and latest roster
   const fetchStaffAndRoster = async () => {
@@ -1491,49 +1579,104 @@ const Roster = () => {
         </div>
 
         {/* Compact Controls & Navigation */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4 bg-white p-3 rounded-lg shadow-sm">
-          {/* Navigation Buttons */}
-          <div className="flex bg-gray-100 rounded p-1">
-            <button
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "previous" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setViewMode("previous")}
-            >
-              Previous
-            </button>
-            <button
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "current" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setViewMode("current")}
-            >
-              Current
-            </button>
-            <button
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "next" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setViewMode("next")}
-            >
-              Next
-            </button>
-          </div>
-
-          {/* Action Buttons - ONLY SHOW IN CURRENT MODE */}
-          {viewMode === "current" && (
-            <div className="flex flex-wrap gap-1">
+        <div className="flex flex-col gap-2 mb-4 bg-white p-3 rounded-lg shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            {/* Navigation Buttons */}
+            <div className="flex bg-gray-100 rounded p-1">
               <button
-                className="px-3 py-1.5 bg-rose-500 text-white rounded text-xs font-medium hover:bg-rose-600 transition-colors"
-                onClick={handleClearAllAssignments}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "previous" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setViewMode("previous")}
               >
-                Clear All
+                ◀ Previous
               </button>
               <button
-                className="px-3 py-1.5 bg-emerald-500 text-white rounded text-xs font-medium hover:bg-emerald-600 transition-colors"
-                onClick={handleSaveRoster}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "current" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setViewMode("current")}
               >
-                Save Roster
+                Current
+              </button>
+              <button
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "next" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setViewMode("next")}
+              >
+                Next ▶
               </button>
             </div>
+
+            {/* Action Buttons - ONLY SHOW IN CURRENT MODE */}
+            {viewMode === "current" && (
+              <div className="flex flex-wrap gap-1">
+                <button
+                  className="px-3 py-1.5 bg-rose-500 text-white rounded text-xs font-medium hover:bg-rose-600 transition-colors"
+                  onClick={handleClearAllAssignments}
+                >
+                  Clear All
+                </button>
+                <button
+                  className="px-3 py-1.5 bg-emerald-500 text-white rounded text-xs font-medium hover:bg-emerald-600 transition-colors"
+                  onClick={handleSaveRoster}
+                >
+                  Save Roster
+                </button>
+              </div>
+            )}
+            {viewMode !== "current" && (
+              <div className="flex items-center gap-2">
+                {dateRosterLoading && (
+                  <span className="text-xs text-blue-500 animate-pulse">
+                    Loading...
+                  </span>
+                )}
+                <div className="px-3 py-1.5 text-xs text-gray-500 italic bg-gray-50 rounded border border-gray-200">
+                  Read-Only Mode
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Previous Date Picker */}
+          {viewMode === "previous" && (
+            <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+              <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                📅 View past roster for:
+              </span>
+              <input
+                type="date"
+                value={previousSelectedDate}
+                max={getYesterdayStr()}
+                onChange={(e) => setPreviousSelectedDate(e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white"
+              />
+              {previousSelectedDate && (
+                <span className="text-xs text-gray-400">
+                  {currentSetDate
+                    ? `Showing roster saved: ${new Date(currentSetDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}`
+                    : "No roster saved for this date — showing blank"}
+                </span>
+              )}
+            </div>
           )}
-          {viewMode !== "current" && (
-            <div className="px-3 py-1.5 text-xs text-gray-500 italic bg-gray-50 rounded border border-gray-200">
-              Read-Only Mode
+
+          {/* Next Date Picker */}
+          {viewMode === "next" && (
+            <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+              <span className="text-xs text-purple-500 font-medium whitespace-nowrap">
+                📅 View planned roster for:
+              </span>
+              <input
+                type="date"
+                value={nextSelectedDate}
+                min={getTomorrowStr()}
+                onChange={(e) => setNextSelectedDate(e.target.value)}
+                className="border border-purple-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+              />
+              {nextSelectedDate && (
+                <span className="text-xs text-gray-400">
+                  {currentSetDate
+                    ? `Showing planned roster saved: ${new Date(currentSetDate).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}`
+                    : "No roster planned for this date — showing blank"}
+                </span>
+              )}
             </div>
           )}
         </div>
