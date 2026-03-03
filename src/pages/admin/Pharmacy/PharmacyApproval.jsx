@@ -249,9 +249,9 @@ const PharmacyApproval = () => {
   };
 
   // Load data from Supabase
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       // Load pending indents (status = 'pending')
       const { data: pendingData, error: pendingError } = await supabase
@@ -352,6 +352,88 @@ const PharmacyApproval = () => {
     loadData();
     fetchInvestigationTests();
 
+    // Incrementally update state from a single realtime event
+    const handleRealtimeChange = (payload) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+
+      if (eventType === "DELETE") {
+        const id = oldRow?.id;
+        if (id) {
+          setPendingIndents((prev) => prev.filter((r) => r.id !== id));
+          setHistoryIndents((prev) => prev.filter((r) => r.id !== id));
+        }
+        return;
+      }
+
+      const row = newRow;
+      if (!row) return;
+
+      // Remove from both arrays first
+      setPendingIndents((prev) =>
+        prev.filter((r) => r.id !== parseInt(row.id)),
+      );
+      setHistoryIndents((prev) =>
+        prev.filter((r) => r.id !== parseInt(row.id)),
+      );
+
+      try {
+        const formatted = {
+          id: row.id,
+          indentNumber: row.indent_no,
+          admissionNumber: row.admission_number,
+          ipdNumber: row.ipd_number,
+          staffName: row.staff_name,
+          consultantName: row.consultant_name,
+          patientName: row.patient_name,
+          uhidNumber: row.uhid_number,
+          age: row.age,
+          gender: row.gender,
+          wardLocation: row.ward_location,
+          category: row.category,
+          room: row.room,
+          diagnosis: row.diagnosis,
+          requestTypes: parseJsonField(row.request_types),
+          medicines: parseJsonField(row.medicines) || [],
+          investigations: parseJsonField(row.investigations) || [],
+          investigationAdvice: parseJsonField(row.investigation_advice),
+          timestamp: row.timestamp,
+          status: row.status,
+          slipImage: row.slip_image,
+          slipImageUrl: row.slip_image_url,
+          approvedAt: row.approved_at,
+          rejectedAt: row.rejected_at,
+          approvedBy: row.approved_by,
+          updatedAt: row.updated_at,
+          planned1: row.planned1,
+          actual1: row.actual1,
+        };
+
+        // Pending: planned1 set, actual1 not set, status = pending
+        if (row.planned1 && !row.actual1 && row.status === "pending") {
+          setPendingIndents((prev) => [formatted, ...prev]);
+        }
+        // History: actual1 set, status is approved or rejected
+        else if (
+          row.actual1 &&
+          row.planned1 &&
+          (row.status === "approved" || row.status === "rejected")
+        ) {
+          setHistoryIndents((prev) => [formatted, ...prev]);
+        }
+
+        // Add patient name if new
+        if (formatted.patientName) {
+          setPatientNames((prev) =>
+            prev.includes(formatted.patientName)
+              ? prev
+              : [...prev, formatted.patientName].sort(),
+          );
+        }
+      } catch (e) {
+        console.error("Error processing realtime pharmacy approval event:", e);
+      }
+    };
+
     const channel = supabase
       .channel("pharmacy_approval_changes")
       .on(
@@ -361,8 +443,8 @@ const PharmacyApproval = () => {
           schema: "public",
           table: "pharmacy",
         },
-        () => {
-          loadData();
+        (payload) => {
+          handleRealtimeChange(payload);
         },
       )
       .subscribe();

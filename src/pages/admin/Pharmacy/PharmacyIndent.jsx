@@ -275,9 +275,9 @@ const PharmacyIndents = () => {
     }
   };
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       // Load indents from pharmacy table
       const { data: indentsData, error: indentsError } = await supabase
@@ -535,8 +535,25 @@ const PharmacyIndents = () => {
           schema: "public",
           table: "pharmacy",
         },
-        () => {
-          loadData();
+        (payload) => {
+          const { eventType, new: newRow, old: oldRow } = payload;
+
+          if (eventType === "DELETE") {
+            const id = oldRow?.id;
+            if (id) {
+              setIndents((prev) => prev.filter((r) => r.id !== id));
+            }
+            return;
+          }
+
+          // INSERT or UPDATE — merge the changed row into state
+          const row = newRow;
+          if (!row) return;
+
+          setIndents((prev) => {
+            const without = prev.filter((r) => r.id !== row.id);
+            return [row, ...without];
+          });
         },
       )
       .subscribe();

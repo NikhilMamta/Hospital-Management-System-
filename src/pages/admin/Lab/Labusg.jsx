@@ -1,46 +1,112 @@
-import React, { useState, useEffect } from 'react';
-import { X, Eye, FileText, Upload, Check } from 'lucide-react';
-import supabase from '../../../SupabaseClient';
-import { useNotification } from '../../../contexts/NotificationContext';
+import React, { useState, useEffect } from "react";
+import { X, Eye, FileText, Upload, Check } from "lucide-react";
+import supabase from "../../../SupabaseClient";
+import { useNotification } from "../../../contexts/NotificationContext";
 
 const USG = () => {
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState("pending");
   const [pendingRecords, setPendingRecords] = useState([]);
   const [historyRecords, setHistoryRecords] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [viewingRecord, setViewingRecord] = useState(null);
-  const [modalError, setModalError] = useState('');
+  const [modalError, setModalError] = useState("");
   const [reportPreview, setReportPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [selectedPatient, setSelectedPatient] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedPatient, setSelectedPatient] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
   const [patientNames, setPatientNames] = useState([]);
   const { showNotification } = useNotification();
 
   const [formData, setFormData] = useState({
     reportImage: null,
-    remarks: ''
+    remarks: "",
   });
 
   useEffect(() => {
     loadData();
 
-    // Set up real-time subscription
+    // Format a raw lab record into the component's UI model
+    const formatRecord = (record) => ({
+      id: record.id,
+      uniqueNumber: record.admission_no || "N/A",
+      patientName: record.patient_name || "N/A",
+      phoneNumber: record.phone_no || "N/A",
+      age: record.age || "N/A",
+      gender: record.gender || "N/A",
+      bedNo: record.bed_no || "N/A",
+      location: record.location || "N/A",
+      wardType: record.ward_type || "N/A",
+      room: record.room || "N/A",
+      reasonForVisit: record.reason_for_visit || "N/A",
+      adviceNo: record.admission_no || "N/A",
+      category: record.category,
+      priority: record.priority,
+      radiologyType: record.radiology_type,
+      radiologyTests: record.radiology_tests || [],
+      usgReport: record.report_url,
+      usgRemarks: record.lab_report_remarks,
+      planned3: record.planned3,
+      actual3: record.actual3,
+      paymentStatus: record.payment_status,
+      usgId: record.id,
+      admissionNo: record.admission_no,
+    });
+
+    // Incrementally update state from a single realtime event
+    const handleRealtimeChange = (payload) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+
+      if (eventType === "DELETE") {
+        const id = oldRow?.id;
+        if (!id) return;
+        setPendingRecords((prev) => prev.filter((r) => r.id !== id));
+        setHistoryRecords((prev) => prev.filter((r) => r.id !== id));
+        return;
+      }
+
+      const row = newRow;
+      if (!row) return;
+
+      const isRelevant =
+        row.category === "Radiology" && row.radiology_type === "USG";
+
+      setPendingRecords((prev) => prev.filter((r) => r.id !== row.id));
+      setHistoryRecords((prev) => prev.filter((r) => r.id !== row.id));
+
+      if (!isRelevant) return;
+
+      const formatted = formatRecord(row);
+
+      if (row.planned3 && !row.actual3 && row.payment_status === "Yes") {
+        setPendingRecords((prev) => [formatted, ...prev]);
+      } else if (row.planned3 && row.actual3) {
+        setHistoryRecords((prev) => [formatted, ...prev]);
+      }
+
+      if (formatted.patientName && formatted.patientName !== "N/A") {
+        setPatientNames((prev) =>
+          prev.includes(formatted.patientName)
+            ? prev
+            : [...prev, formatted.patientName].sort(),
+        );
+      }
+    };
+
     const channel = supabase
-      .channel('usg-changes')
+      .channel("usg-changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'lab'
+          event: "*",
+          schema: "public",
+          table: "lab",
         },
-        () => {
-          loadData();
-        }
+        (payload) => {
+          handleRealtimeChange(payload);
+        },
       )
       .subscribe();
 
@@ -49,38 +115,38 @@ const USG = () => {
     };
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     try {
-      setInitialLoading(true);
+      if (!silent) setInitialLoading(true);
 
       // Load pending USG records
       // Conditions: category = 'Radiology', radiology_type = 'USG', planned3 IS NOT NULL, actual3 IS NULL, payment_status IS NOT NULL
       const { data: pendingData, error: pendingError } = await supabase
-        .from('lab')
+        .from("lab")
         .select(`*`)
-        .eq('category', 'Radiology')
-        .eq('radiology_type', 'USG')
-        .eq('payment_status', 'Yes')
-        .not('planned3', 'is', null)
-        .is('actual3', null)        
-        .order('timestamp', { ascending: false });
+        .eq("category", "Radiology")
+        .eq("radiology_type", "USG")
+        .eq("payment_status", "Yes")
+        .not("planned3", "is", null)
+        .is("actual3", null)
+        .order("timestamp", { ascending: false });
 
       if (pendingError) throw pendingError;
 
-      const formattedPending = pendingData.map(record => {
+      const formattedPending = pendingData.map((record) => {
         return {
           id: record.id,
-          uniqueNumber: record.admission_no || 'N/A',
-          patientName: record.patient_name || 'N/A',
-          phoneNumber: record.phone_no || 'N/A',
-          age: record.age || 'N/A',
-          gender: record.gender || 'N/A',
-          bedNo: record.bed_no || 'N/A',
-          location: record.location || 'N/A',
-          wardType: record.ward_type || 'N/A',
-          room: record.room || 'N/A',
-          reasonForVisit: record.reason_for_visit || 'N/A',
-          adviceNo: record.admission_no || 'N/A',
+          uniqueNumber: record.admission_no || "N/A",
+          patientName: record.patient_name || "N/A",
+          phoneNumber: record.phone_no || "N/A",
+          age: record.age || "N/A",
+          gender: record.gender || "N/A",
+          bedNo: record.bed_no || "N/A",
+          location: record.location || "N/A",
+          wardType: record.ward_type || "N/A",
+          room: record.room || "N/A",
+          reasonForVisit: record.reason_for_visit || "N/A",
+          adviceNo: record.admission_no || "N/A",
           category: record.category,
           priority: record.priority,
           radiologyType: record.radiology_type,
@@ -89,7 +155,7 @@ const USG = () => {
           actual3: record.actual3,
           paymentStatus: record.payment_status,
           usgId: record.id,
-          admissionNo: record.admission_no
+          admissionNo: record.admission_no,
         };
       });
 
@@ -97,30 +163,30 @@ const USG = () => {
 
       // Load completed USG records (actual3 IS NOT NULL)
       const { data: historyData, error: historyError } = await supabase
-        .from('lab')
+        .from("lab")
         .select(`*`)
-        .eq('category', 'Radiology')
-        .eq('radiology_type', 'USG')
-        .not('planned3', 'is', null)
-        .not('actual3', 'is', null)
-        .order('actual3', { ascending: false });
+        .eq("category", "Radiology")
+        .eq("radiology_type", "USG")
+        .not("planned3", "is", null)
+        .not("actual3", "is", null)
+        .order("actual3", { ascending: false });
 
       if (historyError) throw historyError;
 
-      const formattedHistory = historyData.map(record => {
+      const formattedHistory = historyData.map((record) => {
         return {
           id: record.id,
-          uniqueNumber: record.admission_no || 'N/A',
-          patientName: record.patient_name || 'N/A',
-          phoneNumber: record.phone_no || 'N/A',
-          age: record.age || 'N/A',
-          gender: record.gender || 'N/A',
-          bedNo: record.bed_no || 'N/A',
-          location: record.location || 'N/A',
-          wardType: record.ward_type || 'N/A',
-          room: record.room || 'N/A',
-          reasonForVisit: record.reason_for_visit || 'N/A',
-          adviceNo: record.admission_no || 'N/A',
+          uniqueNumber: record.admission_no || "N/A",
+          patientName: record.patient_name || "N/A",
+          phoneNumber: record.phone_no || "N/A",
+          age: record.age || "N/A",
+          gender: record.gender || "N/A",
+          bedNo: record.bed_no || "N/A",
+          location: record.location || "N/A",
+          wardType: record.ward_type || "N/A",
+          room: record.room || "N/A",
+          reasonForVisit: record.reason_for_visit || "N/A",
+          adviceNo: record.admission_no || "N/A",
           category: record.category,
           priority: record.priority,
           radiologyType: record.radiology_type,
@@ -131,7 +197,7 @@ const USG = () => {
           actual3: record.actual3,
           paymentStatus: record.payment_status,
           usgId: record.id,
-          admissionNo: record.admission_no
+          admissionNo: record.admission_no,
         };
       });
 
@@ -139,12 +205,11 @@ const USG = () => {
 
       // Extract unique patient names for filter
       const allRecords = [...formattedPending, ...formattedHistory];
-      const names = [...new Set(allRecords.map(r => r.patientName))].sort();
+      const names = [...new Set(allRecords.map((r) => r.patientName))].sort();
       setPatientNames(names);
-
     } catch (error) {
-      console.error('Failed to load data:', error);
-      setModalError('Failed to load data. Please try again.');
+      console.error("Failed to load data:", error);
+      setModalError("Failed to load data. Please try again.");
     } finally {
       setInitialLoading(false);
     }
@@ -157,9 +222,9 @@ const USG = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -167,15 +232,15 @@ const USG = () => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        setModalError('File size should be less than 5MB');
+        setModalError("File size should be less than 5MB");
         return;
       }
 
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
-          reportImage: reader.result
+          reportImage: reader.result,
         }));
         setReportPreview(reader.result);
       };
@@ -185,12 +250,12 @@ const USG = () => {
 
   const handleSubmit = async () => {
     if (!formData.reportImage) {
-      setModalError('Please upload report image');
+      setModalError("Please upload report image");
       return;
     }
 
     if (!formData.remarks.trim()) {
-      setModalError('Please enter remarks');
+      setModalError("Please enter remarks");
       return;
     }
 
@@ -198,8 +263,8 @@ const USG = () => {
       setLoading(true);
 
       // Extract raw base64 data and mime type
-      const [meta, base64Data] = formData.reportImage.split(',');
-      const mimeType = meta.split(':')[1].split(';')[0];
+      const [meta, base64Data] = formData.reportImage.split(",");
+      const mimeType = meta.split(":")[1].split(";")[0];
 
       const binaryData = atob(base64Data);
       const arrayBuffer = new ArrayBuffer(binaryData.length);
@@ -212,40 +277,44 @@ const USG = () => {
       const blob = new Blob([uint8Array], { type: mimeType });
 
       // Determine extension based on mime type
-      const fileExt = mimeType === 'application/pdf' ? 'pdf' : 'jpg';
+      const fileExt = mimeType === "application/pdf" ? "pdf" : "jpg";
       const fileName = `usg_${selectedRecord.id}_${Date.now()}.${fileExt}`;
 
       // Upload report to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('usg_reports')
+        .from("usg_reports")
         .upload(fileName, blob, {
           contentType: mimeType,
-          upsert: true
+          upsert: true,
         });
 
       if (uploadError) throw uploadError;
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('usg_reports')
-        .getPublicUrl(fileName);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("usg_reports").getPublicUrl(fileName);
 
       // Update lab record with USG info
       const { error: updateError } = await supabase
-        .from('lab')
+        .from("lab")
         .update({
           report_url: publicUrl,
           lab_report_remarks: formData.remarks,
-          actual3: new Date().toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false
-          }).replace(',', ''),
-          planned4: new Date().toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false
-          }).replace(',', '')
+          actual3: new Date()
+            .toLocaleString("en-CA", {
+              timeZone: "Asia/Kolkata",
+              hour12: false,
+            })
+            .replace(",", ""),
+          planned4: new Date()
+            .toLocaleString("en-CA", {
+              timeZone: "Asia/Kolkata",
+              hour12: false,
+            })
+            .replace(",", ""),
         })
-        .eq('id', selectedRecord.id);
+        .eq("id", selectedRecord.id);
 
       if (updateError) throw updateError;
 
@@ -255,8 +324,8 @@ const USG = () => {
       setShowModal(false);
       resetForm();
     } catch (error) {
-      console.error('Failed to save USG report:', error);
-      setModalError('Failed to save report. Please try again.');
+      console.error("Failed to save USG report:", error);
+      setModalError("Failed to save report. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -265,10 +334,10 @@ const USG = () => {
   const resetForm = () => {
     setFormData({
       reportImage: null,
-      remarks: ''
+      remarks: "",
     });
     setReportPreview(null);
-    setModalError('');
+    setModalError("");
     setSelectedRecord(null);
   };
 
@@ -279,15 +348,15 @@ const USG = () => {
 
   const handleViewReport = (reportUrl) => {
     if (!reportUrl) {
-      showNotification('No USG report available', 'info');
+      showNotification("No USG report available", "info");
       return;
     }
 
     // Check if it's a PDF
-    const isPdf = reportUrl.toLowerCase().includes('.pdf');
+    const isPdf = reportUrl.toLowerCase().includes(".pdf");
 
     if (isPdf) {
-      window.open(reportUrl, '_blank');
+      window.open(reportUrl, "_blank");
     } else {
       const newWindow = window.open();
       newWindow.document.write(`
@@ -303,15 +372,19 @@ const USG = () => {
 
   // Filter Logic
   const applyFilters = (records) => {
-    return records.filter(record => {
-      const matchesPatient = selectedPatient ? record.patientName === selectedPatient : true;
+    return records.filter((record) => {
+      const matchesPatient = selectedPatient
+        ? record.patientName === selectedPatient
+        : true;
       // Date Matching on Planned3
       let matchesDate = true;
       if (selectedDate) {
         if (!record.planned3) {
           matchesDate = false;
         } else {
-          const recordDate = new Date(record.planned3).toLocaleDateString('en-CA');
+          const recordDate = new Date(record.planned3).toLocaleDateString(
+            "en-CA",
+          );
           const filterDate = selectedDate;
           matchesDate = recordDate === filterDate;
         }
@@ -327,7 +400,9 @@ const USG = () => {
   const totalRecords = [...pendingRecords, ...historyRecords].length;
   const completedRecords = historyRecords.length;
   const pendingCount = pendingRecords.length;
-  const highPriorityCount = [...pendingRecords, ...historyRecords].filter(r => r.priority === 'High').length;
+  const highPriorityCount = [...pendingRecords, ...historyRecords].filter(
+    (r) => r.priority === "High",
+  ).length;
 
   if (initialLoading) {
     return (
@@ -348,8 +423,12 @@ const USG = () => {
         <div className="px-4 py-3 sm:px-6">
           <div className="flex flex-col gap-3 justify-between items-start sm:flex-row sm:items-center">
             <div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl lg:text-3xl">USG Management</h1>
-              <p className="hidden mt-1 text-sm text-gray-600 sm:block">Process USG reports and manage records</p>
+              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl lg:text-3xl">
+                USG Management
+              </h1>
+              <p className="hidden mt-1 text-sm text-gray-600 sm:block">
+                Process USG reports and manage records
+              </p>
             </div>
             <button
               onClick={loadData}
@@ -365,29 +444,45 @@ const USG = () => {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="p-4 bg-white rounded-lg border border-green-200 shadow-sm">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-gray-600 uppercase">Total USG</span>
-                <span className="text-2xl font-bold text-green-600 mt-1">{totalRecords}</span>
+                <span className="text-xs font-medium text-gray-600 uppercase">
+                  Total USG
+                </span>
+                <span className="text-2xl font-bold text-green-600 mt-1">
+                  {totalRecords}
+                </span>
               </div>
             </div>
 
             <div className="p-4 bg-white rounded-lg border border-green-200 shadow-sm">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-gray-600 uppercase">Completed</span>
-                <span className="text-2xl font-bold text-green-600 mt-1">{completedRecords}</span>
+                <span className="text-xs font-medium text-gray-600 uppercase">
+                  Completed
+                </span>
+                <span className="text-2xl font-bold text-green-600 mt-1">
+                  {completedRecords}
+                </span>
               </div>
             </div>
 
             <div className="p-4 bg-white rounded-lg border border-orange-200 shadow-sm">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-gray-600 uppercase">Pending</span>
-                <span className="text-2xl font-bold text-orange-600 mt-1">{pendingCount}</span>
+                <span className="text-xs font-medium text-gray-600 uppercase">
+                  Pending
+                </span>
+                <span className="text-2xl font-bold text-orange-600 mt-1">
+                  {pendingCount}
+                </span>
               </div>
             </div>
 
             <div className="p-4 bg-white rounded-lg border border-red-200 shadow-sm">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-gray-600 uppercase">High Priority</span>
-                <span className="text-2xl font-bold text-red-600 mt-1">{highPriorityCount}</span>
+                <span className="text-xs font-medium text-gray-600 uppercase">
+                  High Priority
+                </span>
+                <span className="text-2xl font-bold text-red-600 mt-1">
+                  {highPriorityCount}
+                </span>
               </div>
             </div>
           </div>
@@ -401,20 +496,22 @@ const USG = () => {
               {/* Tabs */}
               <nav className="flex gap-4 -mb-[1px]">
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${activeTab === 'pending'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
+                  onClick={() => setActiveTab("pending")}
+                  className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${
+                    activeTab === "pending"
+                      ? "border-green-500 text-green-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
                 >
                   Pending ({filteredPendingRecords.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('history')}
-                  className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${activeTab === 'history'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
+                  onClick={() => setActiveTab("history")}
+                  className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${
+                    activeTab === "history"
+                      ? "border-green-500 text-green-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
                 >
                   History ({filteredHistoryRecords.length})
                 </button>
@@ -445,8 +542,8 @@ const USG = () => {
                 {(selectedPatient || selectedDate) && (
                   <button
                     onClick={() => {
-                      setSelectedPatient('');
-                      setSelectedDate('');
+                      setSelectedPatient("");
+                      setSelectedDate("");
                     }}
                     className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
                   >
@@ -460,20 +557,22 @@ const USG = () => {
             <div className="lg:hidden flex flex-col gap-2 sm:gap-3 pb-2 sm:pb-3">
               <nav className="flex gap-2 sm:gap-4 -mb-[1px]">
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className={`px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-medium border-b-2 transition-colors ${activeTab === 'pending'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
+                  onClick={() => setActiveTab("pending")}
+                  className={`px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-medium border-b-2 transition-colors ${
+                    activeTab === "pending"
+                      ? "border-green-500 text-green-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
                 >
                   Pending ({filteredPendingRecords.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('history')}
-                  className={`px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-medium border-b-2 transition-colors ${activeTab === 'history'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
+                  onClick={() => setActiveTab("history")}
+                  className={`px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-medium border-b-2 transition-colors ${
+                    activeTab === "history"
+                      ? "border-green-500 text-green-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
                 >
                   History ({filteredHistoryRecords.length})
                 </button>
@@ -501,8 +600,8 @@ const USG = () => {
                 {(selectedPatient || selectedDate) && (
                   <button
                     onClick={() => {
-                      setSelectedPatient('');
-                      setSelectedDate('');
+                      setSelectedPatient("");
+                      setSelectedDate("");
                     }}
                     className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-xs sm:text-sm font-medium whitespace-nowrap"
                   >
@@ -519,27 +618,55 @@ const USG = () => {
       <div className="flex-1 overflow-hidden p-3 md:p-4">
         <div className="h-full flex flex-col">
           {/* Pending Section */}
-          {activeTab === 'pending' && (
+          {activeTab === "pending" && (
             <div className="flex-1 flex flex-col min-h-0">
               {/* Desktop Table - Scrollable Container */}
               <div className="hidden md:block flex-1 overflow-auto bg-white rounded-lg border border-gray-200 shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200 border-separate border-tools">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Action</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Admission No</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Patient Name</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Phone Number</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50 min-w-[300px]">Reason For Visit</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Age</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Bed No.</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Location</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Ward Type</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Room</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Priority</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Category</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Tests</th>
-                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">Planned</th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Action
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Admission No
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Patient Name
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Phone Number
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50 min-w-[300px]">
+                        Reason For Visit
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Age
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Bed No.
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Location
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Ward Type
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Room
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Priority
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Category
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Tests
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
+                        Planned
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -554,42 +681,82 @@ const USG = () => {
                               Process
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.admissionNo}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.patientName}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.phoneNumber}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-[350px] whitespace-normal break-words text-center">{record.reasonForVisit}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.age}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.bedNo}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.location}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.wardType}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.room}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">
+                            {record.admissionNo}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.patientName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.phoneNumber}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 max-w-[350px] whitespace-normal break-words text-center">
+                            {record.reasonForVisit}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.age}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.bedNo}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.location}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.wardType}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.room}
+                          </td>
                           <td className="px-4 py-3 text-sm whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${record.priority === 'High' ? 'bg-red-100 text-red-700' :
-                              record.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-green-100 text-green-700'
-                              }`}>
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                record.priority === "High"
+                                  ? "bg-red-100 text-red-700"
+                                  : record.priority === "Medium"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-green-100 text-green-700"
+                              }`}
+                            >
                               {record.priority}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.radiologyType}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.radiologyType}
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.radiologyTests?.map((test, index) => (
                               <div key={index}>{test}</div>
                             ))}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                            {record.planned3 ? new Date(record.planned3).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {record.planned3
+                              ? new Date(record.planned3).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="14" className="px-4 py-8 text-center text-gray-500">
+                        <td
+                          colSpan="14"
+                          className="px-4 py-8 text-center text-gray-500"
+                        >
                           <FileText className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                          <p className="text-lg font-medium text-gray-900">No pending USG records</p>
-                          <p className="text-sm text-gray-500 mt-1">USG records with payment status will appear here</p>
+                          <p className="text-lg font-medium text-gray-900">
+                            No pending USG records
+                          </p>
+                          <p className="text-sm text-gray-500 mt-1">
+                            USG records with payment status will appear here
+                          </p>
                         </td>
                       </tr>
                     )}
@@ -601,11 +768,18 @@ const USG = () => {
               <div className="md:hidden flex-1 overflow-auto space-y-3">
                 {filteredPendingRecords.length > 0 ? (
                   filteredPendingRecords.map((record) => (
-                    <div key={record.id} className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div
+                      key={record.id}
+                      className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm"
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <div className="text-xs font-medium text-green-600 mb-1">Admission No: {record.admissionNo}</div>
-                          <h3 className="text-sm font-semibold text-gray-900">{record.patientName}</h3>
+                          <div className="text-xs font-medium text-green-600 mb-1">
+                            Admission No: {record.admissionNo}
+                          </div>
+                          <h3 className="text-sm font-semibold text-gray-900">
+                            {record.patientName}
+                          </h3>
                         </div>
                         <button
                           onClick={() => handleActionClick(record)}
@@ -617,31 +791,50 @@ const USG = () => {
                       <div className="space-y-2 text-xs">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Phone:</span>
-                          <span className="font-medium text-gray-900">{record.phoneNumber}</span>
+                          <span className="font-medium text-gray-900">
+                            {record.phoneNumber}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Age:</span>
-                          <span className="font-medium text-gray-900">{record.age}</span>
+                          <span className="font-medium text-gray-900">
+                            {record.age}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Bed/Room:</span>
-                          <span className="font-medium text-gray-900">{record.bedNo} / {record.room}</span>
+                          <span className="font-medium text-gray-900">
+                            {record.bedNo} / {record.room}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Priority:</span>
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${record.priority === 'High' ? 'bg-red-100 text-red-700' :
-                            record.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-green-100 text-green-700'
-                            }`}>
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              record.priority === "High"
+                                ? "bg-red-100 text-red-700"
+                                : record.priority === "Medium"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-green-100 text-green-700"
+                            }`}
+                          >
                             {record.priority}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Planned:</span>
                           <span className="font-medium text-gray-900">
-                            {record.planned3 ? new Date(record.planned3).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {record.planned3
+                              ? new Date(record.planned3).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </span>
                         </div>
                       </div>
@@ -650,8 +843,12 @@ const USG = () => {
                 ) : (
                   <div className="p-8 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
                     <FileText className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                    <p className="text-sm font-medium text-gray-900">No pending USG records</p>
-                    <p className="text-xs text-gray-500 mt-1">USG records with payment status will appear here</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      No pending USG records
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      USG records with payment status will appear here
+                    </p>
                   </div>
                 )}
               </div>
@@ -659,67 +856,140 @@ const USG = () => {
           )}
 
           {/* History Section */}
-          {activeTab === 'history' && (
+          {activeTab === "history" && (
             <div className="flex-1 flex flex-col min-h-0">
               {/* Desktop Table - Scrollable Container */}
               <div className="hidden md:block flex-1 overflow-auto bg-white rounded-lg border border-gray-200 shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200 border-separate border-tools">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Admission No</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Patient Name</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Phone Number</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50 min-w-[300px]">Reason For Visit</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Age</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Bed No.</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Location</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Ward Type</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Room</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Priority</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Category</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Tests</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Planned</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Completed</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">Report</th>
-                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50 min-w-[300px]">Remarks</th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Admission No
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Patient Name
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Phone Number
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50 min-w-[300px]">
+                        Reason For Visit
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Age
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Bed No.
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Location
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Ward Type
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Room
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Priority
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Category
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Tests
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Planned
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Completed
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50">
+                        Report
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase bg-gray-50 min-w-[300px]">
+                        Remarks
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredHistoryRecords.length > 0 ? (
                       filteredHistoryRecords.map((record) => (
                         <tr key={record.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">{record.admissionNo}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.patientName}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.phoneNumber}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-[350px] whitespace-normal break-words text-center">{record.reasonForVisit}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.age}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.bedNo}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.location}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.wardType}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.room}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">
+                            {record.admissionNo}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.patientName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.phoneNumber}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 max-w-[350px] whitespace-normal break-words text-center">
+                            {record.reasonForVisit}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.age}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.bedNo}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.location}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.wardType}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.room}
+                          </td>
                           <td className="px-4 py-3 text-sm whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${record.priority === 'High' ? 'bg-red-100 text-red-700' :
-                              record.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-green-100 text-green-700'
-                              }`}>
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                record.priority === "High"
+                                  ? "bg-red-100 text-red-700"
+                                  : record.priority === "Medium"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-green-100 text-green-700"
+                              }`}
+                            >
                               {record.priority}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{record.radiologyType}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.radiologyType}
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.radiologyTests?.map((test, index) => (
                               <div key={index}>{test}</div>
                             ))}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                            {record.planned3 ? new Date(record.planned3).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {record.planned3
+                              ? new Date(record.planned3).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                            {record.actual3 ? new Date(record.actual3).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {record.actual3
+                              ? new Date(record.actual3).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </td>
                           <td className="px-4 py-3 text-sm whitespace-nowrap">
                             <button
@@ -730,14 +1000,21 @@ const USG = () => {
                               View
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-[350px] whitespace-normal break-words text-center">{record.usgRemarks}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 max-w-[350px] whitespace-normal break-words text-center">
+                            {record.usgRemarks}
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="16" className="px-4 py-8 text-center text-gray-500">
+                        <td
+                          colSpan="16"
+                          className="px-4 py-8 text-center text-gray-500"
+                        >
                           <FileText className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                          <p className="text-lg font-medium text-gray-900">No history records</p>
+                          <p className="text-lg font-medium text-gray-900">
+                            No history records
+                          </p>
                         </td>
                       </tr>
                     )}
@@ -749,11 +1026,18 @@ const USG = () => {
               <div className="md:hidden flex-1 overflow-auto space-y-3">
                 {filteredHistoryRecords.length > 0 ? (
                   filteredHistoryRecords.map((record) => (
-                    <div key={record.id} className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div
+                      key={record.id}
+                      className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm"
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <div className="text-xs font-medium text-green-600 mb-1">Admission No: {record.admissionNo}</div>
-                          <h3 className="text-sm font-semibold text-gray-900">{record.patientName}</h3>
+                          <div className="text-xs font-medium text-green-600 mb-1">
+                            Admission No: {record.admissionNo}
+                          </div>
+                          <h3 className="text-sm font-semibold text-gray-900">
+                            {record.patientName}
+                          </h3>
                         </div>
                         <button
                           onClick={() => handleViewClick(record)}
@@ -765,31 +1049,53 @@ const USG = () => {
                       <div className="space-y-2 text-xs">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Phone:</span>
-                          <span className="font-medium text-gray-900">{record.phoneNumber}</span>
+                          <span className="font-medium text-gray-900">
+                            {record.phoneNumber}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Age:</span>
-                          <span className="font-medium text-gray-900">{record.age}</span>
+                          <span className="font-medium text-gray-900">
+                            {record.age}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Planned:</span>
                           <span className="font-medium text-gray-900">
-                            {record.planned3 ? new Date(record.planned3).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {record.planned3
+                              ? new Date(record.planned3).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Completed:</span>
                           <span className="font-medium text-gray-900">
-                            {record.actual3 ? new Date(record.actual3).toLocaleString('en-GB', {
-                              hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short'
-                            }) : '-'}
+                            {record.actual3
+                              ? new Date(record.actual3).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    day: "2-digit",
+                                    month: "short",
+                                  },
+                                )
+                              : "-"}
                           </span>
                         </div>
                         <div>
                           <span className="text-gray-600">Remarks:</span>
-                          <div className="font-medium text-gray-900 mt-1 line-clamp-2">{record.usgRemarks}</div>
+                          <div className="font-medium text-gray-900 mt-1 line-clamp-2">
+                            {record.usgRemarks}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -797,7 +1103,9 @@ const USG = () => {
                 ) : (
                   <div className="p-8 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
                     <FileText className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                    <p className="text-sm font-medium text-gray-900">No history records</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      No history records
+                    </p>
                   </div>
                 )}
               </div>
@@ -811,7 +1119,9 @@ const USG = () => {
         <div className="overflow-y-auto fixed inset-0 z-50 flex justify-center items-center p-4 bg-black bg-opacity-50">
           <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-xl">
             <div className="sticky top-0 z-10 flex justify-between items-center p-4 bg-white border-b border-gray-200 md:p-6">
-              <h2 className="text-xl font-bold text-gray-900 md:text-2xl">Process USG Report</h2>
+              <h2 className="text-xl font-bold text-gray-900 md:text-2xl">
+                Process USG Report
+              </h2>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -826,43 +1136,63 @@ const USG = () => {
             <div className="p-4 md:p-6">
               {/* Pre-filled Patient Info */}
               <div className="p-4 mb-6 bg-green-50 rounded-lg border border-green-200">
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">Patient Information</h3>
+                <h3 className="mb-3 text-sm font-semibold text-gray-900">
+                  Patient Information
+                </h3>
                 <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
                   <div>
                     <span className="text-gray-600">Admission No:</span>
-                    <div className="font-medium text-green-600">{selectedRecord.admissionNo}</div>
+                    <div className="font-medium text-green-600">
+                      {selectedRecord.admissionNo}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Name:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.patientName}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.patientName}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Phone:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.phoneNumber}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.phoneNumber}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Age:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.age}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.age}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Bed No:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.bedNo}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.bedNo}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Location:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.location}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.location}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Ward Type:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.wardType}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.wardType}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Room:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.room}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.room}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Category:</span>
-                    <div className="font-medium text-gray-900">{selectedRecord.radiologyType}</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedRecord.radiologyType}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -870,7 +1200,9 @@ const USG = () => {
               {/* Report Form */}
               <div className="space-y-4">
                 <div>
-                  <label className="block mb-1 text-sm font-medium text-gray-700">Upload Report *</label>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Upload Report *
+                  </label>
                   <div className="mt-1">
                     <input
                       type="file"
@@ -885,10 +1217,12 @@ const USG = () => {
                     >
                       {reportPreview ? (
                         <div className="text-center w-full">
-                          {reportPreview.startsWith('data:application/pdf') ? (
+                          {reportPreview.startsWith("data:application/pdf") ? (
                             <div className="flex flex-col items-center justify-center h-40 bg-gray-100 rounded-lg mb-2">
                               <FileText className="w-12 h-12 text-red-500 mb-2" />
-                              <span className="text-sm font-medium text-gray-700">PDF Report Selected</span>
+                              <span className="text-sm font-medium text-gray-700">
+                                PDF Report Selected
+                              </span>
                             </div>
                           ) : (
                             <img
@@ -901,13 +1235,19 @@ const USG = () => {
                             <Check className="w-4 h-4" />
                             Report uploaded successfully
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">Click to change file</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Click to change file
+                          </p>
                         </div>
                       ) : (
                         <div className="text-center">
                           <Upload className="mx-auto w-12 h-12 text-gray-400 mb-2" />
-                          <p className="text-sm text-gray-600">Click to upload USG report</p>
-                          <p className="text-xs text-gray-500 mt-1">PNG, JPG, PDF up to 5MB</p>
+                          <p className="text-sm text-gray-600">
+                            Click to upload USG report
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            PNG, JPG, PDF up to 5MB
+                          </p>
                         </div>
                       )}
                     </label>
@@ -915,7 +1255,9 @@ const USG = () => {
                 </div>
 
                 <div>
-                  <label className="block mb-1 text-sm font-medium text-gray-700">Remarks *</label>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Remarks *
+                  </label>
                   <textarea
                     name="remarks"
                     value={formData.remarks}
@@ -951,7 +1293,7 @@ const USG = () => {
                   disabled={loading}
                   className="px-6 py-2 w-full font-medium text-white bg-green-600 rounded-lg transition-colors hover:bg-green-700 disabled:opacity-50 sm:w-auto"
                 >
-                  {loading ? 'Processing...' : 'Save Report'}
+                  {loading ? "Processing..." : "Save Report"}
                 </button>
               </div>
             </div>
@@ -964,7 +1306,9 @@ const USG = () => {
         <div className="overflow-y-auto fixed inset-0 z-50 flex justify-center items-center p-4 bg-black bg-opacity-50">
           <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-xl">
             <div className="sticky top-0 z-10 flex justify-between items-center p-4 bg-white border-b border-gray-200 md:p-6">
-              <h2 className="text-xl font-bold text-gray-900 md:text-2xl">USG Report Details</h2>
+              <h2 className="text-xl font-bold text-gray-900 md:text-2xl">
+                USG Report Details
+              </h2>
               <button
                 onClick={() => setShowViewModal(false)}
                 className="p-1 text-gray-400 rounded-full hover:text-gray-600 hover:bg-gray-100"
@@ -976,50 +1320,72 @@ const USG = () => {
             <div className="p-4 md:p-6 space-y-6">
               {/* Patient Information */}
               <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">Patient Information</h3>
+                <h3 className="mb-3 text-sm font-semibold text-gray-900">
+                  Patient Information
+                </h3>
                 <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
                   <div>
                     <span className="text-gray-600">Admission No:</span>
-                    <div className="font-medium text-green-600">{viewingRecord.admissionNo}</div>
+                    <div className="font-medium text-green-600">
+                      {viewingRecord.admissionNo}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Name:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.patientName}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.patientName}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Phone:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.phoneNumber}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.phoneNumber}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Age:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.age}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.age}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Gender:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.gender}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.gender}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Bed No:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.bedNo}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.bedNo}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Room:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.room}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.room}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Category:</span>
-                    <div className="font-medium text-gray-900">{viewingRecord.radiologyType}</div>
+                    <div className="font-medium text-gray-900">
+                      {viewingRecord.radiologyType}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Report Image */}
               <div>
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">USG Report</h3>
+                <h3 className="mb-3 text-sm font-semibold text-gray-900">
+                  USG Report
+                </h3>
                 <div className="p-2 border rounded-lg">
                   {viewingRecord.usgReport ? (
                     <div className="relative">
-                      {viewingRecord.usgReport.toLowerCase().includes('.pdf') ? (
+                      {viewingRecord.usgReport
+                        .toLowerCase()
+                        .includes(".pdf") ? (
                         <div className="relative group">
                           <iframe
                             src={viewingRecord.usgReport}
@@ -1027,7 +1393,9 @@ const USG = () => {
                             title="USG Report PDF"
                           />
                           <button
-                            onClick={() => handleViewReport(viewingRecord.usgReport)}
+                            onClick={() =>
+                              handleViewReport(viewingRecord.usgReport)
+                            }
                             className="absolute top-2 right-2 p-2 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Open in Full Screen"
                           >
@@ -1037,7 +1405,9 @@ const USG = () => {
                       ) : (
                         <div
                           className="cursor-pointer group relative"
-                          onClick={() => handleViewReport(viewingRecord.usgReport)}
+                          onClick={() =>
+                            handleViewReport(viewingRecord.usgReport)
+                          }
                         >
                           <img
                             src={viewingRecord.usgReport}
@@ -1062,9 +1432,11 @@ const USG = () => {
 
               {/* Remarks */}
               <div>
-                <h3 className="mb-2 text-sm font-semibold text-gray-900">Remarks</h3>
+                <h3 className="mb-2 text-sm font-semibold text-gray-900">
+                  Remarks
+                </h3>
                 <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">
-                  {viewingRecord.usgRemarks || 'No remarks added'}
+                  {viewingRecord.usgRemarks || "No remarks added"}
                 </div>
               </div>
             </div>

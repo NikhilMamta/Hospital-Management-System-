@@ -11,14 +11,15 @@ const StoreMedicinePage = () => {
   const [pendingIndents, setPendingIndents] = useState([]);
   const [historyIndents, setHistoryIndents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [patientNames, setPatientNames] = useState([]);
   const { showNotification } = useNotification();
 
   // Load data from Supabase
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setIsInitialLoading(true);
     try {
       // Fetch data from pharmacy table where planned2 is not null
       const { data: pharmacyData, error } = await supabase
@@ -68,11 +69,69 @@ const StoreMedicinePage = () => {
       showNotification("Error loading data from database", "error");
     } finally {
       setLoading(false);
+      setIsInitialLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
+
+    // Parse and format a raw pharmacy record for the UI
+    const formatPharmacyRecord = (item) => ({
+      ...item,
+      request_types: item.request_types ? JSON.parse(item.request_types) : null,
+      medicines: item.medicines ? JSON.parse(item.medicines) : [],
+      investigations: item.investigations
+        ? JSON.parse(item.investigations)
+        : [],
+    });
+
+    // Incrementally update state from a single realtime event
+    const handleRealtimeChange = (payload) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+
+      if (eventType === "DELETE") {
+        const id = oldRow?.id;
+        if (!id) return;
+        setPendingIndents((prev) => prev.filter((r) => r.id !== id));
+        setHistoryIndents((prev) => prev.filter((r) => r.id !== id));
+        return;
+      }
+
+      const row = newRow;
+      if (!row) return;
+
+      // Remove from both arrays first
+      setPendingIndents((prev) => prev.filter((r) => r.id !== row.id));
+      setHistoryIndents((prev) => prev.filter((r) => r.id !== row.id));
+
+      // Only include rows where planned2 is set and status != rejected
+      if (!row.planned2 || row.status === "rejected") return;
+
+      try {
+        const formatted = formatPharmacyRecord(row);
+
+        // Pending: planned2 set, actual2 not set
+        if (row.planned2 && !row.actual2) {
+          setPendingIndents((prev) => [formatted, ...prev]);
+        }
+        // History: both planned2 and actual2 set
+        else if (row.planned2 && row.actual2) {
+          setHistoryIndents((prev) => [formatted, ...prev]);
+        }
+
+        // Add patient name if new
+        if (row.patient_name) {
+          setPatientNames((prev) =>
+            prev.includes(row.patient_name)
+              ? prev
+              : [...prev, row.patient_name].sort(),
+          );
+        }
+      } catch (e) {
+        console.error("Error processing realtime pharmacy event:", e);
+      }
+    };
 
     // Set up real-time subscription for updates
     const channel = supabase
@@ -84,8 +143,8 @@ const StoreMedicinePage = () => {
           schema: "public",
           table: "pharmacy",
         },
-        () => {
-          loadData();
+        (payload) => {
+          handleRealtimeChange(payload);
         },
       )
       .subscribe();
@@ -350,7 +409,7 @@ const StoreMedicinePage = () => {
 
       {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-4 pb-4">
-        {loading ? (
+        {isInitialLoading ? (
           <div className="flex justify-center items-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>

@@ -25,7 +25,7 @@ const PatientAdmissionSystem = () => {
   const [admissionSearchTerm, setAdmissionSearchTerm] = useState("");
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // New state for notification popup
@@ -119,15 +119,16 @@ const PatientAdmissionSystem = () => {
   const departmentInputRef = useRef(null);
   const doctorInputRef = useRef(null);
 
-  // Auto-hide notification after 3 seconds
+  // Auto-hide notification — 5s for errors, 3s for success
   useEffect(() => {
     if (showNotification) {
+      const duration = notificationType === "error" ? 5000 : 3000;
       const timer = setTimeout(() => {
         setShowNotification(false);
-      }, 1000);
+      }, duration);
       return () => clearTimeout(timer);
     }
-  }, [showNotification]);
+  }, [showNotification, notificationType]);
 
   const showNotificationPopup = (message, type = "success") => {
     setNotificationMessage(message);
@@ -374,7 +375,7 @@ const PatientAdmissionSystem = () => {
             table: "ipd_admissions",
           },
           () => {
-            loadData();
+            silentLoadData();
           },
         )
         .subscribe();
@@ -416,50 +417,52 @@ const PatientAdmissionSystem = () => {
     }
   }, [showModal]);
 
-  // Load all data from Supabase
+  // Core data-fetching logic (shared by initial + silent loads)
+  const fetchAllData = async () => {
+    // Load IPD admission records
+    const { data: ipdRecords, error: ipdError } = await supabase
+      .from("ipd_admissions")
+      .select("*")
+      .order("timestamp", { ascending: false });
+
+    if (ipdError) {
+      console.error("Error loading IPD records:", ipdError);
+      showNotificationPopup("Failed to load IPD records", "error");
+    } else {
+      setPatients(ipdRecords || []);
+    }
+
+    // Load patients eligible for IPD admission (department='IPD' and status='assigned')
+    const { data: patientAdmissionData, error: patientError } = await supabase
+      .from("patient_admission")
+      .select("*")
+      .eq("department", "IPD")
+      .eq("status", "assigned")
+      .is("actual2", null)
+      .not("planned2", "is", null)
+      .order("timestamp", { ascending: false });
+
+    if (patientError) {
+      console.error("Error loading patient admission data:", patientError);
+      showNotificationPopup("Failed to load patient data", "error");
+    } else {
+      if (ipdRecords && patientAdmissionData) {
+        const admittedAdmissionNumbers = ipdRecords.map((p) => p.admission_no);
+        const eligiblePatients = patientAdmissionData.filter(
+          (p) => !admittedAdmissionNumbers.includes(p.admission_no),
+        );
+        setIpdPatients(eligiblePatients);
+      } else if (patientAdmissionData) {
+        setIpdPatients(patientAdmissionData);
+      }
+    }
+  };
+
+  // Initial load — shows full-screen loader
   const loadData = async () => {
     try {
       setIsLoading(true);
-
-      // Load IPD admission records
-      const { data: ipdRecords, error: ipdError } = await supabase
-        .from("ipd_admissions")
-        .select("*")
-        .order("timestamp", { ascending: false });
-
-      if (ipdError) {
-        console.error("Error loading IPD records:", ipdError);
-        showNotificationPopup("Failed to load IPD records", "error");
-      } else {
-        setPatients(ipdRecords || []);
-      }
-
-      // Load patients eligible for IPD admission (department='IPD' and status='assigned')
-      const { data: patientAdmissionData, error: patientError } = await supabase
-        .from("patient_admission")
-        .select("*")
-        .eq("department", "IPD")
-        .eq("status", "assigned")
-        .is("actual2", null)
-        .not("planned2", "is", null)
-        .order("timestamp", { ascending: false });
-
-      if (patientError) {
-        console.error("Error loading patient admission data:", patientError);
-        showNotificationPopup("Failed to load patient data", "error");
-      } else {
-        if (ipdRecords && patientAdmissionData) {
-          const admittedAdmissionNumbers = ipdRecords.map(
-            (p) => p.admission_no,
-          );
-          const eligiblePatients = patientAdmissionData.filter(
-            (p) => !admittedAdmissionNumbers.includes(p.admission_no),
-          );
-          setIpdPatients(eligiblePatients);
-        } else if (patientAdmissionData) {
-          setIpdPatients(patientAdmissionData);
-        }
-      }
+      await fetchAllData();
     } catch (error) {
       console.error("Failed to load data:", error);
       showNotificationPopup("Failed to load data", "error");
@@ -468,36 +471,12 @@ const PatientAdmissionSystem = () => {
     }
   };
 
-  // Generate IPD number based on latest record
-  const generateIpdNumber = async () => {
+  // Silent load — updates data without showing loader (used by realtime)
+  const silentLoadData = async () => {
     try {
-      const { data, error } = await supabase
-        .from("ipd_admissions")
-        .select("ipd_number")
-        .order("timestamp", { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.error("Error fetching IPD number:", error);
-        return "IPD-5000";
-      }
-
-      if (data && data.length > 0) {
-        const lastIpdNo = data[0].ipd_number;
-        if (lastIpdNo && lastIpdNo.startsWith("IPD-")) {
-          const lastNumber = parseInt(lastIpdNo.replace("IPD-", ""), 10);
-          if (!isNaN(lastNumber)) {
-            let next = lastNumber + 1;
-            if (next < 5000) next = 5000;
-            return `IPD-${String(next).padStart(4, "0")}`;
-          }
-        }
-      }
-
-      return "IPD-5000";
+      await fetchAllData();
     } catch (error) {
-      console.error("Error generating IPD number:", error);
-      return "IPD-5000";
+      console.error("Failed to silently refresh data:", error);
     }
   };
 
@@ -533,12 +512,11 @@ const PatientAdmissionSystem = () => {
     try {
       setIsSaving(true);
 
-      const ipdNumber = editingPatient
-        ? editingPatient.ipd_number
-        : await generateIpdNumber();
-
+      // For edits, carry the existing IPD number forward.
+      // For new inserts, omit ipd_number — the DB column DEFAULT
+      // (get_next_ipd_number()) fires automatically and guarantees uniqueness.
       const patientData = {
-        ipd_number: ipdNumber,
+        ...(editingPatient ? { ipd_number: editingPatient.ipd_number } : {}),
         admission_no: formData.registrationNumber,
         patient_name: formData.patientName.trim(),
         father_husband_name: formData.fatherHusband.trim(),
@@ -649,7 +627,7 @@ const PatientAdmissionSystem = () => {
 
         // Show success notification
         showNotificationPopup(
-          `Patient ${editingPatient ? "updated" : "admitted"} successfully! IPD Number: ${patientData.ipd_number}`,
+          `Patient ${editingPatient ? "updated" : "admitted"} successfully! IPD Number: ${result[0].ipd_number}`,
           "success",
         );
 
@@ -661,10 +639,22 @@ const PatientAdmissionSystem = () => {
       }
     } catch (error) {
       console.error("Error saving patient:", error);
+      // Detect duplicate admission_no (unique constraint violation)
+      const errMsg = (error.message || "") + (error.details || "");
+      const isDuplicate =
+        error.code === "23505" ||
+        errMsg.includes("ipd_admissions_admission_no_unique") ||
+        errMsg.includes("duplicate key") ||
+        errMsg.includes("unique constraint");
       showNotificationPopup(
-        `Failed to ${editingPatient ? "update" : "admit"} patient: ${error.message}`,
+        isDuplicate
+          ? "This patient has already been admitted by another user. Please refresh the page."
+          : `Failed to ${editingPatient ? "update" : "admit"} patient: ${error.message}`,
         "error",
       );
+      if (isDuplicate) {
+        await loadData(); // Refresh list so user sees the existing entry
+      }
     } finally {
       setIsSaving(false);
     }
@@ -822,7 +812,7 @@ const PatientAdmissionSystem = () => {
     <>
       <div className="min-h-screen bg-gray-50 p-2 md:p-6">
         {/* Loading Overlay */}
-        {isLoading && (
+        {isLoading && patients.length === 0 && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="bg-white p-6 rounded-lg shadow-xl">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
@@ -834,7 +824,7 @@ const PatientAdmissionSystem = () => {
         {/* Notification Popup */}
         {showNotification && (
           <div
-            className={`fixed top-4 right-4 z-50 max-w-md animate-slide-in ${
+            className={`fixed top-4 right-4 z-[9999] max-w-md animate-slide-in ${
               notificationType === "success"
                 ? "bg-green-50 border-green-200"
                 : "bg-red-50 border-red-200"
