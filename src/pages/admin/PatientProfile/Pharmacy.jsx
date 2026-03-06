@@ -15,7 +15,7 @@ import {
 import { useOutletContext, useNavigate } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
-// import { sendIndentApprovalNotification } from "../../../utils/whatsappService"; // moved to PharmacyIndent.jsx
+import { sendIndentApprovalNotification } from "../../../utils/whatsappService";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -697,7 +697,7 @@ export default function Pharmacy() {
             hour12: false,
           })
           .replace(",", ""),
-        indent_number:
+        indent_no:
           editMode && selectedIndent
             ? selectedIndent.indentNumber
             : await generateIndentNumber(),
@@ -751,7 +751,10 @@ export default function Pharmacy() {
         savedRow = data;
         showNotification("Indent created successfully!");
 
-        // notification is now handled in PharmacyIndent.jsx
+        // fire and forget WhatsApp notification for new indents
+        sendIndentApprovalNotification(savedRow, medicines, requestTypes).catch(
+          (err) => console.error("[WhatsApp] Notification error:", err),
+        );
       }
 
       await fetchIndents();

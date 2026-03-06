@@ -1,19 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Eye, Search, Download, X, Plus, CheckCircle } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
-import supabase from '../../../SupabaseClient';
-import { useNotification } from '../../../contexts/NotificationContext';
+import React, { useState, useEffect } from "react";
+import {
+  FileText,
+  Eye,
+  Search,
+  Download,
+  X,
+  Plus,
+  CheckCircle,
+} from "lucide-react";
+import { useOutletContext } from "react-router-dom";
+import supabase from "../../../SupabaseClient";
+import { useNotification } from "../../../contexts/NotificationContext";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
-    if (status === 'Completed') return 'bg-green-100 text-green-700';
-    if (status === 'Pending') return 'bg-yellow-100 text-yellow-700';
-    if (status === 'In Progress') return 'bg-blue-100 text-blue-700';
-    return 'bg-gray-100 text-gray-700';
+    if (status === "Completed") return "bg-green-100 text-green-700";
+    if (status === "Pending") return "bg-yellow-100 text-yellow-700";
+    if (status === "In Progress") return "bg-blue-100 text-blue-700";
+    return "bg-gray-100 text-gray-700";
   };
 
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getColors()}`}>
+    <span
+      className={`px-2 py-1 rounded-full text-xs font-medium ${getColors()}`}
+    >
       {status}
     </span>
   );
@@ -21,12 +31,12 @@ const StatusBadge = ({ status }) => {
 
 export default function Lab() {
   const { data } = useOutletContext();
-  const [activeTab, setActiveTab] = useState('complete');
+  const [activeTab, setActiveTab] = useState("complete");
   const [pendingList, setPendingList] = useState([]);
   const [historyList, setHistoryList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
 
   // Report modal state
   const [showReportModal, setShowReportModal] = useState(false);
@@ -36,17 +46,17 @@ export default function Lab() {
   const [showAddTestModal, setShowAddTestModal] = useState(false);
   const [availableTests, setAvailableTests] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modalError, setModalError] = useState('');
+  const [modalError, setModalError] = useState("");
   const { showNotification } = useNotification();
 
   // Form data (same structure as LabAdvice)
   const [formData, setFormData] = useState({
-    priority: 'Medium',
-    category: '',
+    priority: "Medium",
+    category: "",
     pathologyTests: [],
-    radiologyType: '',
+    radiologyType: "",
     radiologyTests: [],
-    remarks: ''
+    remarks: "",
   });
 
   // Fetch lab data from Supabase
@@ -57,23 +67,23 @@ export default function Lab() {
       setLoading(true);
       const ipdNumber = data.personalInfo.ipd;
 
-      if (!ipdNumber || ipdNumber === 'N/A') {
-        console.warn('No IPD number available for fetching lab data');
+      if (!ipdNumber || ipdNumber === "N/A") {
+        console.warn("No IPD number available for fetching lab data");
         return;
       }
 
       const { data: supabaseLabData, error } = await supabase
-        .from('lab')
-        .select('*')
+        .from("lab")
+        .select("*")
         .or(`ipd_number.eq.${ipdNumber},admission_no.eq.${ipdNumber}`)
-        .order('timestamp', { ascending: false });
+        .order("timestamp", { ascending: false });
 
       if (error) {
-        console.error('Error fetching lab data:', error);
+        console.error("Error fetching lab data:", error);
         return;
       }
 
-      const transformedData = (supabaseLabData || []).map(lab => {
+      const transformedData = (supabaseLabData || []).map((lab) => {
         let pathologyTests = [];
         let radiologyTests = [];
 
@@ -89,45 +99,65 @@ export default function Lab() {
               : JSON.parse(lab.radiology_tests);
           }
         } catch (e) {
-          console.warn('Error parsing tests JSON:', e);
+          console.warn("Error parsing tests JSON:", e);
         }
 
         const isCompleted = lab.actual2 !== null;
-        const isPending = lab.planned1 !== null && lab.actual2 === null && lab.payment_status=== 'Yes';
+        const isPending =
+          lab.planned1 !== null &&
+          lab.actual2 === null &&
+          lab.payment_status === "Yes";
 
         return {
           adviceId: `LAB-${lab.id}`,
           admissionNo: lab.admission_no || ipdNumber,
           adviceNo: lab.lab_no || `LAB-${lab.id}`,
           patientName: lab.patient_name || data.personalInfo.name,
-          phone: lab.phone_no || '',
-          reason: lab.reason_for_visit || '',
+          phone: lab.phone_no || "",
+          reason: lab.reason_for_visit || "",
           age: lab.age || data.personalInfo.age,
-          bedNo: lab.bed_no || data.departmentInfo?.bedNumber || '',
-          location: lab.location || data.departmentInfo?.ward || '',
-          priority: lab.priority || 'Medium',
-          category: lab.category || '',
+          bedNo: lab.bed_no || data.departmentInfo?.bedNumber || "",
+          location: lab.location || data.departmentInfo?.ward || "",
+          priority: lab.priority || "Medium",
+          category: lab.category || "",
           tests: [...pathologyTests, ...radiologyTests],
-          remarks: lab.remarks || '',
-          status: lab.status || (isCompleted ? 'Completed' : 'Pending'),
-          requestDate: lab.timestamp ? new Date(lab.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          remarks: lab.remarks || "",
+          status: isCompleted ? "Completed" : lab.status || "Pending",
+          requestDate: lab.timestamp
+            ? new Date(lab.timestamp).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
           reportUrl: lab.report_url || null,
           supabaseData: lab,
           isPending: isPending,
           isCompleted: isCompleted,
-          plannedTime: lab.planned1 ? new Date(lab.planned1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
-          actualTime: lab.actual2 ? new Date(lab.actual2).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+          plannedTime: lab.planned1
+            ? new Date(lab.planned1).toLocaleString("en-GB", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "",
+          actualTime: lab.actual2
+            ? new Date(lab.actual2).toLocaleString("en-GB", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "",
         };
       });
 
-      const pending = transformedData.filter(item => item.isPending);
-      const history = transformedData.filter(item => item.isCompleted);
+      const pending = transformedData.filter((item) => item.isPending);
+      const history = transformedData.filter((item) => item.isCompleted);
 
       setPendingList(pending);
       setHistoryList(history);
-
     } catch (err) {
-      console.error('Error in fetchLabData:', err);
+      console.error("Error in fetchLabData:", err);
     } finally {
       setLoading(false);
     }
@@ -139,37 +169,35 @@ export default function Lab() {
     }
   }, [data]);
 
-
-
   // Fetch tests from investigation table (exactly like LabAdvice)
   const fetchTestsFromDatabase = async (category, type = null) => {
     try {
       let query = supabase
-        .from('investigation')
-        .select('name, type')
-        .order('name', { ascending: true });
+        .from("investigation")
+        .select("name, type")
+        .order("name", { ascending: true });
 
-      if (category === 'Pathology') {
-        query = query.eq('type', 'Pathology');
-      } else if (category === 'Radiology' && type) {
+      if (category === "Pathology") {
+        query = query.eq("type", "Pathology");
+      } else if (category === "Radiology" && type) {
         const dbTypeMap = {
-          'X-ray': 'X-ray',
-          'CT-scan': 'CT Scan',
-          'USG': 'USG'
+          "X-ray": "X-ray",
+          "CT-scan": "CT Scan",
+          USG: "USG",
         };
-        query = query.eq('type', dbTypeMap[type] || type);
+        query = query.eq("type", dbTypeMap[type] || type);
       }
 
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error fetching tests:', error);
+        console.error("Error fetching tests:", error);
         return [];
       }
 
-      return data.map(item => item.name);
+      return data.map((item) => item.name);
     } catch (error) {
-      console.error('Failed to fetch tests:', error);
+      console.error("Failed to fetch tests:", error);
       return [];
     }
   };
@@ -177,11 +205,14 @@ export default function Lab() {
   // Update available tests when category or radiology type changes (exactly like LabAdvice)
   useEffect(() => {
     const loadTests = async () => {
-      if (formData.category === 'Pathology') {
-        const tests = await fetchTestsFromDatabase('Pathology');
+      if (formData.category === "Pathology") {
+        const tests = await fetchTestsFromDatabase("Pathology");
         setAvailableTests(tests);
-      } else if (formData.category === 'Radiology' && formData.radiologyType) {
-        const tests = await fetchTestsFromDatabase('Radiology', formData.radiologyType);
+      } else if (formData.category === "Radiology" && formData.radiologyType) {
+        const tests = await fetchTestsFromDatabase(
+          "Radiology",
+          formData.radiologyType,
+        );
         setAvailableTests(tests);
       } else {
         setAvailableTests([]);
@@ -194,15 +225,16 @@ export default function Lab() {
   }, [formData.category, formData.radiologyType, showAddTestModal]);
 
   const getFilteredTasks = () => {
-    const tasks = activeTab === 'complete' ? historyList : pendingList;
+    const tasks = activeTab === "complete" ? historyList : pendingList;
 
-    return tasks.filter(task => {
+    return tasks.filter((task) => {
       const matchesSearch =
         task.adviceNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.admissionNo?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesCategory = filterCategory === 'all' || task.category === filterCategory;
+      const matchesCategory =
+        filterCategory === "all" || task.category === filterCategory;
 
       return matchesSearch && matchesCategory;
     });
@@ -210,7 +242,7 @@ export default function Lab() {
 
   const handleViewReport = (reportUrl) => {
     if (!reportUrl) {
-      showNotification('No report available', 'info');
+      showNotification("No report available", "info");
       return;
     }
     setSelectedReportImage(reportUrl);
@@ -221,60 +253,64 @@ export default function Lab() {
   const generateLabNumber = async () => {
     try {
       const { data, error } = await supabase
-        .from('lab')
-        .select('lab_no')
-        .order('timestamp', { ascending: false })
+        .from("lab")
+        .select("lab_no")
+        .order("timestamp", { ascending: false })
         .limit(1);
 
       if (error) {
-        console.error('Error fetching lab number:', error);
-        return 'LAB-001';
+        console.error("Error fetching lab number:", error);
+        return "LAB-001";
       }
 
       if (data && data.length > 0) {
         const lastLabNo = data[0].lab_no;
-        if (lastLabNo && lastLabNo.startsWith('LAB-')) {
-          const lastNumber = parseInt(lastLabNo.replace('LAB-', ''), 10);
+        if (lastLabNo && lastLabNo.startsWith("LAB-")) {
+          const lastNumber = parseInt(lastLabNo.replace("LAB-", ""), 10);
           if (!isNaN(lastNumber)) {
-            return `LAB-${String(lastNumber + 1).padStart(3, '0')}`;
+            return `LAB-${String(lastNumber + 1).padStart(3, "0")}`;
           }
         }
       }
 
-      return 'LAB-001';
+      return "LAB-001";
     } catch (error) {
-      console.error('Error generating lab number:', error);
-      return 'LAB-001';
+      console.error("Error generating lab number:", error);
+      return "LAB-001";
     }
   };
 
   // Handle form input changes (exactly like LabAdvice)
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [name]: value,
-      ...(name === 'category' && {
+      ...(name === "category" && {
         pathologyTests: [],
-        radiologyType: '',
-        radiologyTests: []
+        radiologyType: "",
+        radiologyTests: [],
       }),
-      ...(name === 'radiologyType' && { radiologyTests: [] })
+      ...(name === "radiologyType" && { radiologyTests: [] }),
     }));
-    setModalError('');
+    setModalError("");
   };
 
   // Handle checkbox changes for tests (exactly like LabAdvice)
   const handleCheckboxChange = (testName) => {
-    setFormData(prev => {
-      const currentTests = prev.category === 'Pathology' ? prev.pathologyTests : prev.radiologyTests;
+    setFormData((prev) => {
+      const currentTests =
+        prev.category === "Pathology"
+          ? prev.pathologyTests
+          : prev.radiologyTests;
       const newTests = currentTests.includes(testName)
-        ? currentTests.filter(t => t !== testName)
+        ? currentTests.filter((t) => t !== testName)
         : [...currentTests, testName];
 
       return {
         ...prev,
-        [prev.category === 'Pathology' ? 'pathologyTests' : 'radiologyTests']: newTests
+        [prev.category === "Pathology" ? "pathologyTests" : "radiologyTests"]:
+          newTests,
       };
     });
   };
@@ -282,17 +318,23 @@ export default function Lab() {
   // Handle form submission (exactly like LabAdvice)
   const handleSubmit = async () => {
     if (!formData.category) {
-      setModalError('Please select Pathology or Radiology');
+      setModalError("Please select Pathology or Radiology");
       return;
     }
 
-    if (formData.category === 'Pathology' && formData.pathologyTests.length === 0) {
-      setModalError('Please select at least one pathology test');
+    if (
+      formData.category === "Pathology" &&
+      formData.pathologyTests.length === 0
+    ) {
+      setModalError("Please select at least one pathology test");
       return;
     }
 
-    if (formData.category === 'Radiology' && (!formData.radiologyType || formData.radiologyTests.length === 0)) {
-      setModalError('Please select radiology type and at least one test');
+    if (
+      formData.category === "Radiology" &&
+      (!formData.radiologyType || formData.radiologyTests.length === 0)
+    ) {
+      setModalError("Please select radiology type and at least one test");
       return;
     }
 
@@ -308,18 +350,22 @@ export default function Lab() {
 
       // Fetch additional details from database
       let admissionNo = patientData.ipd;
-      let reasonForVisit = patientData.reasonForVisit || '';
-      let wardType = departmentData.wardType || '';
+      let reasonForVisit = patientData.reasonForVisit || "";
+      let wardType = departmentData.wardType || "";
       // Ensure phoneNo is null or empty string if 'N/A' to allow fallback checks
-      let phoneNo = (patientData.phone && patientData.phone !== 'N/A') ? patientData.phone :
-        (patientData.phone_no && patientData.phone_no !== 'N/A') ? patientData.phone_no : '';
+      let phoneNo =
+        patientData.phone && patientData.phone !== "N/A"
+          ? patientData.phone
+          : patientData.phone_no && patientData.phone_no !== "N/A"
+            ? patientData.phone_no
+            : "";
 
       if (patientData.ipd) {
         // First try to get details from ipd_admissions
         const { data: ipdRecord } = await supabase
-          .from('ipd_admissions')
-          .select('admission_no, adm_purpose, ward_type, phone_no')
-          .eq('ipd_number', patientData.ipd)
+          .from("ipd_admissions")
+          .select("admission_no, adm_purpose, ward_type, phone_no")
+          .eq("ipd_number", patientData.ipd)
           .single();
 
         if (ipdRecord) {
@@ -327,32 +373,38 @@ export default function Lab() {
           if (ipdRecord.ward_type) wardType = ipdRecord.ward_type;
           if (ipdRecord.phone_no && !phoneNo) phoneNo = ipdRecord.phone_no;
           // Use adm_purpose as fallback for reason_for_visit
-          if (!reasonForVisit && ipdRecord.adm_purpose) reasonForVisit = ipdRecord.adm_purpose;
+          if (!reasonForVisit && ipdRecord.adm_purpose)
+            reasonForVisit = ipdRecord.adm_purpose;
         }
 
         // Fetch reason_for_visit from patient_admission using admission_no
         if (admissionNo) {
           const { data: patAdmRecord } = await supabase
-            .from('patient_admission')
-            .select('reason_for_visit, ward_type, phone_no')
-            .eq('admission_no', admissionNo)
+            .from("patient_admission")
+            .select("reason_for_visit, ward_type, phone_no")
+            .eq("admission_no", admissionNo)
             .single();
 
           if (patAdmRecord) {
             // Prioritize reason_for_visit from patient_admission as originally requested
-            if (patAdmRecord.reason_for_visit) reasonForVisit = patAdmRecord.reason_for_visit;
-            if (!wardType && patAdmRecord.ward_type) wardType = patAdmRecord.ward_type;
-            if (!phoneNo && patAdmRecord.phone_no) phoneNo = patAdmRecord.phone_no;
+            if (patAdmRecord.reason_for_visit)
+              reasonForVisit = patAdmRecord.reason_for_visit;
+            if (!wardType && patAdmRecord.ward_type)
+              wardType = patAdmRecord.ward_type;
+            if (!phoneNo && patAdmRecord.phone_no)
+              phoneNo = patAdmRecord.phone_no;
           }
         }
       }
 
       // Get current date in Indian timezone (exactly like LabAdvice)
       const now = new Date();
-      const indianTime = now.toLocaleString("en-CA", {
-        timeZone: "Asia/Kolkata",
-        hour12: false
-      }).replace(',', '');
+      const indianTime = now
+        .toLocaleString("en-CA", {
+          timeZone: "Asia/Kolkata",
+          hour12: false,
+        })
+        .replace(",", "");
 
       // Prepare data for lab table (exactly like LabAdvice)
       const labData = {
@@ -361,31 +413,34 @@ export default function Lab() {
         ipd_number: patientData.ipd,
         patient_name: patientData.name,
         phone_no: phoneNo,
-        father_husband_name: patientData.fatherHusbandName || '',
+        father_husband_name: patientData.fatherHusbandName || "",
         age: patientData.age,
-        consultant_dr: patientData.consultantDr || '',
-        refer_by_dr: patientData.referByDr || '',
-        gender: patientData.gender || '',
+        consultant_dr: patientData.consultantDr || "",
+        refer_by_dr: patientData.referByDr || "",
+        gender: patientData.gender || "",
         reason_for_visit: reasonForVisit,
-        bed_no: departmentData.bedNumber || '',
-        location: departmentData.ward || '',
+        bed_no: departmentData.bedNumber || "",
+        location: departmentData.ward || "",
         ward_type: wardType,
-        room: departmentData.room || '',
-        department: departmentData.department || '',
+        room: departmentData.room || "",
+        department: departmentData.department || "",
         priority: formData.priority,
         category: formData.category,
-        pathology_tests: formData.category === 'Pathology' ? formData.pathologyTests : null,
-        radiology_type: formData.category === 'Radiology' ? formData.radiologyType : null,
-        radiology_tests: formData.category === 'Radiology' ? formData.radiologyTests : null,
-        remarks: formData.remarks || '',
-        status: 'Pending',
+        pathology_tests:
+          formData.category === "Pathology" ? formData.pathologyTests : null,
+        radiology_type:
+          formData.category === "Radiology" ? formData.radiologyType : null,
+        radiology_tests:
+          formData.category === "Radiology" ? formData.radiologyTests : null,
+        remarks: formData.remarks || "",
+        status: "Pending",
         planned1: indianTime,
-        timestamp: indianTime
+        timestamp: indianTime,
       };
 
       // Insert into lab table (exactly like LabAdvice)
       const { data: labResult, error: labError } = await supabase
-        .from('lab')
+        .from("lab")
         .insert(labData)
         .select();
 
@@ -401,10 +456,12 @@ export default function Lab() {
       setShowAddTestModal(false);
 
       // Show success notification
-      showNotification(`Lab test added successfully! Lab Number: ${labNumber}`, 'success');
-
+      showNotification(
+        `Lab test added successfully! Lab Number: ${labNumber}`,
+        "success",
+      );
     } catch (error) {
-      console.error('Error submitting lab test:', error);
+      console.error("Error submitting lab test:", error);
       setModalError(`Failed to submit: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -414,14 +471,14 @@ export default function Lab() {
   // Reset form (exactly like LabAdvice)
   const resetForm = () => {
     setFormData({
-      priority: 'Medium',
-      category: '',
+      priority: "Medium",
+      category: "",
       pathologyTests: [],
-      radiologyType: '',
+      radiologyType: "",
       radiologyTests: [],
-      remarks: ''
+      remarks: "",
     });
-    setModalError('');
+    setModalError("");
     setAvailableTests([]);
   };
 
@@ -447,7 +504,7 @@ export default function Lab() {
   const filteredTasks = getFilteredTasks();
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 300px)' }}>
+    <div className="flex flex-col" style={{ height: "calc(100vh - 300px)" }}>
       {/* Header Section */}
       <div className="bg-green-600 text-white p-4 rounded-lg shadow-md flex-shrink-0">
         {/* Desktop View */}
@@ -470,20 +527,22 @@ export default function Lab() {
             {/* Tabs */}
             <div className="flex items-center bg-white/20 rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('complete')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'complete'
-                  ? 'bg-white text-green-600'
-                  : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("complete")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "complete"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Complete ({historyList.length})
               </button>
               <button
-                onClick={() => setActiveTab('pending')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'pending'
-                  ? 'bg-white text-green-600'
-                  : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("pending")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "pending"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Pending ({pendingList.length})
               </button>
@@ -507,9 +566,15 @@ export default function Lab() {
               onChange={(e) => setFilterCategory(e.target.value)}
               className="px-3 py-2 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-sm"
             >
-              <option value="all" className="text-gray-900">All Categories</option>
-              <option value="Pathology" className="text-gray-900">Pathology</option>
-              <option value="Radiology" className="text-gray-900">Radiology</option>
+              <option value="all" className="text-gray-900">
+                All Categories
+              </option>
+              <option value="Pathology" className="text-gray-900">
+                Pathology
+              </option>
+              <option value="Radiology" className="text-gray-900">
+                Radiology
+              </option>
             </select>
 
             {/* Add Test Button */}
@@ -541,20 +606,22 @@ export default function Lab() {
               {/* Small Tabs */}
               <div className="flex items-center bg-white/20 rounded-lg p-0.5">
                 <button
-                  onClick={() => setActiveTab('complete')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'complete'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("complete")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "complete"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Complete ({historyList.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'pending'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("pending")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "pending"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Pending ({pendingList.length})
                 </button>
@@ -578,9 +645,15 @@ export default function Lab() {
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="px-2 py-1.5 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-xs w-24"
                 >
-                  <option value="all" className="text-gray-900">All</option>
-                  <option value="Pathology" className="text-gray-900">Path</option>
-                  <option value="Radiology" className="text-gray-900">Rad</option>
+                  <option value="all" className="text-gray-900">
+                    All
+                  </option>
+                  <option value="Pathology" className="text-gray-900">
+                    Path
+                  </option>
+                  <option value="Radiology" className="text-gray-900">
+                    Rad
+                  </option>
                 </select>
 
                 {/* Add New Button for mobile */}
@@ -603,12 +676,21 @@ export default function Lab() {
             <div className="h-full overflow-y-auto p-4">
               <div className="space-y-4">
                 {filteredTasks.map((task, i) => (
-                  <div key={i} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+                  <div
+                    key={i}
+                    className="bg-white border border-gray-200 rounded-lg shadow-sm p-4"
+                  >
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="font-bold text-green-600 text-sm">{task.adviceNo}</h3>
-                        <p className="text-sm font-medium text-gray-900 mt-1">{task.patientName}</p>
-                        <p className="text-xs text-gray-500">Age: {task.age} | IPD: {task.admissionNo}</p>
+                        <h3 className="font-bold text-green-600 text-sm">
+                          {task.adviceNo}
+                        </h3>
+                        <p className="text-sm font-medium text-gray-900 mt-1">
+                          {task.patientName}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Age: {task.age} | IPD: {task.admissionNo}
+                        </p>
                       </div>
                       <StatusBadge status={task.status} />
                     </div>
@@ -616,10 +698,15 @@ export default function Lab() {
                     <div className="space-y-3">
                       {/* Priority and Category */}
                       <div className="flex flex-wrap gap-2">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${task.priority === 'High' ? 'bg-red-100 text-red-700' :
-                          task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
-                          }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            task.priority === "High"
+                              ? "bg-red-100 text-red-700"
+                              : task.priority === "Medium"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-green-100 text-green-700"
+                          }`}
+                        >
                           {task.priority}
                         </span>
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
@@ -630,48 +717,65 @@ export default function Lab() {
                       {/* Reason */}
                       {task.reason && (
                         <div className="text-sm">
-                          <span className="font-medium text-gray-700">Reason: </span>
+                          <span className="font-medium text-gray-700">
+                            Reason:{" "}
+                          </span>
                           <span className="text-gray-600">{task.reason}</span>
                         </div>
                       )}
 
                       {/* Tests */}
                       <div className="text-sm">
-                        <span className="font-medium text-gray-700">Tests: </span>
+                        <span className="font-medium text-gray-700">
+                          Tests:{" "}
+                        </span>
                         <span className="text-gray-600">
-                          {(task.tests || []).slice(0, 3).join(', ')}
-                          {(task.tests || []).length > 3 && ` +${(task.tests || []).length - 3} more`}
+                          {(task.tests || []).slice(0, 3).join(", ")}
+                          {(task.tests || []).length > 3 &&
+                            ` +${(task.tests || []).length - 3} more`}
                         </span>
                       </div>
 
                       {/* Location */}
                       <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                         <div>
-                          <span className="font-medium">Bed:</span> {task.bedNo || 'N/A'}
+                          <span className="font-medium">Bed:</span>{" "}
+                          {task.bedNo || "N/A"}
                         </div>
                         <div>
-                          <span className="font-medium">Location:</span> {task.location || 'N/A'}
+                          <span className="font-medium">Location:</span>{" "}
+                          {task.location || "N/A"}
                         </div>
                       </div>
 
                       {/* Time and Phone */}
                       <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                         <div>
-                          <span className="font-medium text-gray-700">Planned:</span> {task.plannedTime}
+                          <span className="font-medium text-gray-700">
+                            Planned:
+                          </span>{" "}
+                          {task.plannedTime}
                         </div>
-                        {activeTab === 'complete' && (
+                        {activeTab === "complete" && (
                           <div>
-                            <span className="font-medium text-gray-700">Actual:</span> {task.actualTime}
+                            <span className="font-medium text-gray-700">
+                              Actual:
+                            </span>{" "}
+                            {task.actualTime}
                           </div>
                         )}
                         <div>
-                          <span className="font-medium text-gray-700">Phone:</span> {task.phone || 'N/A'}
+                          <span className="font-medium text-gray-700">
+                            Phone:
+                          </span>{" "}
+                          {task.phone || "N/A"}
                         </div>
                       </div>
 
                       {/* Date */}
                       <div className="text-sm text-gray-600">
-                        <span className="font-medium text-gray-700">Date:</span> {task.requestDate}
+                        <span className="font-medium text-gray-700">Date:</span>{" "}
+                        {task.requestDate}
                       </div>
 
                       {/* Report Actions */}
@@ -706,12 +810,16 @@ export default function Lab() {
               <div className="text-center">
                 <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-600 font-medium text-sm">
-                  {activeTab === 'complete' ? 'No completed lab tests found' : 'No pending lab tests found'}
+                  {activeTab === "complete"
+                    ? "No completed lab tests found"
+                    : "No pending lab tests found"}
                 </p>
                 <p className="text-gray-500 text-xs mt-1">
-                  {searchTerm ? 'No tests match your search' :
-                    activeTab === 'complete' ? 'No completed tests available' : 'No pending tests available'
-                  }
+                  {searchTerm
+                    ? "No tests match your search"
+                    : activeTab === "complete"
+                      ? "No completed tests available"
+                      : "No pending tests available"}
                 </p>
               </div>
             </div>
@@ -723,55 +831,102 @@ export default function Lab() {
       <div className="hidden md:block flex-1 min-h-0 mt-2">
         <div className="h-full bg-white rounded-lg border border-gray-200 overflow-hidden">
           {filteredTasks.length > 0 ? (
-            <div className="h-full overflow-auto" style={{ maxHeight: '100%' }}>
+            <div className="h-full overflow-auto" style={{ maxHeight: "100%" }}>
               <table className="w-full text-sm text-left">
                 <thead className="sticky top-0 z-10 bg-gray-100 border-b-2 border-gray-300">
                   <tr>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">LAB NO</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">PATIENT</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">PHONE</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">REASON</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">BED NO</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">LOCATION</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">PRIORITY</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">CATEGORY</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">TESTS</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Planned Time</th>
-                    {activeTab === 'complete' && (
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actual Time</th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      LAB NO
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      PATIENT
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      PHONE
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      REASON
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      BED NO
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      LOCATION
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      PRIORITY
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      CATEGORY
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      TESTS
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      Planned Time
+                    </th>
+                    {activeTab === "complete" && (
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Actual Time
+                      </th>
                     )}
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">DATE</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">STATUS</th>
-                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">VIEW</th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      DATE
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      STATUS
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      VIEW
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredTasks.map((task, i) => (
                     <tr key={i} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <span className="font-semibold text-green-600">{task.adviceNo}</span>
+                        <span className="font-semibold text-green-600">
+                          {task.adviceNo}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{task.patientName}</div>
-                        <div className="text-xs text-gray-500">Age: {task.age}</div>
+                        <div className="font-medium text-gray-900">
+                          {task.patientName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Age: {task.age}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-gray-700">{task.phone || 'N/A'}</div>
+                        <div className="text-gray-700">
+                          {task.phone || "N/A"}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-gray-500 truncate max-w-xs">{task.reason}</div>
+                        <div className="text-xs text-gray-500 truncate max-w-xs">
+                          {task.reason}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-gray-700">{task.bedNo || 'N/A'}</span>
+                        <span className="text-gray-700">
+                          {task.bedNo || "N/A"}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-gray-500 truncate max-w-xs">{task.location || 'N/A'}</div>
+                        <div className="text-xs text-gray-500 truncate max-w-xs">
+                          {task.location || "N/A"}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${task.priority === 'High' ? 'bg-red-100 text-red-700' :
-                          task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
-                          }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            task.priority === "High"
+                              ? "bg-red-100 text-red-700"
+                              : task.priority === "Medium"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-green-100 text-green-700"
+                          }`}
+                        >
                           {task.priority}
                         </span>
                       </td>
@@ -780,19 +935,21 @@ export default function Lab() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs text-gray-500 truncate max-w-xs">
-                          {(task.tests || []).join(', ')}
+                          {(task.tests || []).join(", ")}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                         {task.plannedTime}
                       </td>
-                      {activeTab === 'complete' && (
+                      {activeTab === "complete" && (
                         <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                           {task.actualTime}
                         </td>
                       )}
                       <td className="px-4 py-3">
-                        <div className="text-xs text-gray-500">{task.requestDate}</div>
+                        <div className="text-xs text-gray-500">
+                          {task.requestDate}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={task.status} />
@@ -817,7 +974,9 @@ export default function Lab() {
                             </a>
                           </div>
                         ) : (
-                          <span className="text-gray-400 text-xs">No Report</span>
+                          <span className="text-gray-400 text-xs">
+                            No Report
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -830,12 +989,16 @@ export default function Lab() {
               <div className="text-center">
                 <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-600 font-medium text-sm">
-                  {activeTab === 'complete' ? 'No completed lab tests found' : 'No pending lab tests found'}
+                  {activeTab === "complete"
+                    ? "No completed lab tests found"
+                    : "No pending lab tests found"}
                 </p>
                 <p className="text-gray-500 text-xs mt-1">
-                  {searchTerm ? 'No tests match your search' :
-                    activeTab === 'complete' ? 'No completed tests available' : 'No pending tests available'
-                  }
+                  {searchTerm
+                    ? "No tests match your search"
+                    : activeTab === "complete"
+                      ? "No completed tests available"
+                      : "No pending tests available"}
                 </p>
               </div>
             </div>
@@ -848,7 +1011,9 @@ export default function Lab() {
         <div className="overflow-y-auto fixed inset-0 z-50 flex justify-center items-center p-4 bg-black bg-opacity-50">
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-xl">
             <div className="sticky top-0 z-10 flex justify-between items-center p-4 bg-white border-b border-gray-200 md:p-6">
-              <h2 className="text-xl font-bold text-gray-900 md:text-2xl">Lab Advice Form</h2>
+              <h2 className="text-xl font-bold text-gray-900 md:text-2xl">
+                Lab Advice Form
+              </h2>
               <button
                 onClick={() => {
                   setShowAddTestModal(false);
@@ -864,43 +1029,63 @@ export default function Lab() {
             <div className="p-4 md:p-6">
               {/* Patient Info (Read-only) */}
               <div className="p-4 mb-6 bg-green-50 rounded-lg border border-green-200">
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">Patient Information</h3>
+                <h3 className="mb-3 text-sm font-semibold text-gray-900">
+                  Patient Information
+                </h3>
                 <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
                   <div>
                     <span className="text-gray-600">IPD No:</span>
-                    <div className="font-medium text-gray-900">{data.personalInfo.ipd}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.personalInfo.ipd}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Name:</span>
-                    <div className="font-medium text-gray-900">{data.personalInfo.name}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.personalInfo.name}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Phone:</span>
-                    <div className="font-medium text-gray-900">{data.personalInfo.phone || 'N/A'}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.personalInfo.phone || "N/A"}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Age:</span>
-                    <div className="font-medium text-gray-900">{data.personalInfo.age}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.personalInfo.age}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Gender:</span>
-                    <div className="font-medium text-gray-900">{data.personalInfo.gender || 'N/A'}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.personalInfo.gender || "N/A"}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Department:</span>
-                    <div className="font-medium text-gray-900">{data.departmentInfo?.department || 'N/A'}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.departmentInfo?.department || "N/A"}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Bed No:</span>
-                    <div className="font-medium text-gray-900">{data.departmentInfo?.bedNumber || 'N/A'}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.departmentInfo?.bedNumber || "N/A"}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Location:</span>
-                    <div className="font-medium text-gray-900">{data.departmentInfo?.ward || 'N/A'}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.departmentInfo?.ward || "N/A"}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Ward Type:</span>
-                    <div className="font-medium text-gray-900">{data.departmentInfo?.wardType || 'General'}</div>
+                    <div className="font-medium text-gray-900">
+                      {data.departmentInfo?.wardType || "General"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -909,7 +1094,9 @@ export default function Lab() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <label className="block mb-1 text-sm font-medium text-gray-700">Priority *</label>
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
+                      Priority *
+                    </label>
                     <select
                       name="priority"
                       value={formData.priority}
@@ -924,7 +1111,9 @@ export default function Lab() {
                   </div>
 
                   <div>
-                    <label className="block mb-1 text-sm font-medium text-gray-700">Pathology & Radiology *</label>
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
+                      Pathology & Radiology *
+                    </label>
                     <select
                       name="category"
                       value={formData.category}
@@ -940,16 +1129,20 @@ export default function Lab() {
                 </div>
 
                 {/* Pathology Tests */}
-                {formData.category === 'Pathology' && (
+                {formData.category === "Pathology" && (
                   <div>
                     <label className="block mb-2 text-sm font-medium text-gray-700">
-                      Select Pathology Tests * ({formData.pathologyTests.length} selected)
+                      Select Pathology Tests * ({formData.pathologyTests.length}{" "}
+                      selected)
                     </label>
                     <div className="p-4 max-h-60 overflow-y-auto bg-gray-50 rounded-lg border border-gray-300">
                       {availableTests.length > 0 ? (
                         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                           {availableTests.map((test) => (
-                            <label key={test} className="flex items-start gap-2 cursor-pointer">
+                            <label
+                              key={test}
+                              className="flex items-start gap-2 cursor-pointer"
+                            >
                               <input
                                 type="checkbox"
                                 checked={formData.pathologyTests.includes(test)}
@@ -957,7 +1150,9 @@ export default function Lab() {
                                 disabled={isSubmitting}
                                 className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
                               />
-                              <span className="text-sm text-gray-700">{test}</span>
+                              <span className="text-sm text-gray-700">
+                                {test}
+                              </span>
                             </label>
                           ))}
                         </div>
@@ -971,10 +1166,12 @@ export default function Lab() {
                 )}
 
                 {/* Radiology Section */}
-                {formData.category === 'Radiology' && (
+                {formData.category === "Radiology" && (
                   <>
                     <div>
-                      <label className="block mb-1 text-sm font-medium text-gray-700">Radiology Type *</label>
+                      <label className="block mb-1 text-sm font-medium text-gray-700">
+                        Radiology Type *
+                      </label>
                       <select
                         name="radiologyType"
                         value={formData.radiologyType}
@@ -992,21 +1189,29 @@ export default function Lab() {
                     {formData.radiologyType && (
                       <div>
                         <label className="block mb-2 text-sm font-medium text-gray-700">
-                          Select {formData.radiologyType} Tests * ({formData.radiologyTests.length} selected)
+                          Select {formData.radiologyType} Tests * (
+                          {formData.radiologyTests.length} selected)
                         </label>
                         <div className="p-4 max-h-60 overflow-y-auto bg-gray-50 rounded-lg border border-gray-300">
                           {availableTests.length > 0 ? (
                             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                               {availableTests.map((test) => (
-                                <label key={test} className="flex items-start gap-2 cursor-pointer">
+                                <label
+                                  key={test}
+                                  className="flex items-start gap-2 cursor-pointer"
+                                >
                                   <input
                                     type="checkbox"
-                                    checked={formData.radiologyTests.includes(test)}
+                                    checked={formData.radiologyTests.includes(
+                                      test,
+                                    )}
                                     onChange={() => handleCheckboxChange(test)}
                                     disabled={isSubmitting}
                                     className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
                                   />
-                                  <span className="text-sm text-gray-700">{test}</span>
+                                  <span className="text-sm text-gray-700">
+                                    {test}
+                                  </span>
                                 </label>
                               ))}
                             </div>
@@ -1023,7 +1228,9 @@ export default function Lab() {
 
                 {/* Remarks */}
                 <div>
-                  <label className="block mb-1 text-sm font-medium text-gray-700">Remarks</label>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Remarks
+                  </label>
                   <textarea
                     name="remarks"
                     value={formData.remarks}
@@ -1061,7 +1268,7 @@ export default function Lab() {
                   disabled={isSubmitting}
                   className="px-6 py-2 w-full font-medium text-white bg-green-600 rounded-lg transition-colors hover:bg-green-700 disabled:bg-gray-400 sm:w-auto"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                  {isSubmitting ? "Submitting..." : "Submit"}
                 </button>
               </div>
             </div>
@@ -1074,7 +1281,9 @@ export default function Lab() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black bg-opacity-75">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Lab Report</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Lab Report
+              </h3>
               <button
                 onClick={() => {
                   setShowReportModal(false);
@@ -1096,7 +1305,8 @@ export default function Lab() {
                       className="w-full h-auto object-contain"
                       onError={(e) => {
                         e.target.onerror = null;
-                        e.target.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2Ij5SZXBvcnQgSW1hZ2UgTm90IEF2YWlsYWJsZTwvdGV4dD48L3N2Zz4=";
+                        e.target.src =
+                          "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2Ij5SZXBvcnQgSW1hZ2UgTm90IEF2YWlsYWJsZTwvdGV4dD48L3N2Zz4=";
                       }}
                     />
                   </div>
@@ -1127,12 +1337,26 @@ export default function Lab() {
               ) : (
                 <div className="text-center py-12">
                   <div className="mb-4 text-gray-400">
-                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <svg
+                      className="w-16 h-16 mx-auto"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
                     </svg>
                   </div>
-                  <p className="text-gray-600 font-medium mb-2">No report image available</p>
-                  <p className="text-gray-500 text-sm">The lab report image could not be loaded</p>
+                  <p className="text-gray-600 font-medium mb-2">
+                    No report image available
+                  </p>
+                  <p className="text-gray-500 text-sm">
+                    The lab report image could not be loaded
+                  </p>
                 </div>
               )}
             </div>
