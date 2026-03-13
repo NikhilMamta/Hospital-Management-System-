@@ -20,12 +20,12 @@ const APPROVAL_PHONE_NUMBERS = [
 
 // ⬇️ Hardcoded recipient for dressing notifications
 // Change DRESSING_PHONE_NUMBER to the actual WhatsApp number
-const DRESSING_PHONE_NUMBER = "9162677 99443"; // Update this with the specific number for dressing notifications
+const DRESSING_PHONE_NUMBER = "916267799443"; // Update this with the specific number for dressing notifications
 
 // ⬇️ Hardcoded recipients for OT notifications
 // Change OT_PHONE_NUMBERS to the actual WhatsApp numbers
 const OT_PHONE_NUMBERS = [
-  "9162677 99443", // Update with specific numbers for OT notifications
+  "916267799443", // Update with specific numbers for OT notifications
 ];
 
 export { DRESSING_PHONE_NUMBER, OT_PHONE_NUMBERS };
