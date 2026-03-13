@@ -1247,7 +1247,9 @@ const PharmacyIndents = () => {
                                 onClick={() => handleEdit(indent)}
                                 className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 title="Edit Indent"
-                                disabled={loading || indent.status === "approved"}
+                                disabled={
+                                  loading || indent.status === "approved"
+                                }
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
