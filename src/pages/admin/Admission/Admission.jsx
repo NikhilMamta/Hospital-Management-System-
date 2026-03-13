@@ -102,25 +102,6 @@ const Admission = () => {
   };
 
   // Generate admission number based on latest patient; start sequence at 5000
-  const generateAdmissionNo = () => {
-    if (patients.length === 0) {
-      return "ADM-5000";
-    }
-
-    const admissionNumbers = patients
-      .map((p) => p.admissionNo)
-      .filter((num) => num && num.startsWith("ADM-"))
-      .map((num) => parseInt(num.replace("ADM-", ""), 10))
-      .filter((num) => !isNaN(num));
-
-    const maxNumber =
-      admissionNumbers.length > 0 ? Math.max(...admissionNumbers) : 0;
-    let nextNumber = maxNumber + 1;
-    if (nextNumber < 5000) nextNumber = 5000;
-
-    // pad to at least 4 digits so that 5000 doesn't shrink
-    return `ADM-${String(nextNumber).padStart(4, "0")}`;
-  };
 
   // Filter patients based on search query and date filter
   const filteredPatients = patients.filter((patient) => {
@@ -213,7 +194,6 @@ const Admission = () => {
 
         const patientData = {
           timestamp: timestamp,
-          admission_no: generateAdmissionNo(),
           patient_name: formData.patientName.trim(),
           phone_no: formData.phoneNumber.trim(),
           attender_name: formData.attenderName.trim(),
@@ -279,13 +259,13 @@ const Admission = () => {
 
   return (
     <div className="p-1 space-y-2 md:p-0 bg-gray-50 min-h-[75vh]">
-      <div className="flex flex-col gap-3 justify-between items-start sm:flex-row sm:items-center">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">
             Patient Admission
           </h1>
           {isLoading && (
-            <p className="text-sm text-gray-600 mt-1">Loading...</p>
+            <p className="mt-1 text-sm text-gray-600">Loading...</p>
           )}
         </div>
         <button
@@ -304,7 +284,7 @@ const Admission = () => {
       {/* Search and Filter Section */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute w-5 h-5 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
           <input
             type="text"
             placeholder="Search by name, phone, admission no..."
@@ -314,7 +294,7 @@ const Admission = () => {
           />
         </div>
         <div className="relative sm:w-64">
-          <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Filter className="absolute w-5 h-5 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
           <input
             type="date"
             value={filterDate}
@@ -324,7 +304,7 @@ const Admission = () => {
           {filterDate && (
             <button
               onClick={() => setFilterDate("")}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute text-gray-400 transform -translate-y-1/2 right-3 top-1/2 hover:text-gray-600"
             >
               <X className="w-4 h-4" />
             </button>
@@ -333,13 +313,13 @@ const Admission = () => {
       </div>
 
       {/* Desktop Table View with Fixed Header */}
-      <div className="hidden md:block bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="hidden overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm md:block">
         <div
           className="overflow-auto"
           style={{ maxHeight: "calc(100vh - 280px)" }}
         >
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50 sticky top-0 z-10">
+            <thead className="sticky top-0 z-10 bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase bg-gray-50">
                   Admission No
@@ -384,7 +364,7 @@ const Admission = () => {
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     <div className="flex flex-col items-center">
-                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
+                      <div className="w-10 h-10 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                       <p className="text-lg font-medium text-gray-900">
                         Loading patients...
                       </p>
@@ -400,28 +380,28 @@ const Admission = () => {
                     <td className="px-4 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">
                       {patient.admissionNo}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.patientName}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.phoneNumber}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.attenderName}
                     </td>
                     <td className="px-4 py-3 text-sm max-w-[250px] whitespace-normal break-words text-gray-900">
                       {patient.reasonForVisit}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {formatDateForDisplay(patient.dateOfBirth)}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.age}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.gender}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.timestampFormatted
                         ? new Date(patient.timestampFormatted).toLocaleString(
                             "en-GB",
@@ -434,7 +414,7 @@ const Admission = () => {
                           )
                         : "-"}
                     </td>
-                    <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {patient.submittedBy}
                     </td>
                     <td className="px-4 py-3 text-sm whitespace-nowrap">
@@ -455,7 +435,7 @@ const Admission = () => {
                     colSpan="11"
                     className="px-4 py-8 text-center text-gray-500"
                   >
-                    <UserPlus className="mx-auto mb-2 w-12 h-12 text-gray-300" />
+                    <UserPlus className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                     <p className="text-lg font-medium text-gray-900">
                       {searchQuery || filterDate
                         ? "No patients found matching your filters"
@@ -477,9 +457,9 @@ const Admission = () => {
       {/* Mobile Card View */}
       <div className="space-y-3 md:hidden">
         {isLoading && filteredPatients.length === 0 ? (
-          <div className="p-8 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="p-8 text-center bg-white border border-gray-200 rounded-lg shadow-sm">
             <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
+              <div className="w-10 h-10 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
               <p className="text-sm font-medium text-gray-900">
                 Loading patients...
               </p>
@@ -492,11 +472,11 @@ const Admission = () => {
           filteredPatients.map((patient) => (
             <div
               key={patient.id}
-              className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm"
+              className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
             >
-              <div className="flex justify-between items-start mb-3">
+              <div className="flex items-start justify-between mb-3">
                 <div>
-                  <div className="text-xs font-medium text-green-600 mb-1">
+                  <div className="mb-1 text-xs font-medium text-green-600">
                     {patient.admissionNo}
                   </div>
                   <h3 className="text-sm font-semibold text-gray-900">
@@ -506,7 +486,7 @@ const Admission = () => {
                 <button
                   onClick={() => handleEdit(patient)}
                   disabled={isLoading}
-                  className="flex flex-shrink-0 gap-1 items-center px-2 py-1 text-xs text-white bg-green-600 rounded-lg shadow-sm disabled:bg-gray-400"
+                  className="flex items-center flex-shrink-0 gap-1 px-2 py-1 text-xs text-white bg-green-600 rounded-lg shadow-sm disabled:bg-gray-400"
                 >
                   <Edit2 className="w-3 h-3" />
                   Edit
@@ -560,8 +540,8 @@ const Admission = () => {
             </div>
           ))
         ) : (
-          <div className="p-8 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
-            <UserPlus className="mx-auto mb-2 w-12 h-12 text-gray-300" />
+          <div className="p-8 text-center bg-white border border-gray-200 rounded-lg shadow-sm">
+            <UserPlus className="w-12 h-12 mx-auto mb-2 text-gray-300" />
             <p className="text-sm font-medium text-gray-900">
               {searchQuery || filterDate
                 ? "No patients found"
@@ -578,9 +558,9 @@ const Admission = () => {
 
       {/* Add New Patient Modal */}
       {showModal && (
-        <div className="overflow-y-auto fixed inset-0 z-50 flex justify-center items-center p-4 bg-black bg-opacity-50 transition-opacity duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto transition-opacity duration-300 bg-black bg-opacity-50">
           <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-xl animate-scale-in">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 md:p-6">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 md:p-6">
               <h2 className="text-xl font-bold text-gray-900 md:text-2xl">
                 {editingId ? "Edit Patient" : "Add New Patient"}
               </h2>
@@ -589,7 +569,7 @@ const Admission = () => {
                   setShowModal(false);
                   resetForm();
                 }}
-                className="text-gray-400 rounded-full p-1 hover:text-gray-600 hover:bg-gray-100"
+                className="p-1 text-gray-400 rounded-full hover:text-gray-600 hover:bg-gray-100"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -606,7 +586,7 @@ const Admission = () => {
                     name="patientName"
                     value={formData.patientName}
                     onChange={handleInputChange}
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
 
@@ -619,7 +599,7 @@ const Admission = () => {
                     name="phoneNumber"
                     value={formData.phoneNumber}
                     onChange={handleInputChange}
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
 
@@ -632,7 +612,7 @@ const Admission = () => {
                     name="attenderName"
                     value={formData.attenderName}
                     onChange={handleInputChange}
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
 
@@ -646,7 +626,7 @@ const Admission = () => {
                     value={formData.dateOfBirth}
                     onChange={handleInputChange}
                     max={new Date().toISOString().split("T")[0]}
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
 
@@ -659,7 +639,7 @@ const Admission = () => {
                     name="age"
                     value={formData.age}
                     readOnly
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 bg-gray-50 text-gray-600 cursor-not-allowed"
+                    className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                     placeholder="Auto-calculated from DOB"
                   />
                 </div>
@@ -672,7 +652,7 @@ const Admission = () => {
                     name="gender"
                     value={formData.gender}
                     onChange={handleInputChange}
-                    className="px-3 py-2 w-full bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -689,7 +669,7 @@ const Admission = () => {
                     value={formData.reasonForVisit}
                     onChange={handleInputChange}
                     rows="3"
-                    className="px-3 py-2 w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
               </div>
@@ -700,7 +680,7 @@ const Admission = () => {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 justify-end mt-6 sm:flex-row">
+              <div className="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => {
@@ -708,7 +688,7 @@ const Admission = () => {
                     resetForm();
                   }}
                   disabled={isLoading}
-                  className="px-4 py-2 w-full font-medium text-gray-700 bg-gray-100 rounded-lg transition-colors hover:bg-gray-200 disabled:bg-gray-300 sm:w-auto"
+                  className="w-full px-4 py-2 font-medium text-gray-700 transition-colors bg-gray-100 rounded-lg hover:bg-gray-200 disabled:bg-gray-300 sm:w-auto"
                 >
                   Cancel
                 </button>
@@ -716,7 +696,7 @@ const Admission = () => {
                   type="button"
                   onClick={handleSubmit}
                   disabled={isLoading}
-                  className="flex gap-2 items-center justify-center px-6 py-2 w-full font-medium text-white bg-green-600 rounded-lg shadow-sm transition-colors hover:bg-green-700 disabled:bg-gray-400 sm:w-auto"
+                  className="flex items-center justify-center w-full gap-2 px-6 py-2 font-medium text-white transition-colors bg-green-600 rounded-lg shadow-sm hover:bg-green-700 disabled:bg-gray-400 sm:w-auto"
                 >
                   <Save className="w-5 h-5" />
                   {isLoading

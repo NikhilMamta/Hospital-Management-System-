@@ -18,6 +18,18 @@ const APPROVAL_PHONE_NUMBERS = [
   "916267799443",
 ];
 
+// ⬇️ Hardcoded recipient for dressing notifications
+// Change DRESSING_PHONE_NUMBER to the actual WhatsApp number
+const DRESSING_PHONE_NUMBER = "9162677 99443"; // Update this with the specific number for dressing notifications
+
+// ⬇️ Hardcoded recipients for OT notifications
+// Change OT_PHONE_NUMBERS to the actual WhatsApp numbers
+const OT_PHONE_NUMBERS = [
+  "9162677 99443", // Update with specific numbers for OT notifications
+];
+
+export { DRESSING_PHONE_NUMBER, OT_PHONE_NUMBERS };
+
 /**
  * Build the approval WhatsApp message for a pharmacy indent.
  *
@@ -191,6 +203,152 @@ export const sendIndentApprovalNotification = async (
     return successful.length === APPROVAL_PHONE_NUMBERS.length;
   } catch (error) {
     console.error("[WhatsApp] sendIndentApprovalNotification error:", error);
+    return false;
+  }
+};
+
+/**
+ * Build the dressing notification WhatsApp message.
+ *
+ * @param {Object} dressingData - The dressing record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ * @param {string} completeUrl - Full URL to the dressing page
+ * @returns {string} Formatted WhatsApp message
+ */
+export const buildDressingNotificationMessage = (
+  dressingData,
+  patientData,
+  completeUrl,
+) => {
+  const message = `📌 Dressing Intimation
+
+👤 Patient Name: ${dressingData.patient_name || "N/A"}
+🆔 Admission No.: ${dressingData.admission_number || "N/A"}
+🏨 Wards: ${dressingData.ward_type || "N/A"} | Bed: ${dressingData.bed_no || "N/A"}
+
+🎯 Reason for Visit: ${patientData?.reason_for_visit || "N/A"}
+📅 Age/Gender: ${patientData?.age || "N/A"} / ${patientData?.gender || "N/A"}
+
+✅ Complete Link: ${completeUrl}
+
+📢 Kindly proceed for patient dressing at the scheduled time.
+
+THANKS & REGARDS
+NIKHIL KUMAR URANW
+MIS`;
+
+  return message;
+};
+
+/**
+ * High-level helper: send the dressing notification.
+ *
+ * @param {Object} dressingData - The dressing record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ */
+export const sendDressingNotification = async (dressingData, patientData) => {
+  try {
+    console.log("[WhatsApp] Sending dressing notification...");
+    // Build the complete URL pointing to the dressing page
+    const completeUrl = `${window.location.origin}/admin/patient-profile/dressing`;
+
+    const message = buildDressingNotificationMessage(
+      dressingData,
+      patientData,
+      completeUrl,
+    );
+
+    const success = await sendWhatsAppMessage(DRESSING_PHONE_NUMBER, message);
+
+    if (success) {
+      console.log("[WhatsApp] Dressing notification sent successfully");
+    } else {
+      console.warn("[WhatsApp] Failed to send dressing notification");
+    }
+
+    return success;
+  } catch (error) {
+    console.error("[WhatsApp] sendDressingNotification error:", error);
+    return false;
+  }
+};
+
+/**
+ * Build the OT notification WhatsApp message.
+ *
+ * @param {Object} otData - The OT record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ * @param {string} completeUrl - Full URL to the OT page
+ * @returns {string} Formatted WhatsApp message
+ */
+export const buildOTNotificationMessage = (
+  otData,
+  patientData,
+  completeUrl,
+) => {
+  const operationDateTime =
+    otData.ot_date && otData.ot_time
+      ? `${otData.ot_date} ${otData.ot_time}`
+      : "N/A";
+
+  const message = `📌 OT SURGICAL PATIENT ALERT
+
+👤 Patient Name: ${otData.patient_name || "N/A"}
+🆔 Admission No.: ${otData.ipd_number || "N/A"}
+🏥 Ward: ${otData.ward_type || "N/A"} | Bed: ${otData.bed_no || "N/A"}
+🎯 Reason for Visit: ${patientData?.reason_for_visit || "N/A"}
+📅 Age/Gender: ${patientData?.age || "N/A"} / ${patientData?.gender || "N/A"}
+📂 Category: ${patientData?.category || "N/A"}
+
+⏰ Operation Timing Fixed: ${operationDateTime}
+👨‍⚕️ Surgeon: ${otData.doctor || "N/A"}
+👨‍⚕️ RMO: ${otData.rmo || "N/A"}
+
+📢 Kindly be present in OT as per the scheduled timing.
+✅ Complete Link: ${completeUrl}
+
+NIKHIL KUMAR URANW (MIS)
+TEAM MAMTA HOSPITAL`;
+
+  return message;
+};
+
+/**
+ * High-level helper: send the OT notification.
+ *
+ * @param {Object} otData - The OT record data
+ * @param {Object} patientData - Additional patient data from patient_admission
+ */
+export const sendOTNotification = async (otData, patientData) => {
+  try {
+    console.log("[WhatsApp] Sending OT notification...");
+    // Build the complete URL pointing to the OT page
+    const completeUrl = `${window.location.origin}/admin/ot/assign-ot-time`;
+
+    const message = buildOTNotificationMessage(
+      otData,
+      patientData,
+      completeUrl,
+    );
+
+    const results = await sendWhatsAppMessages(OT_PHONE_NUMBERS, message);
+
+    const successful = results.filter((r) => r.success).map((r) => r.number);
+    const failed = results.filter((r) => !r.success).map((r) => r.number);
+
+    if (successful.length > 0) {
+      console.log("[WhatsApp] OT notification sent to", successful.join(", "));
+    }
+    if (failed.length > 0) {
+      console.warn(
+        "[WhatsApp] Failed to send OT notification to",
+        failed.join(", "),
+      );
+    }
+
+    return successful.length === OT_PHONE_NUMBERS.length;
+  } catch (error) {
+    console.error("[WhatsApp] sendOTNotification error:", error);
     return false;
   }
 };

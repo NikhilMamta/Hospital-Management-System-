@@ -1,26 +1,38 @@
-import React, { useState, useEffect } from 'react';
-import { Heart, Search, ChevronDown, ChevronUp, User, Calendar, Clock } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
-import supabase from '../../../SupabaseClient';
-import { useNotification } from '../../../contexts/NotificationContext';
+import React, { useState, useEffect } from "react";
+import {
+  Heart,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Calendar,
+  Clock,
+} from "lucide-react";
+import { useOutletContext } from "react-router-dom";
+import supabase from "../../../SupabaseClient";
+import { useNotification } from "../../../contexts/NotificationContext";
+import { sendDressingNotification } from "../../../utils/whatsappService";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
-    if (status === 'Yes') return 'bg-green-100 text-green-700 border-green-200';
-    if (status === 'No') return 'bg-red-100 text-red-700 border-red-200';
-    if (status === 'Pending') return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    return 'bg-gray-100 text-gray-700 border-gray-200';
+    if (status === "Yes") return "bg-green-100 text-green-700 border-green-200";
+    if (status === "No") return "bg-red-100 text-red-700 border-red-200";
+    if (status === "Pending")
+      return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    return "bg-gray-100 text-gray-700 border-gray-200";
   };
 
   const getLabel = (status) => {
-    if (status === 'Yes') return 'Completed';
-    if (status === 'No') return 'Cancelled';
-    if (status === 'Pending') return 'Pending';
+    if (status === "Yes") return "Completed";
+    if (status === "No") return "Cancelled";
+    if (status === "Pending") return "Pending";
     return status;
   };
 
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}>
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getColors()}`}
+    >
       {getLabel(status)}
     </span>
   );
@@ -31,39 +43,40 @@ export default function Dressing() {
 
   const [pendingList, setPendingList] = useState([]);
   const [historyList, setHistoryList] = useState([]);
-  const [activeTab, setActiveTab] = useState('history');
+  const [activeTab, setActiveTab] = useState("history");
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [expandedCard, setExpandedCard] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allPatients, setAllPatients] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const { showNotification } = useNotification();
 
   const [formData, setFormData] = useState({
-    admission_number: '',
-    ipd_number: '',
-    patient_name: '',
-    task_no: '',
-    patient_location: '',
-    ward_type: '',
-    room: '',
-    bed_no: '',
-    remarks: '',
-    status: ''
+    admission_number: "",
+    ipd_number: "",
+    patient_name: "",
+    task_no: "",
+    patient_location: "",
+    ward_type: "",
+    room: "",
+    bed_no: "",
+    remarks: "",
+    status: "",
   });
 
   // Function to get patient details from ipd_admissions table by matching IPD number
   const getPatientFromIPD = async (ipdNumber) => {
-    if (!ipdNumber || ipdNumber === 'N/A') return null;
+    if (!ipdNumber || ipdNumber === "N/A") return null;
 
     try {
       const { data: patientData, error } = await supabase
-        .from('ipd_admissions')
-        .select(`
+        .from("ipd_admissions")
+        .select(
+          `
           admission_no,
           patient_name,
           bed_location,
@@ -74,27 +87,29 @@ export default function Dressing() {
           location_status,
           ward_no,
           room_no
-        `)
-        .eq('ipd_number', ipdNumber)
+        `,
+        )
+        .eq("ipd_number", ipdNumber)
         .single();
 
       if (error) {
-        console.error('Error fetching patient details:', error);
+        console.error("Error fetching patient details:", error);
         return null;
       }
 
       return {
         admission_number: patientData.admission_no, // Map admission_no to admission_number
         patient_name: patientData.patient_name,
-        patient_location: patientData.bed_location || patientData.location_status,
+        patient_location:
+          patientData.bed_location || patientData.location_status,
         ward_type: patientData.ward_type,
         room: patientData.room || patientData.room_no,
         bed_no: patientData.bed_no,
         ipd_number: patientData.ipd_number,
-        ward_no: patientData.ward_no
+        ward_no: patientData.ward_no,
       };
     } catch (err) {
-      console.error('Error in getPatientFromIPD:', err);
+      console.error("Error in getPatientFromIPD:", err);
       return null;
     }
   };
@@ -103,8 +118,9 @@ export default function Dressing() {
   const fetchAllPatients = async () => {
     try {
       const { data: patients, error } = await supabase
-        .from('ipd_admissions')
-        .select(`
+        .from("ipd_admissions")
+        .select(
+          `
           id,
           admission_no,
           patient_name,
@@ -116,17 +132,18 @@ export default function Dressing() {
           location_status,
           ward_no,
           room_no
-        `)
-        .order('patient_name');
+        `,
+        )
+        .order("patient_name");
 
       if (error) {
-        console.error('Error fetching patients:', error);
+        console.error("Error fetching patients:", error);
         return;
       }
 
       setAllPatients(patients || []);
     } catch (err) {
-      console.error('Error in fetchAllPatients:', err);
+      console.error("Error in fetchAllPatients:", err);
     }
   };
 
@@ -136,60 +153,77 @@ export default function Dressing() {
       setLoading(true);
 
       let query = supabase
-        .from('dressing')
-        .select('*')
-        .order('timestamp', { ascending: false });
+        .from("dressing")
+        .select("*")
+        .order("timestamp", { ascending: false });
 
       // If we have a specific patient from context, get their details first
-      if (data?.personalInfo?.ipd && data.personalInfo.ipd !== 'N/A') {
+      if (data?.personalInfo?.ipd && data.personalInfo.ipd !== "N/A") {
         const patientInfo = await getPatientFromIPD(data.personalInfo.ipd);
 
         if (patientInfo?.admission_number) {
           // Filter by admission number
-          query = query.eq('admission_number', patientInfo.admission_number);
+          query = query.eq("admission_number", patientInfo.admission_number);
         }
       }
 
       const { data: dressingData, error } = await query;
 
       if (error) {
-        console.error('Error fetching dressing records:', error);
+        console.error("Error fetching dressing records:", error);
         return;
       }
 
       const records = dressingData || [];
 
       // Transform data to match UI structure
-      const transformedRecords = records.map(record => ({
+      const transformedRecords = records.map((record) => ({
         id: record.id,
         taskId: record.id,
-        taskNo: record.task_no || `DR-${String(record.id).padStart(3, '0')}`,
-        admissionNo: record.admission_number || 'N/A',
-        patientName: record.patient_name || 'N/A',
-        taskName: 'Dressing',
-        wardType: record.ward_type || '',
-        room: record.room || '',
-        bedNo: record.bed_no || '',
-        location: record.patient_location || '',
-        remarks: record.remarks || '',
-        status: record.status || 'Pending',
-        date: record.timestamp ? new Date(record.timestamp).toISOString().split('T')[0] : 'N/A',
+        taskNo: record.task_no || `DR-${String(record.id).padStart(3, "0")}`,
+        admissionNo: record.admission_number || "N/A",
+        patientName: record.patient_name || "N/A",
+        taskName: "Dressing",
+        wardType: record.ward_type || "",
+        room: record.room || "",
+        bedNo: record.bed_no || "",
+        location: record.patient_location || "",
+        remarks: record.remarks || "",
+        status: record.status || "Pending",
+        date: record.timestamp
+          ? new Date(record.timestamp).toISOString().split("T")[0]
+          : "N/A",
         supabaseData: record,
-        plannedTime: record.planned1 ? new Date(record.planned1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
-        actualTime: record.actual1 ? new Date(record.actual1).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
+        plannedTime: record.planned1
+          ? new Date(record.planned1).toLocaleString("en-GB", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
+        actualTime: record.actual1
+          ? new Date(record.actual1).toLocaleString("en-GB", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
         plannedDate: record.planned1,
-        actualDate: record.actual1
+        actualDate: record.actual1,
       }));
 
       // Separate pending and history records based on actual1
-      const history = transformedRecords.filter(record => record.actualDate);
-      const pending = transformedRecords.filter(record => !record.actualDate);
+      const history = transformedRecords.filter((record) => record.actualDate);
+      const pending = transformedRecords.filter((record) => !record.actualDate);
 
       setHistoryList(history);
       setPendingList(pending);
-
     } catch (err) {
-      console.error('Error in fetchDressingRecords:', err);
+      console.error("Error in fetchDressingRecords:", err);
     } finally {
       setLoading(false);
     }
@@ -198,18 +232,18 @@ export default function Dressing() {
   // Auto-fill patient details when admission number is selected
   const handlePatientSelect = (patient) => {
     setFormData({
-      admission_number: patient.admission_no || '',
-      ipd_number: patient.ipd_number || '',
-      patient_name: patient.patient_name || '',
-      task_no: '',
-      patient_location: patient.bed_location || patient.location_status || '',
-      ward_type: patient.ward_type || '',
-      room: patient.room || patient.room_no || '',
-      bed_no: patient.bed_no || '',
-      remarks: '',
-      status: ''
+      admission_number: patient.admission_no || "",
+      ipd_number: patient.ipd_number || "",
+      patient_name: patient.patient_name || "",
+      task_no: "",
+      patient_location: patient.bed_location || patient.location_status || "",
+      ward_type: patient.ward_type || "",
+      room: patient.room || patient.room_no || "",
+      bed_no: patient.bed_no || "",
+      remarks: "",
+      status: "",
     });
-    setSearchQuery(patient.admission_no || '');
+    setSearchQuery(patient.admission_no || "");
     setShowPatientDropdown(false);
   };
 
@@ -217,9 +251,11 @@ export default function Dressing() {
   const generateTaskNumber = () => {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    const random = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0");
     return `DR${year}${month}${day}${random}`;
   };
 
@@ -228,7 +264,7 @@ export default function Dressing() {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: value
+      [name]: value,
     });
   };
 
@@ -237,7 +273,7 @@ export default function Dressing() {
     e.preventDefault();
 
     if (!formData.admission_number || !formData.status) {
-      showNotification('Please fill in Admission Number and Status', 'error');
+      showNotification("Please fill in Admission Number and Status", "error");
       return;
     }
 
@@ -248,10 +284,12 @@ export default function Dressing() {
       //   const now = new Date().toISOString();
 
       const dressingData = {
-        timestamp: new Date().toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        }).replace(',', ''),
+        timestamp: new Date()
+          .toLocaleString("en-CA", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          })
+          .replace(",", ""),
         admission_number: formData.admission_number,
         ipd_number: formData.ipd_number,
         patient_name: formData.patient_name,
@@ -260,42 +298,70 @@ export default function Dressing() {
         ward_type: formData.ward_type,
         room: formData.room,
         bed_no: formData.bed_no,
-        planned1: new Date().toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        }).replace(',', ''),
+        planned1: new Date()
+          .toLocaleString("en-CA", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          })
+          .replace(",", ""),
         actual1: null,
         remarks: formData.remarks || null,
-        status: formData.status
+        status: formData.status,
       };
 
-      const { error } = await supabase
-        .from('dressing')
-        .insert([dressingData]);
+      const { error } = await supabase.from("dressing").insert([dressingData]);
 
       if (error) throw error;
 
+      // Send WhatsApp notification
+      try {
+        // Fetch patient details from patient_admission
+        const { data: patientData, error: patientError } = await supabase
+          .from("patient_admission")
+          .select("age, gender, reason_for_visit")
+          .eq("admission_no", formData.admission_number)
+          .single();
+
+        if (patientError) {
+          console.error("Error fetching patient details:", patientError);
+        }
+
+        // Send dressing notification
+        const success = await sendDressingNotification(formData, patientData);
+        if (success) {
+          showNotification(
+            "Dressing notification sent successfully",
+            "success",
+          );
+        } else {
+          showNotification("Failed to send WhatsApp notification", "error");
+        }
+      } catch (whatsappError) {
+        console.error("Error sending WhatsApp:", whatsappError);
+        showNotification("Failed to send WhatsApp notification", "error");
+      }
+
       // Reset form
       setFormData({
-        admission_number: '',
-        ipd_number: '',
-        patient_name: '',
-        task_no: '',
-        patient_location: '',
-        ward_type: '',
-        room: '',
-        bed_no: '',
-        remarks: '',
-        status: ''
+        admission_number: "",
+        ipd_number: "",
+        patient_name: "",
+        task_no: "",
+        patient_location: "",
+        ward_type: "",
+        room: "",
+        bed_no: "",
+        remarks: "",
+        status: "",
       });
-      setSearchQuery('');
+      setSearchQuery("");
 
       setShowForm(false);
       fetchDressingRecords();
-      showNotification('Dressing record added successfully!', 'success');
+      showNotification("Dressing record added successfully!", "success");
     } catch (error) {
-      console.error('Error adding dressing record:', error);
-      showNotification('Failed to add dressing record', 'error');
+      console.error("Error adding dressing record:", error);
+      showNotification("Failed to add dressing record", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -306,41 +372,44 @@ export default function Dressing() {
     try {
       const updateData = {
         status: status,
-        actual1: new Date().toISOString()
+        actual1: new Date().toISOString(),
       };
 
       const { error } = await supabase
-        .from('dressing')
+        .from("dressing")
         .update(updateData)
-        .eq('id', id);
+        .eq("id", id);
 
       if (error) throw error;
 
       fetchDressingRecords();
-      showNotification(`Dressing marked as ${status === 'Yes' ? 'Completed' : 'Cancelled'}`, 'success');
+      showNotification(
+        `Dressing marked as ${status === "Yes" ? "Completed" : "Cancelled"}`,
+        "success",
+      );
     } catch (error) {
-      console.error('Error updating dressing status:', error);
-      showNotification('Failed to update dressing status', 'error');
+      console.error("Error updating dressing status:", error);
+      showNotification("Failed to update dressing status", "error");
     }
   };
 
   // Auto-fill form with current patient data from context
   const autoFillCurrentPatient = async () => {
-    if (!data?.personalInfo?.ipd || data.personalInfo.ipd === 'N/A') {
+    if (!data?.personalInfo?.ipd || data.personalInfo.ipd === "N/A") {
       // If no IPD number, use basic info from context
       setFormData({
-        admission_number: data?.personalInfo?.uhid || '',
-        ipd_number: data?.personalInfo?.ipd || '',
-        patient_name: data?.personalInfo?.name || '',
-        task_no: '',
-        patient_location: data?.departmentInfo?.ward || '',
-        ward_type: data?.departmentInfo?.ward_type || '',
-        room: data?.departmentInfo?.room || '',
-        bed_no: data?.departmentInfo?.bedNumber || '',
-        remarks: '',
-        status: ''
+        admission_number: data?.personalInfo?.uhid || "",
+        ipd_number: data?.personalInfo?.ipd || "",
+        patient_name: data?.personalInfo?.name || "",
+        task_no: "",
+        patient_location: data?.departmentInfo?.ward || "",
+        ward_type: data?.departmentInfo?.ward_type || "",
+        room: data?.departmentInfo?.room || "",
+        bed_no: data?.departmentInfo?.bedNumber || "",
+        remarks: "",
+        status: "",
       });
-      setSearchQuery(data?.personalInfo?.uhid || '');
+      setSearchQuery(data?.personalInfo?.uhid || "");
       return;
     }
 
@@ -349,33 +418,37 @@ export default function Dressing() {
 
     if (patientInfo) {
       setFormData({
-        admission_number: patientInfo.admission_number || data.personalInfo.uhid || '',
-        ipd_number: patientInfo.ipd_number || data.personalInfo.ipd || '',
-        patient_name: patientInfo.patient_name || data.personalInfo.name || '',
-        task_no: '',
-        patient_location: patientInfo.patient_location || data.departmentInfo.ward || '',
-        ward_type: patientInfo.ward_type || data.departmentInfo.ward_type || '',
-        room: patientInfo.room || data.departmentInfo.room || '',
-        bed_no: patientInfo.bed_no || data.departmentInfo.bedNumber || '',
-        remarks: '',
-        status: ''
+        admission_number:
+          patientInfo.admission_number || data.personalInfo.uhid || "",
+        ipd_number: patientInfo.ipd_number || data.personalInfo.ipd || "",
+        patient_name: patientInfo.patient_name || data.personalInfo.name || "",
+        task_no: "",
+        patient_location:
+          patientInfo.patient_location || data.departmentInfo.ward || "",
+        ward_type: patientInfo.ward_type || data.departmentInfo.ward_type || "",
+        room: patientInfo.room || data.departmentInfo.room || "",
+        bed_no: patientInfo.bed_no || data.departmentInfo.bedNumber || "",
+        remarks: "",
+        status: "",
       });
-      setSearchQuery(patientInfo.admission_number || data.personalInfo.uhid || '');
+      setSearchQuery(
+        patientInfo.admission_number || data.personalInfo.uhid || "",
+      );
     } else {
       // Fallback to context data
       setFormData({
-        admission_number: data.personalInfo.uhid || '',
-        ipd_number: data.personalInfo.ipd || '',
-        patient_name: data.personalInfo.name || '',
-        task_no: '',
-        patient_location: data.departmentInfo.ward || '',
-        ward_type: data.departmentInfo.ward_type || '',
-        room: data.departmentInfo.room || '',
-        bed_no: data.departmentInfo.bedNumber || '',
-        remarks: '',
-        status: ''
+        admission_number: data.personalInfo.uhid || "",
+        ipd_number: data.personalInfo.ipd || "",
+        patient_name: data.personalInfo.name || "",
+        task_no: "",
+        patient_location: data.departmentInfo.ward || "",
+        ward_type: data.departmentInfo.ward_type || "",
+        room: data.departmentInfo.room || "",
+        bed_no: data.departmentInfo.bedNumber || "",
+        remarks: "",
+        status: "",
       });
-      setSearchQuery(data.personalInfo.uhid || '');
+      setSearchQuery(data.personalInfo.uhid || "");
     }
   };
 
@@ -392,30 +465,40 @@ export default function Dressing() {
   }, [showForm, data]);
 
   const getFilteredTasks = () => {
-    const tasks = activeTab === 'pending' ? pendingList : historyList;
+    const tasks = activeTab === "pending" ? pendingList : historyList;
 
-    return tasks.filter(task => {
+    return tasks.filter((task) => {
       const matchesSearch =
         task.admissionNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         task.taskNo?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
+      const matchesStatus =
+        filterStatus === "all" || task.status === filterStatus;
 
       return matchesSearch && matchesStatus;
     });
   };
 
   // Filter patients for dropdown - using correct column names
-  const filteredPatients = allPatients.filter(patient => {
-    if (!searchQuery) return false;
+  const filteredPatients = allPatients
+    .filter((patient) => {
+      if (!searchQuery) return false;
 
-    return (
-      (patient.admission_no && patient.admission_no.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (patient.patient_name && patient.patient_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (patient.ipd_number && patient.ipd_number.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }).slice(0, 10); // Limit to 10 results
+      return (
+        (patient.admission_no &&
+          patient.admission_no
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())) ||
+        (patient.patient_name &&
+          patient.patient_name
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())) ||
+        (patient.ipd_number &&
+          patient.ipd_number.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    })
+    .slice(0, 10); // Limit to 10 results
 
   const toggleCardExpansion = (taskId) => {
     if (expandedCard === taskId) {
@@ -443,7 +526,9 @@ export default function Dressing() {
                 </span>
               </div>
 
-              <h3 className="font-bold text-gray-800 text-sm mb-1">{task.taskName}</h3>
+              <h3 className="font-bold text-gray-800 text-sm mb-1">
+                {task.taskName}
+              </h3>
 
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div className="flex items-center gap-1 text-xs text-gray-600">
@@ -476,42 +561,62 @@ export default function Dressing() {
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Task ID</label>
-                  <span className="text-xs font-medium text-green-600">{task.taskNo}</span>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Task ID
+                  </label>
+                  <span className="text-xs font-medium text-green-600">
+                    {task.taskNo}
+                  </span>
                 </div>
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">IPD</label>
-                  <span className="text-xs text-gray-700">{task.supabaseData.ipd_number || 'N/A'}</span>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    IPD
+                  </label>
+                  <span className="text-xs text-gray-700">
+                    {task.supabaseData.ipd_number || "N/A"}
+                  </span>
                 </div>
               </div>
 
               <div className="bg-gray-50 p-2 rounded">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Ward & Bed</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Ward & Bed
+                </label>
                 <div className="text-xs text-gray-700">
                   {task.wardType} {task.room && `/ ${task.room}`}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">Bed: {task.bedNo || 'N/A'}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Bed: {task.bedNo || "N/A"}
+                </div>
               </div>
 
               {task.remarks && (
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Remarks</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Remarks
+                  </label>
                   <p className="text-xs text-gray-700">{task.remarks}</p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 p-2 rounded">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Planned Time</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Planned Time
+                  </label>
                   <div className="flex items-center gap-1">
                     <Calendar className="w-3 h-3 text-gray-400" />
-                    <p className="text-xs text-gray-700">{task.plannedTime || 'N/A'}</p>
+                    <p className="text-xs text-gray-700">
+                      {task.plannedTime || "N/A"}
+                    </p>
                   </div>
                 </div>
 
                 {task.actualTime && (
                   <div className="bg-gray-50 p-2 rounded">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Actual Time</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Actual Time
+                    </label>
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3 text-gray-400" />
                       <p className="text-xs text-gray-700">{task.actualTime}</p>
@@ -563,7 +668,10 @@ export default function Dressing() {
   const filteredTasks = getFilteredTasks();
 
   return (
-    <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 200px)' }}>
+    <div
+      className="flex flex-col h-full"
+      style={{ height: "calc(100vh - 200px)" }}
+    >
       {/* Header - GREEN THEME */}
       <div className="flex-shrink-0 bg-green-600 text-white p-4 rounded-lg shadow-md">
         {/* Desktop View */}
@@ -572,9 +680,13 @@ export default function Dressing() {
           <div className="flex items-center gap-3">
             <Heart className="w-8 h-8" />
             <div>
-              <h1 className="text-xl md:text-2xl font-bold">Dressing Records</h1>
+              <h1 className="text-xl md:text-2xl font-bold">
+                Dressing Records
+              </h1>
               <p className="text-xs opacity-90 mt-1">
-                {data?.personalInfo?.name ? `${data.personalInfo.name} - UHID: ${data.personalInfo.uhid}` : 'Manage dressing records'}
+                {data?.personalInfo?.name
+                  ? `${data.personalInfo.name} - UHID: ${data.personalInfo.uhid}`
+                  : "Manage dressing records"}
               </p>
             </div>
           </div>
@@ -584,20 +696,22 @@ export default function Dressing() {
             {/* Tabs */}
             <div className="flex items-center bg-white/20 rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('history')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'history'
-                  ? 'bg-white text-green-600'
-                  : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("history")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "history"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Complete ({historyList.length})
               </button>
               <button
-                onClick={() => setActiveTab('pending')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${activeTab === 'pending'
-                  ? 'bg-white text-green-600'
-                  : 'text-white hover:bg-white/30'
-                  }`}
+                onClick={() => setActiveTab("pending")}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === "pending"
+                    ? "bg-white text-green-600"
+                    : "text-white hover:bg-white/30"
+                }`}
               >
                 Pending ({pendingList.length})
               </button>
@@ -621,9 +735,15 @@ export default function Dressing() {
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-3 py-2 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-sm"
             >
-              <option value="all" className="text-gray-900">All Status</option>
-              <option value="Yes" className="text-gray-900">Completed</option>
-              <option value="No" className="text-gray-900">Cancelled</option>
+              <option value="all" className="text-gray-900">
+                All Status
+              </option>
+              <option value="Yes" className="text-gray-900">
+                Completed
+              </option>
+              <option value="No" className="text-gray-900">
+                Cancelled
+              </option>
               {/* <option value="Pending" className="text-gray-900">Pending</option> */}
             </select>
 
@@ -646,7 +766,9 @@ export default function Dressing() {
               <div className="flex-1">
                 <h1 className="text-xl font-bold">Dressing Records</h1>
                 <p className="text-xs opacity-90 mt-1">
-                  {data?.personalInfo?.name ? `${data.personalInfo.name} - UHID: ${data.personalInfo.uhid}` : 'Manage dressing records'}
+                  {data?.personalInfo?.name
+                    ? `${data.personalInfo.name} - UHID: ${data.personalInfo.uhid}`
+                    : "Manage dressing records"}
                 </p>
               </div>
             </div>
@@ -656,20 +778,22 @@ export default function Dressing() {
               {/* Small Tabs */}
               <div className="flex items-center bg-white/20 rounded-lg p-0.5">
                 <button
-                  onClick={() => setActiveTab('history')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'history'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("history")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "history"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Complete ({historyList.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${activeTab === 'pending'
-                    ? 'bg-white text-green-600'
-                    : 'text-white hover:bg-white/30'
-                    }`}
+                  onClick={() => setActiveTab("pending")}
+                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === "pending"
+                      ? "bg-white text-green-600"
+                      : "text-white hover:bg-white/30"
+                  }`}
                 >
                   Pending ({pendingList.length})
                 </button>
@@ -693,10 +817,18 @@ export default function Dressing() {
                   onChange={(e) => setFilterStatus(e.target.value)}
                   className="px-2 py-1.5 bg-white/10 border border-green-400 rounded-lg focus:ring-2 focus:ring-white focus:border-transparent text-white text-xs w-24"
                 >
-                  <option value="all" className="text-gray-900">All Status</option>
-                  <option value="Yes" className="text-gray-900">Completed</option>
-                  <option value="No" className="text-gray-900">Cancelled</option>
-                  <option value="Pending" className="text-gray-900">Pending</option>
+                  <option value="all" className="text-gray-900">
+                    All Status
+                  </option>
+                  <option value="Yes" className="text-gray-900">
+                    Completed
+                  </option>
+                  <option value="No" className="text-gray-900">
+                    Cancelled
+                  </option>
+                  <option value="Pending" className="text-gray-900">
+                    Pending
+                  </option>
                 </select>
 
                 {/* Add New Button for mobile */}
@@ -722,12 +854,16 @@ export default function Dressing() {
                 <div className="text-center">
                   <Heart className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                   <p className="text-gray-600 font-medium text-xs">
-                    {activeTab === 'pending' ? 'No pending dressing found' : 'No completed dressing found'}
+                    {activeTab === "pending"
+                      ? "No pending dressing found"
+                      : "No completed dressing found"}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {searchTerm ? 'No records match your search' :
-                      activeTab === 'pending' ? 'No pending dressing available' : 'No completed dressing available'
-                    }
+                    {searchTerm
+                      ? "No records match your search"
+                      : activeTab === "pending"
+                        ? "No pending dressing available"
+                        : "No completed dressing available"}
                   </p>
                 </div>
               </div>
@@ -753,16 +889,32 @@ export default function Dressing() {
                 <table className="w-full text-sm text-left">
                   <thead className="sticky top-0 z-10 bg-gray-100 border-b-2 border-gray-300">
                     <tr>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Task NO</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Patient</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Admission No</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Location</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Ward/Bed</th>
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Planned Time</th>
-                      {activeTab === 'history' && (
-                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actual Time</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Task NO
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Patient
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Admission No
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Location
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Ward/Bed
+                      </th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Planned Time
+                      </th>
+                      {activeTab === "history" && (
+                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                          Actual Time
+                        </th>
                       )}
-                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Status</th>
+                      <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                        Status
+                      </th>
                       {/* <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actions</th> */}
                     </tr>
                   </thead>
@@ -770,30 +922,38 @@ export default function Dressing() {
                     {filteredTasks.map((task) => (
                       <tr key={task.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <span className="font-semibold text-green-600">{task.taskNo}</span>
+                          <span className="font-semibold text-green-600">
+                            {task.taskNo}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{task.patientName}</div>
+                          <div className="font-medium text-gray-900">
+                            {task.patientName}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-xs text-gray-500">{task.admissionNo}</div>
+                          <div className="text-xs text-gray-500">
+                            {task.admissionNo}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm text-gray-700 max-w-xs truncate">
-                            {task.location || 'N/A'}
+                            {task.location || "N/A"}
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm text-gray-700">
                             {task.wardType} {task.room && `/ ${task.room}`}
                           </div>
-                          <div className="text-xs text-gray-500">Bed: {task.bedNo || 'N/A'}</div>
+                          <div className="text-xs text-gray-500">
+                            Bed: {task.bedNo || "N/A"}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {task.plannedTime}
                         </td>
-                        {activeTab === 'history' && (
+                        {activeTab === "history" && (
                           <td className="px-4 py-3 text-sm text-gray-700">
                             {task.actualTime}
                           </td>
@@ -850,12 +1010,16 @@ export default function Dressing() {
                 <div className="text-center">
                   <Heart className="w-12 h-12 mx-auto text-gray-300 mb-3" />
                   <p className="text-gray-600 font-medium text-sm">
-                    {activeTab === 'pending' ? 'No pending dressing found' : 'No completed dressing found'}
+                    {activeTab === "pending"
+                      ? "No pending dressing found"
+                      : "No completed dressing found"}
                   </p>
                   <p className="text-gray-500 text-xs mt-1">
-                    {searchTerm ? 'No records match your search' :
-                      activeTab === 'pending' ? 'No pending dressing available' : 'No completed dressing available'
-                    }
+                    {searchTerm
+                      ? "No records match your search"
+                      : activeTab === "pending"
+                        ? "No pending dressing available"
+                        : "No completed dressing available"}
                   </p>
                 </div>
               </div>
@@ -869,23 +1033,25 @@ export default function Dressing() {
         <div className="fixed inset-0 bg-black/50 flex items-start md:items-center justify-center p-2 md:p-4 z-50">
           <div className="bg-white p-4 md:p-6 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto border-2 border-green-600">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg md:text-xl font-semibold text-green-600">Add New Dressing Record</h2>
+              <h2 className="text-lg md:text-xl font-semibold text-green-600">
+                Add New Dressing Record
+              </h2>
               <button
                 onClick={() => {
                   setShowForm(false);
                   setFormData({
-                    admission_number: '',
-                    ipd_number: '',
-                    patient_name: '',
-                    task_no: '',
-                    patient_location: '',
-                    ward_type: '',
-                    room: '',
-                    bed_no: '',
-                    remarks: '',
-                    status: ''
+                    admission_number: "",
+                    ipd_number: "",
+                    patient_name: "",
+                    task_no: "",
+                    patient_location: "",
+                    ward_type: "",
+                    room: "",
+                    bed_no: "",
+                    remarks: "",
+                    status: "",
                   });
-                  setSearchQuery('');
+                  setSearchQuery("");
                 }}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
               >
@@ -914,39 +1080,45 @@ export default function Dressing() {
                   />
                 </div>
 
-                {showPatientDropdown && searchQuery && filteredPatients.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-green-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {filteredPatients.map((patient) => (
-                      <div
-                        key={patient.id}
-                        onClick={() => handlePatientSelect(patient)}
-                        className="p-3 cursor-pointer border-b border-gray-100 hover:bg-green-50 transition-colors"
-                      >
-                        <div className="font-medium text-green-600 text-sm">
-                          {patient.admission_no} - {patient.patient_name}
+                {showPatientDropdown &&
+                  searchQuery &&
+                  filteredPatients.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-green-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredPatients.map((patient) => (
+                        <div
+                          key={patient.id}
+                          onClick={() => handlePatientSelect(patient)}
+                          className="p-3 cursor-pointer border-b border-gray-100 hover:bg-green-50 transition-colors"
+                        >
+                          <div className="font-medium text-green-600 text-sm">
+                            {patient.admission_no} - {patient.patient_name}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-0.5">
+                            IPD: {patient.ipd_number} | Ward:{" "}
+                            {patient.ward_type}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-600 mt-0.5">
-                          IPD: {patient.ipd_number} | Ward: {patient.ward_type}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
 
                 <p className="text-xs text-gray-500 mt-2">
                   {data?.personalInfo?.name
                     ? `Current Patient: ${data.personalInfo.name} (${data.personalInfo.uhid})`
-                    : 'Search for a patient to auto-fill details'
-                  }
+                    : "Search for a patient to auto-fill details"}
                 </p>
               </div>
 
               {/* Auto-filled Patient Details */}
               <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Patient Details (Auto-filled)</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Patient Details (Auto-filled)
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Admission Number</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Admission Number
+                    </label>
                     <input
                       type="text"
                       name="admission_number"
@@ -957,7 +1129,9 @@ export default function Dressing() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">IPD Number</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      IPD Number
+                    </label>
                     <input
                       type="text"
                       name="ipd_number"
@@ -967,7 +1141,9 @@ export default function Dressing() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Patient Name</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Patient Name
+                    </label>
                     <input
                       type="text"
                       name="patient_name"
@@ -977,7 +1153,9 @@ export default function Dressing() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Location</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Location
+                    </label>
                     <input
                       type="text"
                       name="patient_location"
@@ -987,7 +1165,9 @@ export default function Dressing() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Ward Type</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Ward Type
+                    </label>
                     <input
                       type="text"
                       name="ward_type"
@@ -997,7 +1177,9 @@ export default function Dressing() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Room</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Room
+                    </label>
                     <input
                       type="text"
                       name="room"
@@ -1007,7 +1189,9 @@ export default function Dressing() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Bed No</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Bed No
+                    </label>
                     <input
                       type="text"
                       name="bed_no"
@@ -1057,36 +1241,38 @@ export default function Dressing() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${isSubmitting
-                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                    : 'bg-green-600 text-white hover:bg-green-700'
-                    }`}
+                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${
+                    isSubmitting
+                      ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                      : "bg-green-600 text-white hover:bg-green-700"
+                  }`}
                 >
-                  {isSubmitting ? 'Submitting...' : 'Add Dressing Record'}
+                  {isSubmitting ? "Submitting..." : "Add Dressing Record"}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowForm(false);
                     setFormData({
-                      admission_number: '',
-                      ipd_number: '',
-                      patient_name: '',
-                      task_no: '',
-                      patient_location: '',
-                      ward_type: '',
-                      room: '',
-                      bed_no: '',
-                      remarks: '',
-                      status: ''
+                      admission_number: "",
+                      ipd_number: "",
+                      patient_name: "",
+                      task_no: "",
+                      patient_location: "",
+                      ward_type: "",
+                      room: "",
+                      bed_no: "",
+                      remarks: "",
+                      status: "",
                     });
-                    setSearchQuery('');
+                    setSearchQuery("");
                   }}
                   disabled={isSubmitting}
-                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${isSubmitting
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-gray-600 text-white hover:bg-gray-700'
-                    }`}
+                  className={`flex-1 py-3 rounded-lg font-medium text-sm transition-colors ${
+                    isSubmitting
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-gray-600 text-white hover:bg-gray-700"
+                  }`}
                 >
                   Cancel
                 </button>
