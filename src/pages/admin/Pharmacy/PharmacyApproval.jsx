@@ -1144,7 +1144,7 @@ const PharmacyApproval = () => {
                     disabled={loading}
                   >
                     <Save className="w-4 h-4" />
-                    {loading ? "Saving..." : "Save"}
+                    {loading ? "Submitting..." : "Submit"}
                   </button>
                 </div>
               )}
@@ -2187,7 +2187,7 @@ const PharmacyApproval = () => {
                   ) : (
                     <>
                       <Save className="w-4 h-4" />
-                      Save Changes
+                      Submit Changes
                     </>
                   )}
                 </button>
