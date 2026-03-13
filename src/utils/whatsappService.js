@@ -285,13 +285,18 @@ export const buildOTNotificationMessage = (
   otData,
   patientData,
   completeUrl,
+  isUpdate = false,
 ) => {
   const operationDateTime =
     otData.ot_date && otData.ot_time
       ? `${otData.ot_date} ${otData.ot_time}`
       : "N/A";
 
-  const message = `📌 OT SURGICAL PATIENT ALERT
+  const title = isUpdate
+    ? "📌 OT SURGICAL PATIENT ALERT - UPDATED"
+    : "📌 OT SURGICAL PATIENT ALERT";
+
+  const message = `${title}
 
 👤 Patient Name: ${otData.patient_name || "N/A"}
 🆔 Admission No.: ${otData.ipd_number || "N/A"}
@@ -318,8 +323,13 @@ TEAM MAMTA HOSPITAL`;
  *
  * @param {Object} otData - The OT record data
  * @param {Object} patientData - Additional patient data from patient_admission
+ * @param {boolean} isUpdate - Whether this is an update notification
  */
-export const sendOTNotification = async (otData, patientData) => {
+export const sendOTNotification = async (
+  otData,
+  patientData,
+  isUpdate = false,
+) => {
   try {
     console.log("[WhatsApp] Sending OT notification...");
     // Build the complete URL pointing to the OT page
@@ -329,6 +339,7 @@ export const sendOTNotification = async (otData, patientData) => {
       otData,
       patientData,
       completeUrl,
+      isUpdate,
     );
 
     const results = await sendWhatsAppMessages(OT_PHONE_NUMBERS, message);

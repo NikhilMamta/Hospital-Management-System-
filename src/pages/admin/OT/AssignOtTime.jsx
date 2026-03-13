@@ -263,6 +263,34 @@ const AssignOtTime = () => {
 
       if (error) throw error;
 
+      // Fetch updated record and patient data for WhatsApp notification
+      const { data: updatedRecord, error: fetchError } = await supabase
+        .from("ot_information")
+        .select("*")
+        .eq("id", selectedUpdateRecord.id)
+        .single();
+
+      if (!fetchError && updatedRecord) {
+        const { data: patientData, error: patientError } = await supabase
+          .from("patient_admission")
+          .select("*")
+          .eq("ipd_number", updatedRecord.ipd_number)
+          .single();
+
+        if (!patientError && patientData) {
+          // Send WhatsApp notification for updated OT
+          const otData = {
+            ...updatedRecord,
+            doctor: updatedRecord.doctor,
+            rmo: updatedRecord.rmo,
+            ot_date: updatedRecord.ot_date,
+            ot_time: updatedRecord.ot_time,
+            ot_description: updatedRecord.ot_description,
+          };
+          await sendOTNotification(otData, patientData, true);
+        }
+      }
+
       showNotification("OT date updated successfully!", "success");
       setShowUpdateModal(false);
       setSelectedUpdateRecord(null);
