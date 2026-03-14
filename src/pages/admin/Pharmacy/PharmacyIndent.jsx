@@ -869,6 +869,13 @@ const PharmacyIndents = () => {
         if (error) throw error;
         insertedData = data;
         showPopup("Indent updated successfully!");
+
+        // Notify the approval team again when a pending indent is updated
+        sendIndentApprovalNotification(
+          insertedData,
+          medicines,
+          requestTypes,
+        ).catch((err) => console.error("[WhatsApp] Notification error:", err));
       } else {
         // Create new indent
         const { data, error } = await supabase
@@ -960,12 +967,20 @@ const PharmacyIndents = () => {
     }
   };
 
+  const isApprovedIndent = (status) =>
+    typeof status === "string" && status.toLowerCase().includes("approved");
+
   const handleView = (indent) => {
     setSelectedIndent(indent);
     setViewModal(true);
   };
 
   const handleEdit = (indent) => {
+    if (isApprovedIndent(indent.status)) {
+      showPopup("This indent has been approved and cannot be edited.");
+      return;
+    }
+
     setSelectedIndent(indent);
     setFormData({
       admissionNumber: indent.admission_number,
@@ -1197,15 +1212,17 @@ const PharmacyIndents = () => {
                               className={`px-2 py-1 flex w-fit text-xs font-semibold rounded-full ${
                                 indent.status === "pending"
                                   ? "bg-yellow-100 text-yellow-800"
-                                  : indent.status === "Approved"
+                                  : isApprovedIndent(indent.status)
                                     ? "bg-blue-100 text-blue-800"
                                     : "bg-green-100 text-green-800"
                               }`}
                             >
-                              {indent.status === "Approved"
+                              {isApprovedIndent(indent.status)
                                 ? "Approved"
-                                : indent.status.charAt(0).toUpperCase() +
-                                  indent.status.slice(1)}
+                                : indent.status
+                                  ? indent.status.charAt(0).toUpperCase() +
+                                    indent.status.slice(1)
+                                  : "Unknown"}
                             </span>
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
@@ -1248,7 +1265,7 @@ const PharmacyIndents = () => {
                                 className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 title="Edit Indent"
                                 disabled={
-                                  loading || indent.status === "approved"
+                                  loading || isApprovedIndent(indent.status)
                                 }
                               >
                                 <Edit className="w-4 h-4" />
@@ -1399,15 +1416,14 @@ const PharmacyIndents = () => {
                           <Eye className="w-4 h-4" />
                           Details
                         </button>
-                        {indent.status === "pending" && (
-                          <button
-                            onClick={() => handleEdit(indent)}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg hover:bg-amber-100 transition-colors"
-                          >
-                            <Edit className="w-4 h-4" />
-                            Edit
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleEdit(indent)}
+                          disabled={isApprovedIndent(indent.status)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Edit className="w-4 h-4" />
+                          Edit
+                        </button>
                       </div>
                     </div>
                   </div>

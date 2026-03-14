@@ -6,6 +6,7 @@ const Roster = () => {
   const wards = [
     "Male General Ward",
     "Female General Ward",
+    "General Ward(5th Floor)",
     "ICU",
     "HDU",
     "Private Ward",
@@ -232,6 +233,9 @@ const Roster = () => {
             break;
           case "Female General Ward":
             columnName = "female_general_ward";
+            break;
+          case "General Ward(5th Floor)":
+            columnName = "general_ward_5th_floor";
             break;
           case "ICU":
             columnName = "icu";
@@ -1326,6 +1330,9 @@ const Roster = () => {
               break;
             case "Female General Ward":
               columnName = "female_general_ward";
+              break;
+            case "General Ward(5th Floor)":
+              columnName = "general_ward_5th_floor";
               break;
             case "ICU":
               columnName = "icu";

@@ -237,10 +237,53 @@ const FloorBed = () => {
     }));
   };
 
+  // Generate next serial number in the same format as existing entries
+  const getNextSerialNo = () => {
+    const serials = floorBeds
+      .map((item) => item.serial_no)
+      .filter(Boolean)
+      .map((s) => s.toString().trim())
+      .filter((s) => s.length > 0);
+
+    if (serials.length === 0) return "1";
+
+    // Find the serial with the highest numeric suffix
+    let maxNum = -Infinity;
+    let bestMatch = null;
+
+    serials.forEach((serial) => {
+      const match = serial.match(/(.*?)(\d+)$/);
+      if (!match) return;
+
+      const [, prefix, numStr] = match;
+      const num = parseInt(numStr, 10);
+      if (Number.isNaN(num)) return;
+
+      if (num > maxNum) {
+        maxNum = num;
+        bestMatch = { prefix, numStrLength: numStr.length };
+      }
+    });
+
+    if (bestMatch === null) {
+      // Fallback to numeric-only increment
+      const nums = serials
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      if (nums.length === 0) return "1";
+      const max = Math.max(...nums);
+      return String(max + 1);
+    }
+
+    const nextNum = maxNum + 1;
+    const padded = String(nextNum).padStart(bestMatch.numStrLength, "0");
+    return `${bestMatch.prefix}${padded}`;
+  };
+
   // Reset form
   const resetForm = () => {
     setFormData({
-      serial_no: "",
+      serial_no: getNextSerialNo(),
       floor: "",
       ward: "",
       room: "",
@@ -257,7 +300,7 @@ const FloorBed = () => {
     if (item) {
       setEditingFloorBed(item);
       setFormData({
-        serial_no: item.serial_no || "",
+        serial_no: item.serial_no || getNextSerialNo(),
         floor: item.floor || "",
         ward: item.ward || "",
         room: item.room || "",
@@ -735,7 +778,7 @@ const FloorBed = () => {
                   value={formData.serial_no}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Enter serial number"
+                  placeholder="Auto-generated"
                 />
               </div>
 

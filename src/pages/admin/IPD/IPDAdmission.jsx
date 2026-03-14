@@ -2231,6 +2231,7 @@ const PatientAdmissionSystem = () => {
                       "All",
                       "Male General Ward",
                       "Female General Ward",
+                      "General Ward(5th Floor)",
                       "ICU",
                       "Private Ward",
                       "PICU",

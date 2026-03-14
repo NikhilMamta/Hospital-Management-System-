@@ -36,6 +36,9 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+const isApprovedIndent = (status) =>
+  typeof status === "string" && status.toLowerCase().includes("approved");
+
 export default function Pharmacy() {
   const { data } = useOutletContext();
   const currentIpdNumber = data?.personalInfo?.ipd || "";
@@ -72,6 +75,20 @@ export default function Pharmacy() {
       if (storedUser) {
         const user = JSON.parse(storedUser);
         return user.name || "";
+      }
+    } catch (error) {
+      console.error("Error parsing user from localStorage:", error);
+    }
+    return "";
+  };
+
+  // User role from local storage (used to decide whether to fire WhatsApp notifications)
+  const getCurrentUserRole = () => {
+    try {
+      const storedUser = localStorage.getItem("mis_user");
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        return (user.role || "").toLowerCase();
       }
     } catch (error) {
       console.error("Error parsing user from localStorage:", error);
@@ -740,6 +757,18 @@ export default function Pharmacy() {
         savedRow = data;
 
         showNotification("Indent updated successfully!");
+
+        // Only send WhatsApp notification for nurse updates (not admin/RMO updates)
+        const currentRole = getCurrentUserRole();
+        if (currentRole === "nurse") {
+          sendIndentApprovalNotification(
+            savedRow,
+            medicines,
+            requestTypes,
+          ).catch((err) =>
+            console.error("[WhatsApp] Notification error:", err),
+          );
+        }
       } else {
         const { data, error } = await supabase
           .from("pharmacy")
@@ -783,6 +812,17 @@ export default function Pharmacy() {
   };
 
   const handleDelete = async (indentNumber) => {
+    const indent = submittedIndents.find(
+      (i) => i.indentNumber === indentNumber,
+    );
+    if (indent && isApprovedIndent(indent.status)) {
+      showNotification(
+        "This indent has been approved and cannot be deleted.",
+        "error",
+      );
+      return;
+    }
+
     if (window.confirm("Are you sure you want to delete this indent?")) {
       try {
         const { error } = await supabase
@@ -793,10 +833,10 @@ export default function Pharmacy() {
         if (error) throw error;
 
         await fetchIndents();
-        showPopup("Indent deleted successfully");
+        showNotification("Indent deleted successfully");
       } catch (error) {
         console.error("Error deleting indent:", error);
-        showPopup("Error deleting indent", "error");
+        showNotification("Error deleting indent", "error");
       }
     }
   };
@@ -868,6 +908,14 @@ export default function Pharmacy() {
   };
 
   const handleEdit = (indent) => {
+    if (isApprovedIndent(indent.status)) {
+      showNotification(
+        "This indent has been approved and cannot be edited.",
+        "error",
+      );
+      return;
+    }
+
     if (
       indent.ipdNumber !== currentIpdNumber &&
       indent.admissionNo !== currentIpdNumber
@@ -1158,14 +1206,20 @@ export default function Pharmacy() {
                           </button>
                           <button
                             onClick={() => handleEdit(indent)}
-                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-blue-600 rounded-md hover:bg-blue-700"
+                            disabled={
+                              isApprovedIndent(indent.status) || loading
+                            }
+                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                           >
                             <Edit className="w-3 h-3" />
                             <span>Edit</span>
                           </button>
                           <button
                             onClick={() => handleDelete(indent.indentNumber)}
-                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-red-600 rounded-md hover:bg-red-700"
+                            disabled={
+                              isApprovedIndent(indent.status) || loading
+                            }
+                            className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                           >
                             <Trash2 className="w-3 h-3" />
                             <span>Delete</span>
@@ -1330,14 +1384,20 @@ export default function Pharmacy() {
                           </button>
                           <button
                             onClick={() => handleEdit(indent)}
-                            className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                            disabled={
+                              isApprovedIndent(indent.status) || loading
+                            }
+                            className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             title="Edit Indent"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(indent.indentNumber)}
-                            className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                            disabled={
+                              isApprovedIndent(indent.status) || loading
+                            }
+                            className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             title="Delete Indent"
                           >
                             <Trash2 className="w-4 h-4" />
