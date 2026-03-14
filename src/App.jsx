@@ -187,9 +187,9 @@ function App() {
   // Show loading spinner while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
+          <div className="w-16 h-16 border-b-4 border-blue-600 rounded-full animate-spin"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>

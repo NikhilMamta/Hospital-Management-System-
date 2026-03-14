@@ -36,6 +36,7 @@ const PatientAdmissionSystem = () => {
   // State for dynamic dropdowns
   const [departmentOptions, setDepartmentOptions] = useState([]);
   const [doctorOptions, setDoctorOptions] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
   const [filteredDoctorOptions, setFilteredDoctorOptions] = useState([]);
   const [filteredDepartmentOptions, setFilteredDepartmentOptions] = useState(
     [],
@@ -195,6 +196,37 @@ const PatientAdmissionSystem = () => {
     } catch (error) {
       console.error("Error loading departments:", error);
       showNotificationPopup("Failed to load departments", "error");
+      return [];
+    }
+  };
+
+  // Load patient categories from category table
+  const loadCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("category")
+        .select("name")
+        .not("name", "is", null)
+        .order("name");
+
+      if (error) {
+        console.error("Error loading categories:", error);
+        showNotificationPopup("Failed to load categories", "error");
+        return [];
+      }
+
+      const options = data
+        .map((item) => item.name)
+        .filter(
+          (value, index, self) =>
+            value && value.trim() !== "" && self.indexOf(value) === index,
+        );
+
+      setCategoryOptions(options);
+      return options;
+    } catch (error) {
+      console.error("Error loading categories:", error);
+      showNotificationPopup("Failed to load categories", "error");
       return [];
     }
   };
@@ -414,6 +446,7 @@ const PatientAdmissionSystem = () => {
     if (showModal) {
       loadDepartments();
       loadDoctors();
+      loadCategories();
     }
   }, [showModal]);
 
@@ -1718,7 +1751,7 @@ const PatientAdmissionSystem = () => {
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Category</option>
-                          {dropdownData.patCategories.map((cat) => (
+                          {categoryOptions.map((cat) => (
                             <option key={cat} value={cat}>
                               {cat}
                             </option>
