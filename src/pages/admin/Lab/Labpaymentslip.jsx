@@ -370,15 +370,37 @@ const Payment = () => {
       showNotificationPopup("No bill image available", "error");
       return;
     }
+
+    const isPdf = imageUrl.toLowerCase().endsWith(".pdf");
+
     const newWindow = window.open();
-    newWindow.document.write(`
-      <html>
-        <head><title>Bill Image</title></head>
-        <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#000;">
-          <img src="${imageUrl}" style="max-width:100%;max-height:100vh;object-fit:contain;" />
-        </body>
-      </html>
-    `);
+    if (!newWindow) {
+      showNotificationPopup(
+        "Unable to open viewer. Please allow popups.",
+        "error",
+      );
+      return;
+    }
+
+    if (isPdf) {
+      newWindow.document.write(`
+        <html>
+          <head><title>Bill PDF</title></head>
+          <body style="margin:0;">
+            <iframe src="${imageUrl}" style="width:100vw;height:100vh;border:none;"></iframe>
+          </body>
+        </html>
+      `);
+    } else {
+      newWindow.document.write(`
+        <html>
+          <head><title>Bill Image</title></head>
+          <body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#000;">
+            <img src="${imageUrl}" style="max-width:100%;max-height:100vh;object-fit:contain;" />
+          </body>
+        </html>
+      `);
+    }
   };
 
   const applyFilters = (records) => {
@@ -1073,11 +1095,19 @@ const Payment = () => {
               </div>
               {viewingRecord.billImage && (
                 <div className="border rounded-lg overflow-hidden">
-                  <img
-                    src={viewingRecord.billImage}
-                    alt="Bill"
-                    className="w-full h-auto max-h-96 object-contain"
-                  />
+                  {viewingRecord.billImage.toLowerCase().endsWith(".pdf") ? (
+                    <iframe
+                      src={viewingRecord.billImage}
+                      title="Bill PDF"
+                      className="w-full h-96"
+                    />
+                  ) : (
+                    <img
+                      src={viewingRecord.billImage}
+                      alt="Bill"
+                      className="w-full h-auto max-h-96 object-contain"
+                    />
+                  )}
                   <button
                     onClick={() => handleViewImage(viewingRecord.billImage)}
                     className="w-full py-2 bg-green-50 text-green-600 text-sm"
