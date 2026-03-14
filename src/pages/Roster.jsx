@@ -1247,6 +1247,11 @@ const Roster = () => {
     }
 
     setAssignments(newAssignments);
+
+    // Clear checkbox selection after drag/drop (especially for multi-select assignments)
+    if (dragData.isMultiple) {
+      setSelectedStaff(new Set());
+    }
   };
 
   // Handle remove assignment

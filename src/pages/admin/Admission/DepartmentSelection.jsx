@@ -17,7 +17,7 @@ const DepartmentSelection = () => {
   const [historyPatients, setHistoryPatients] = useState([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("IPD");
   const [activeView, setActiveView] = useState("pending");
   const [assignError, setAssignError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -244,7 +244,7 @@ const DepartmentSelection = () => {
 
   const handleAssignClick = (patient) => {
     setSelectedPatient(patient);
-    setSelectedDepartment("");
+    setSelectedDepartment("IPD");
     setAssignError("");
     setShowAssignModal(true);
   };
@@ -285,7 +285,7 @@ const DepartmentSelection = () => {
 
         setShowAssignModal(false);
         setSelectedPatient(null);
-        setSelectedDepartment("");
+        setSelectedDepartment("IPD");
 
         // Show success notification instead of alert
         showNotificationPopup(
@@ -352,9 +352,9 @@ const DepartmentSelection = () => {
     <div className="p-3 space-y-4 md:p-6 bg-gray-50 min-h-[75vh]">
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 md:gap-4">
-        <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm md:p-4">
+        <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm md:p-4">
           <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between">
               <p className="text-xs text-gray-600 md:text-sm">Total Patients</p>
               <Users className="w-4 h-4 text-green-600 md:w-5 md:h-5" />
             </div>
@@ -364,9 +364,9 @@ const DepartmentSelection = () => {
           </div>
         </div>
 
-        <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm md:p-4">
+        <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm md:p-4">
           <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between">
               <p className="text-xs text-gray-600 md:text-sm">Pending</p>
               <Clock className="w-4 h-4 text-yellow-600 md:w-5 md:h-5" />
             </div>
@@ -376,9 +376,9 @@ const DepartmentSelection = () => {
           </div>
         </div>
 
-        <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm md:p-4">
+        <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm md:p-4">
           <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between">
               <p className="text-xs text-gray-600 md:text-sm">Total OPD</p>
               <Building2 className="w-4 h-4 text-green-600 md:w-5 md:h-5" />
             </div>
@@ -388,9 +388,9 @@ const DepartmentSelection = () => {
           </div>
         </div>
 
-        <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm md:p-4">
+        <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm md:p-4">
           <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between">
               <p className="text-xs text-gray-600 md:text-sm">Total IPD</p>
               <Activity className="w-4 h-4 text-purple-600 md:w-5 md-h-5" />
             </div>
@@ -400,9 +400,9 @@ const DepartmentSelection = () => {
           </div>
         </div>
 
-        <div className="col-span-2 lg:col-span-1 p-3 bg-white rounded-lg border border-gray-200 shadow-sm md:p-4">
+        <div className="col-span-2 p-3 bg-white border border-gray-200 rounded-lg shadow-sm lg:col-span-1 md:p-4">
           <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between">
               <p className="text-xs text-gray-600 md:text-sm">
                 Total Emergency
               </p>
@@ -416,9 +416,9 @@ const DepartmentSelection = () => {
       </div>
 
       {/* Search Bar */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+      <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute w-5 h-5 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
           <input
             type="text"
             placeholder="Search by admission number, patient name, phone, attender name, or department..."
@@ -430,7 +430,7 @@ const DepartmentSelection = () => {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute text-gray-400 transform -translate-y-1/2 right-3 top-1/2 hover:text-gray-600"
             >
               <X className="w-5 h-5" />
             </button>
@@ -448,7 +448,7 @@ const DepartmentSelection = () => {
       </div>
 
       {/* Main Content */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveView("pending")}
@@ -462,7 +462,7 @@ const DepartmentSelection = () => {
             <Clock className="w-4 h-4 md:w-5 md:h-5" />
             Pending ({stats.pending})
             {isLoading && (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-600"></div>
+              <div className="w-3 h-3 border-b-2 border-yellow-600 rounded-full animate-spin"></div>
             )}
           </button>
           <button
@@ -487,42 +487,42 @@ const DepartmentSelection = () => {
                 style={{ maxHeight: "calc(105vh - 400px)" }}
               >
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                  <thead className="sticky top-0 z-10 shadow-sm bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Action
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Planned Time
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Admission No
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Patient Name
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Phone Number
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Attender Name
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Attender Mobile
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         DOB
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Reason For Visit
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Age
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Gender
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Submitted By
                       </th>
                     </tr>
@@ -535,7 +535,7 @@ const DepartmentSelection = () => {
                           className="px-4 py-8 text-center text-gray-500"
                         >
                           <div className="flex flex-col items-center">
-                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
+                            <div className="w-10 h-10 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                             <p className="text-gray-700">Loading patients...</p>
                           </div>
                         </td>
@@ -573,7 +573,7 @@ const DepartmentSelection = () => {
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {formatDOBForDisplay(patient.dateOfBirth)}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
+                          <td className="max-w-xs px-4 py-3 text-sm text-gray-900 truncate">
                             {patient.reasonForVisit}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
@@ -593,7 +593,7 @@ const DepartmentSelection = () => {
                           colSpan="12"
                           className="px-4 py-8 text-center text-gray-500"
                         >
-                          <Clock className="mx-auto mb-2 w-12 h-12 text-gray-300" />
+                          <Clock className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                           <p className="text-lg font-medium text-gray-900">
                             {searchQuery
                               ? "No patients found matching your search"
@@ -615,7 +615,7 @@ const DepartmentSelection = () => {
             <div className="p-4 space-y-3 md:hidden">
               {isInitialLoad ? (
                 <div className="p-8 text-center">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-4"></div>
+                  <div className="w-10 h-10 mx-auto mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                   <p className="text-gray-700">Loading patients...</p>
                 </div>
               ) : filteredPendingPatients.length > 0 ? (
@@ -624,9 +624,9 @@ const DepartmentSelection = () => {
                     key={patient.id}
                     className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm"
                   >
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <div className="text-xs font-medium text-green-600 mb-1">
+                        <div className="mb-1 text-xs font-medium text-green-600">
                           {patient.admissionNo} •{" "}
                           <span className="text-gray-500">
                             {patient.planned1Formatted}
@@ -692,7 +692,7 @@ const DepartmentSelection = () => {
                 ))
               ) : (
                 <div className="p-8 text-center bg-white">
-                  <Clock className="mx-auto mb-2 w-12 h-12 text-gray-300" />
+                  <Clock className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                   <p className="text-sm font-medium text-gray-900">
                     {searchQuery
                       ? "No patients found"
@@ -710,45 +710,45 @@ const DepartmentSelection = () => {
                 style={{ maxHeight: "calc(100vh - 400px)" }}
               >
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                  <thead className="sticky top-0 z-10 shadow-sm bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Department
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Planned Time
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Actual Time
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Admission No
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Patient Name
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Phone Number
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Attender Name
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Attender Mobile
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         DOB
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Reason For Visit
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Age
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Gender
                       </th>
-                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase bg-gray-50 border-b-2 border-gray-200">
+                      <th className="px-4 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase border-b-2 border-gray-200 bg-gray-50">
                         Submitted By
                       </th>
                     </tr>
@@ -761,7 +761,7 @@ const DepartmentSelection = () => {
                           className="px-4 py-8 text-center text-gray-500"
                         >
                           <div className="flex flex-col items-center">
-                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mb-4"></div>
+                            <div className="w-10 h-10 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                             <p className="text-gray-700">Loading patients...</p>
                           </div>
                         </td>
@@ -800,7 +800,7 @@ const DepartmentSelection = () => {
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {formatDOBForDisplay(patient.dateOfBirth)}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">
+                          <td className="max-w-xs px-4 py-3 text-sm text-gray-900 truncate">
                             {patient.reasonForVisit}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
@@ -820,7 +820,7 @@ const DepartmentSelection = () => {
                           colSpan="14"
                           className="px-4 py-8 text-center text-gray-500"
                         >
-                          <CheckCircle className="mx-auto mb-2 w-12 h-12 text-gray-300" />
+                          <CheckCircle className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                           <p className="text-lg font-medium text-gray-900">
                             {searchQuery
                               ? "No patients found matching your search"
@@ -842,7 +842,7 @@ const DepartmentSelection = () => {
             <div className="p-4 space-y-3 md:hidden max-h-[calc(100vh-400px)] overflow-y-auto">
               {isInitialLoad ? (
                 <div className="p-8 text-center">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-4"></div>
+                  <div className="w-10 h-10 mx-auto mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                   <p className="text-gray-700">Loading patients...</p>
                 </div>
               ) : filteredHistoryPatients.length > 0 ? (
@@ -851,9 +851,9 @@ const DepartmentSelection = () => {
                     key={patient.id}
                     className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm"
                   >
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <div className="text-xs font-medium text-green-600 mb-1">
+                        <div className="mb-1 text-xs font-medium text-green-600">
                           {patient.admissionNo} •{" "}
                           <span className="text-gray-500">
                             {patient.planned1Formatted}
@@ -912,7 +912,7 @@ const DepartmentSelection = () => {
                           {patient.reasonForVisit}
                         </p>
                       </div>
-                      <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between">
+                      <div className="flex justify-between pt-2 mt-2 border-t border-gray-100">
                         <span className="text-gray-600">Actual:</span>
                         <span className="font-medium text-green-700">
                           {patient.actual1Formatted}
@@ -923,7 +923,7 @@ const DepartmentSelection = () => {
                 ))
               ) : (
                 <div className="p-8 text-center bg-white">
-                  <CheckCircle className="mx-auto mb-2 w-12 h-12 text-gray-300" />
+                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                   <p className="text-sm font-medium text-gray-900">
                     {searchQuery
                       ? "No patients found"
@@ -938,16 +938,16 @@ const DepartmentSelection = () => {
 
       {/* Assign Department Modal */}
       {showAssignModal && selectedPatient && (
-        <div className="overflow-y-auto fixed inset-0 z-50 flex justify-center items-center p-4 bg-black bg-opacity-50 transition-opacity duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto transition-opacity duration-300 bg-black bg-opacity-50">
           <div className="relative w-full max-w-md bg-white rounded-lg shadow-xl animate-scale-in">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 md:p-6">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 md:p-6">
               <h2 className="text-xl font-bold text-gray-900">
                 Assign Department
               </h2>
               <button
                 onClick={() => setShowAssignModal(false)}
                 disabled={isAssigning}
-                className="text-gray-400 rounded-full p-1 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                className="p-1 text-gray-400 rounded-full hover:text-gray-600 hover:bg-gray-100 disabled:opacity-50"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -963,7 +963,7 @@ const DepartmentSelection = () => {
                     type="text"
                     value={selectedPatient.admissionNo}
                     disabled
-                    className="px-3 py-2 w-full bg-gray-100 rounded-lg border border-gray-300 text-gray-700"
+                    className="w-full px-3 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg"
                   />
                 </div>
 
@@ -975,7 +975,7 @@ const DepartmentSelection = () => {
                     type="text"
                     value={selectedPatient.patientName}
                     disabled
-                    className="px-3 py-2 w-full bg-gray-100 rounded-lg border border-gray-300 text-gray-700"
+                    className="w-full px-3 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg"
                   />
                 </div>
 
@@ -987,7 +987,7 @@ const DepartmentSelection = () => {
                     type="text"
                     value={selectedPatient.phoneNumber}
                     disabled
-                    className="px-3 py-2 w-full bg-gray-100 rounded-lg border border-gray-300 text-gray-700"
+                    className="w-full px-3 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg"
                   />
                 </div>
 
@@ -999,11 +999,10 @@ const DepartmentSelection = () => {
                     value={selectedDepartment}
                     onChange={(e) => setSelectedDepartment(e.target.value)}
                     disabled={isAssigning}
-                    className="px-3 py-2 w-full bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   >
-                    <option value="">Select Department</option>
-                    <option value="OPD">OPD (Out-Patient Department)</option>
                     <option value="IPD">IPD (In-Patient Department)</option>
+                    <option value="OPD">OPD (Out-Patient Department)</option>
                     <option value="Emergency">Emergency</option>
                   </select>
                 </div>
@@ -1015,12 +1014,12 @@ const DepartmentSelection = () => {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 justify-end mt-6 sm:flex-row">
+              <div className="flex flex-col justify-end gap-3 mt-6 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
                   disabled={isAssigning}
-                  className="px-4 py-2 w-full font-medium text-gray-700 bg-gray-100 rounded-lg transition-colors hover:bg-gray-200 disabled:bg-gray-300 sm:w-auto"
+                  className="w-full px-4 py-2 font-medium text-gray-700 transition-colors bg-gray-100 rounded-lg hover:bg-gray-200 disabled:bg-gray-300 sm:w-auto"
                 >
                   Cancel
                 </button>
@@ -1028,11 +1027,11 @@ const DepartmentSelection = () => {
                   type="button"
                   onClick={handleAssignDepartment}
                   disabled={isAssigning}
-                  className="px-4 py-2 w-full font-medium text-white bg-green-600 rounded-lg transition-colors hover:bg-green-700 disabled:bg-gray-400 sm:w-auto flex items-center justify-center gap-2"
+                  className="flex items-center justify-center w-full gap-2 px-4 py-2 font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-400 sm:w-auto"
                 >
                   {isAssigning ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <div className="w-4 h-4 border-b-2 border-white rounded-full animate-spin"></div>
                       Assigning...
                     </>
                   ) : (

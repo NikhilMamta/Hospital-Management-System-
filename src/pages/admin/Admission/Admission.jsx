@@ -133,8 +133,7 @@ const Admission = () => {
       !formData.patientName ||
       !formData.phoneNumber ||
       !formData.attenderName ||
-      !formData.reasonForVisit ||
-      !formData.dateOfBirth
+      !formData.reasonForVisit
     ) {
       setModalError("Please fill all required fields marked with *");
       return;
@@ -151,7 +150,7 @@ const Admission = () => {
           phone_no: formData.phoneNumber.trim(),
           attender_name: formData.attenderName.trim(),
           reason_for_visit: formData.reasonForVisit.trim(),
-          date_of_birth: formData.dateOfBirth,
+          date_of_birth: formData.dateOfBirth || null,
           age: formData.age,
           gender: formData.gender,
         };
@@ -189,7 +188,7 @@ const Admission = () => {
           phone_no: formData.phoneNumber.trim(),
           attender_name: formData.attenderName.trim(),
           reason_for_visit: formData.reasonForVisit.trim(),
-          date_of_birth: formData.dateOfBirth,
+          date_of_birth: formData.dateOfBirth || null,
           age: formData.age,
           gender: formData.gender,
           status: "pending",
@@ -609,7 +608,7 @@ const Admission = () => {
 
                 <div>
                   <label className="block mb-1 text-sm font-medium text-gray-700">
-                    Date of Birth *
+                    Date of Birth
                   </label>
                   <input
                     type="date"
