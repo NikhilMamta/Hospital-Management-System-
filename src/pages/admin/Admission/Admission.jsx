@@ -121,19 +121,10 @@ const Admission = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
 
-    if (name === "dateOfBirth") {
-      const calculatedAge = calculateAge(value);
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-        age: calculatedAge,
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   // Submit new patient to Supabase
@@ -635,12 +626,12 @@ const Admission = () => {
                     Age
                   </label>
                   <input
-                    type="text"
+                    type="number"
                     name="age"
                     value={formData.age}
-                    readOnly
-                    className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
-                    placeholder="Auto-calculated from DOB"
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Enter age"
                   />
                 </div>
 

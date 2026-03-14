@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Edit2,
@@ -32,6 +32,9 @@ const FloorBed = () => {
     room: "",
     bed: "",
   });
+  const [customFloor, setCustomFloor] = useState("");
+  const [customWard, setCustomWard] = useState("");
+  const [customRoom, setCustomRoom] = useState("");
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -89,31 +92,115 @@ const FloorBed = () => {
 
   useRealtimeTable("all_floor_bed", fetchFloorBeds);
 
-  // Filter floor beds based on search and filters
-  const filteredFloorBeds = floorBeds.filter((item) => {
-    // Apply filters
-    if (filters.floor !== "all" && item.floor !== filters.floor) return false;
-    if (filters.ward !== "all" && item.ward !== filters.ward) return false;
-    if (filters.room !== "all" && item.room !== filters.room) return false;
+  // Filter floor beds based on search and filters, then sort by serial number
+  const filteredFloorBeds = useMemo(() => {
+    const filtered = floorBeds.filter((item) => {
+      // Apply filters
+      if (filters.floor !== "all" && item.floor !== filters.floor) return false;
+      if (filters.ward !== "all" && item.ward !== filters.ward) return false;
+      if (filters.room !== "all" && item.room !== filters.room) return false;
 
-    // Apply search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        item.serial_no?.toLowerCase().includes(searchLower) ||
-        item.floor?.toLowerCase().includes(searchLower) ||
-        item.ward?.toLowerCase().includes(searchLower) ||
-        item.room?.toLowerCase().includes(searchLower) ||
-        item.bed?.toLowerCase().includes(searchLower)
-      );
+      // Apply search filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          item.serial_no?.toLowerCase().includes(searchLower) ||
+          item.floor?.toLowerCase().includes(searchLower) ||
+          item.ward?.toLowerCase().includes(searchLower) ||
+          item.room?.toLowerCase().includes(searchLower) ||
+          item.bed?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const aSerial = parseInt(a.serial_no, 10);
+      const bSerial = parseInt(b.serial_no, 10);
+
+      if (!isNaN(aSerial) && !isNaN(bSerial)) {
+        return aSerial - bSerial;
+      }
+
+      // Fallback to locale compare if serial is not numeric
+      return (a.serial_no || "").localeCompare(b.serial_no || "", undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
+  }, [floorBeds, filters.floor, filters.ward, filters.room, searchTerm]);
+
+  // Derive dependent options based on selected filters
+  const wardOptions = useMemo(() => {
+    let filtered = floorBeds;
+    if (filters.floor !== "all") {
+      filtered = filtered.filter((item) => item.floor === filters.floor);
     }
 
-    return true;
-  });
+    return [
+      ...new Set(filtered.map((item) => item.ward).filter(Boolean)),
+    ].sort();
+  }, [floorBeds, filters.floor]);
+
+  const roomOptions = useMemo(() => {
+    let filtered = floorBeds;
+    if (filters.floor !== "all") {
+      filtered = filtered.filter((item) => item.floor === filters.floor);
+    }
+    if (filters.ward !== "all") {
+      filtered = filtered.filter((item) => item.ward === filters.ward);
+    }
+
+    return [
+      ...new Set(filtered.map((item) => item.room).filter(Boolean)),
+    ].sort();
+  }, [floorBeds, filters.floor, filters.ward]);
 
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
+    // Handle custom options for floor/ward/room
+    if (name === "floor") {
+      setFormData((prev) => ({
+        ...prev,
+        floor: value,
+      }));
+
+      if (value === "custom") {
+        setCustomFloor("");
+      }
+
+      return;
+    }
+
+    if (name === "ward") {
+      setFormData((prev) => ({
+        ...prev,
+        ward: value,
+      }));
+
+      if (value === "custom") {
+        setCustomWard("");
+      }
+
+      return;
+    }
+
+    if (name === "room") {
+      setFormData((prev) => ({
+        ...prev,
+        room: value,
+      }));
+
+      if (value === "custom") {
+        setCustomRoom("");
+      }
+
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -123,6 +210,27 @@ const FloorBed = () => {
   // Handle filter changes
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
+
+    // When changing a higher-level filter, reset dependent filters
+    if (name === "floor") {
+      setFilters((prev) => ({
+        ...prev,
+        floor: value,
+        ward: "all",
+        room: "all",
+      }));
+      return;
+    }
+
+    if (name === "ward") {
+      setFilters((prev) => ({
+        ...prev,
+        ward: value,
+        room: "all",
+      }));
+      return;
+    }
+
     setFilters((prev) => ({
       ...prev,
       [name]: value,
@@ -138,6 +246,9 @@ const FloorBed = () => {
       room: "",
       bed: "",
     });
+    setCustomFloor("");
+    setCustomWard("");
+    setCustomRoom("");
     setEditingFloorBed(null);
   };
 
@@ -166,17 +277,24 @@ const FloorBed = () => {
 
   // Validate form
   const validateForm = () => {
-    if (!formData.floor.trim()) {
+    const resolvedFloor =
+      formData.floor === "custom" ? customFloor.trim() : formData.floor.trim();
+    const resolvedWard =
+      formData.ward === "custom" ? customWard.trim() : formData.ward.trim();
+    const resolvedRoom =
+      formData.room === "custom" ? customRoom.trim() : formData.room.trim();
+
+    if (!resolvedFloor) {
       showNotification("Floor is required", "error");
       return false;
     }
 
-    if (!formData.ward.trim()) {
+    if (!resolvedWard) {
       showNotification("Ward is required", "error");
       return false;
     }
 
-    if (!formData.room.trim()) {
+    if (!resolvedRoom) {
       showNotification("Room is required", "error");
       return false;
     }
@@ -189,16 +307,16 @@ const FloorBed = () => {
     // Check for duplicates (same floor, ward, room, bed)
     const duplicate = floorBeds.find(
       (item) =>
-        item.floor === formData.floor &&
-        item.ward === formData.ward &&
-        item.room === formData.room &&
-        item.bed === formData.bed &&
+        item.floor === resolvedFloor &&
+        item.ward === resolvedWard &&
+        item.room === resolvedRoom &&
+        item.bed === formData.bed.trim() &&
         (!editingFloorBed || item.id !== editingFloorBed.id),
     );
 
     if (duplicate) {
       showNotification(
-        `Bed ${formData.bed} already exists in ${formData.floor} - ${formData.ward} - ${formData.room}`,
+        `Bed ${formData.bed} already exists in ${resolvedFloor} - ${resolvedWard} - ${resolvedRoom}`,
         "error",
       );
       return false;
@@ -212,11 +330,20 @@ const FloorBed = () => {
     if (!validateForm()) return;
 
     try {
+      const resolvedFloor =
+        formData.floor === "custom"
+          ? customFloor.trim()
+          : formData.floor.trim();
+      const resolvedWard =
+        formData.ward === "custom" ? customWard.trim() : formData.ward.trim();
+      const resolvedRoom =
+        formData.room === "custom" ? customRoom.trim() : formData.room.trim();
+
       const floorBedData = {
         serial_no: formData.serial_no.trim() || null,
-        floor: formData.floor.trim(),
-        ward: formData.ward.trim(),
-        room: formData.room.trim(),
+        floor: resolvedFloor,
+        ward: resolvedWard,
+        room: resolvedRoom,
         bed: formData.bed.trim(),
       };
 
@@ -239,7 +366,14 @@ const FloorBed = () => {
         showNotification("Floor bed added successfully!", "success");
       }
 
-      fetchFloorBeds();
+      // Refresh list and make the new/updated bed visible in filters
+      await fetchFloorBeds();
+      setFilters({
+        floor: resolvedFloor,
+        ward: resolvedWard,
+        room: resolvedRoom,
+      });
+
       closeModal();
     } catch (error) {
       console.error("Error saving floor bed:", error);
@@ -365,7 +499,7 @@ const FloorBed = () => {
               className="w-full px-2 py-1.5 md:px-3 md:py-2 text-[11px] md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50"
             >
               <option value="all">All</option>
-              {availableOptions.wards.map((ward) => (
+              {wardOptions.map((ward) => (
                 <option key={ward} value={ward}>
                   {ward}
                 </option>
@@ -383,7 +517,7 @@ const FloorBed = () => {
               className="w-full px-2 py-1.5 md:px-3 md:py-2 text-[11px] md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-50"
             >
               <option value="all">All</option>
-              {availableOptions.rooms.map((room) => (
+              {roomOptions.map((room) => (
                 <option key={room} value={room}>
                   {room}
                 </option>
@@ -628,13 +762,8 @@ const FloorBed = () => {
                 {formData.floor === "custom" && (
                   <input
                     type="text"
-                    value={formData.floor === "custom" ? "" : formData.floor}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        floor: e.target.value,
-                      }))
-                    }
+                    value={customFloor}
+                    onChange={(e) => setCustomFloor(e.target.value)}
                     className="w-full px-3 py-2 mt-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Enter new floor"
                     autoFocus
@@ -665,10 +794,8 @@ const FloorBed = () => {
                 {formData.ward === "custom" && (
                   <input
                     type="text"
-                    value={formData.ward === "custom" ? "" : formData.ward}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, ward: e.target.value }))
-                    }
+                    value={customWard}
+                    onChange={(e) => setCustomWard(e.target.value)}
                     className="w-full px-3 py-2 mt-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Enter new ward"
                     autoFocus
@@ -699,10 +826,8 @@ const FloorBed = () => {
                 {formData.room === "custom" && (
                   <input
                     type="text"
-                    value={formData.room === "custom" ? "" : formData.room}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, room: e.target.value }))
-                    }
+                    value={customRoom}
+                    onChange={(e) => setCustomRoom(e.target.value)}
                     className="w-full px-3 py-2 mt-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Enter new room"
                     autoFocus

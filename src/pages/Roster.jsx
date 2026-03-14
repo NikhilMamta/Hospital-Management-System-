@@ -23,6 +23,7 @@ const Roster = () => {
   const tableContainerRef = useRef(null);
   const scrollIntervalRef = useRef(null);
   const lastDragPosRef = useRef({ x: 0, y: 0 });
+  const ignoreClickRef = useRef(false);
 
   // State management
   const [staffData, setStaffData] = useState({
@@ -835,6 +836,12 @@ const Roster = () => {
 
   // Handle staff selection
   const handleStaffSelection = (staffId) => {
+    // Prevent click toggle immediately after a drag operation
+    if (ignoreClickRef.current) {
+      ignoreClickRef.current = false;
+      return;
+    }
+
     const newSelectedStaff = new Set(selectedStaff);
 
     if (newSelectedStaff.has(staffId)) {
@@ -1111,6 +1118,7 @@ const Roster = () => {
   const handleDragStart = (e, staffId, staffName, staffType) => {
     e.stopPropagation();
     setIsDragging(true);
+    ignoreClickRef.current = true;
 
     const isMultiple = selectedStaff.has(staffId) && selectedStaff.size > 1;
     let dragPayload;

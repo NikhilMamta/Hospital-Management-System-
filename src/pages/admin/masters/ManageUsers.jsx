@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Edit,
@@ -93,6 +93,8 @@ const ManageUsers = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [sortBy, setSortBy] = useState("id");
+  const [sortDirection, setSortDirection] = useState("asc");
   const [formData, setFormData] = useState({
     user_name: "",
     name: "",
@@ -113,7 +115,7 @@ const ManageUsers = () => {
       const { data, error } = await supabase
         .from("users")
         .select("*")
-        .order("timestamp", { ascending: false });
+        .order("id", { ascending: true });
 
       if (error) throw error;
 
@@ -556,16 +558,51 @@ const ManageUsers = () => {
     }
   };
 
-  const filteredUsers = users.filter(
-    (user) =>
-      (user.user_name &&
-        user.user_name.toLowerCase().includes(searchText.toLowerCase())) ||
-      (user.email &&
-        user.email.toLowerCase().includes(searchText.toLowerCase())) ||
-      (user.name &&
-        user.name.toLowerCase().includes(searchText.toLowerCase())) ||
-      (user.role && user.role.toLowerCase().includes(searchText.toLowerCase())),
-  );
+  const toggleSort = (field) => {
+    if (sortBy === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    const searched = users.filter(
+      (user) =>
+        (user.user_name &&
+          user.user_name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (user.email &&
+          user.email.toLowerCase().includes(searchText.toLowerCase())) ||
+        (user.name &&
+          user.name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (user.role &&
+          user.role.toLowerCase().includes(searchText.toLowerCase())),
+    );
+
+    const sorted = [...searched].sort((a, b) => {
+      const rawA = a[sortBy];
+      const rawB = b[sortBy];
+
+      const aNum = typeof rawA === "number" ? rawA : parseFloat(rawA);
+      const bNum = typeof rawB === "number" ? rawB : parseFloat(rawB);
+
+      // Prefer numeric comparison when both values are numbers
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        const compare = aNum - bNum;
+        return sortDirection === "asc" ? compare : -compare;
+      }
+
+      const aVal = (rawA ?? "").toString().toLowerCase();
+      const bVal = (rawB ?? "").toString().toLowerCase();
+
+      if (aVal === bVal) return 0;
+      const compare = aVal > bVal ? 1 : -1;
+      return sortDirection === "asc" ? compare : -compare;
+    });
+
+    return sorted;
+  }, [users, searchText, sortBy, sortDirection]);
 
   const getRoleColor = (role) => {
     switch (role) {
@@ -885,11 +922,31 @@ const ManageUsers = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
-                  ID
+                <th
+                  className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase cursor-pointer select-none"
+                  onClick={() => toggleSort("id")}
+                >
+                  <div className="flex items-center gap-1">
+                    ID
+                    {sortBy === "id" && (
+                      <span className="text-[10px]">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
-                  User Info
+                <th
+                  className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase cursor-pointer select-none"
+                  onClick={() => toggleSort("name")}
+                >
+                  <div className="flex items-center gap-1">
+                    User Info
+                    {sortBy === "name" && (
+                      <span className="text-[10px]">
+                        {sortDirection === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </div>
                 </th>
                 <th className="px-6 py-3 text-xs font-semibold tracking-wider text-left text-gray-700 uppercase">
                   Password
