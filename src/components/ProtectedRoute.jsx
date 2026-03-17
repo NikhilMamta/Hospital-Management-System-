@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 const ProtectedRoute = ({ children, requiredPage }) => {
-  const { user, loading, hasPageAccess } = useAuth();
+  const { user, loading, hasPageAccess, getDefaultRoute } = useAuth();
 
   if (loading) return null;
 
@@ -15,7 +15,7 @@ const ProtectedRoute = ({ children, requiredPage }) => {
   if (requiredPage && !hasPageAccess(requiredPage)) {
     // You can redirect to dashboard or show unauthorized page
     console.warn(`User does not have access to: ${requiredPage}`);
-    return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to={getDefaultRoute()} replace />;
   }
 
   return children;

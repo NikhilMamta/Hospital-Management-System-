@@ -100,6 +100,13 @@ const parseUserPages = (pagesData) => {
   return [];
 };
 
+const getDefaultRoute = (pages = []) =>
+  ALL_PAGES.find(
+    (page) =>
+      page.type !== 'group' &&
+      (pages.includes('all') || pages.includes(page.key))
+  )?.path || '/login';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userPages, setUserPages] = useState([]);
@@ -177,8 +184,7 @@ export function AuthProvider({ children }) {
 
       setLoading(false);
 
-      // Redirect to admin dashboard for all roles
-      navigate('/admin/dashboard');
+      navigate(getDefaultRoute(parsedPages));
       return true;
     } catch (error) {
       console.error('Login error:', error);
@@ -258,6 +264,7 @@ export function AuthProvider({ children }) {
     logout,
     loading,
     hasPageAccess,
+    getDefaultRoute: () => getDefaultRoute(userPages),
     getAccessibleSidebarItems,
     getAccessibleGroupRoutes
   };

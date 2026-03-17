@@ -66,7 +66,8 @@ import Dressing from "./pages/admin/PatientProfile/Dressing";
 import Roster from "./pages/Roster";
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, getDefaultRoute } = useAuth();
+  const defaultRoute = getDefaultRoute();
 
   // ── Global: phone-field enforcement & dropdown autofill suppression ──
   useEffect(() => {
@@ -203,7 +204,7 @@ function App() {
         <Route
           path="/"
           element={
-            <Navigate to={user ? "/admin/dashboard" : "/login"} replace />
+            <Navigate to={user ? defaultRoute : "/login"} replace />
           }
         />
 
@@ -211,7 +212,7 @@ function App() {
         <Route
           path="/login"
           element={
-            user ? <Navigate to="/admin/dashboard" replace /> : <Login />
+            user ? <Navigate to={defaultRoute} replace /> : <Login />
           }
         />
 
@@ -224,7 +225,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route index element={<Navigate to={defaultRoute} replace />} />
 
           {/* Dashboard */}
           <Route
