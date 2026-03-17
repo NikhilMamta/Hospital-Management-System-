@@ -85,7 +85,7 @@ export const buildIndentApprovalMessage = (
 🔢 Quantity: ${medicineQty}
 
 👉 Please review & approve:
-✅ 'https://hospital-management-system-rho-nine.vercel.app'
+✅ ${approvalUrl}
 
 ✍️ NIKHIL KUMAR URANW
 TEAM MAMTA HOSPITAL`;
@@ -250,8 +250,12 @@ MIS`;
 export const sendDressingNotification = async (dressingData, patientData) => {
   try {
     console.log("[WhatsApp] Sending dressing notification...");
+    const patientId =
+      dressingData.patient_id || dressingData.patientId || dressingData.id;
     // Build the complete URL pointing to the dressing page
-    const completeUrl = `${window.location.origin}/admin/patient-profile/dressing`;
+    const completeUrl = `${window.location.origin}/admin/patient-profile${
+      patientId ? `/${patientId}/dressing` : ""
+    }`;
 
     const message = buildDressingNotificationMessage(
       dressingData,

@@ -827,10 +827,6 @@ const PharmacyIndents = () => {
             hour12: false,
           })
           .replace(",", ""),
-        indent_no:
-          editMode && selectedIndent
-            ? selectedIndent.indent_no
-            : await generateIndentNumber(),
         admission_number: formData.admissionNumber,
         ipd_number: selectedPatient?.ipd_number || "",
         staff_name: formData.staffName,

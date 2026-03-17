@@ -65,7 +65,7 @@ export default function Dressing() {
     room: "",
     bed_no: "",
     remarks: "",
-    status: "",
+    status: "Pending",
   });
 
   // Function to get patient details from ipd_admissions table by matching IPD number
@@ -241,7 +241,7 @@ export default function Dressing() {
       room: patient.room || patient.room_no || "",
       bed_no: patient.bed_no || "",
       remarks: "",
-      status: "",
+      status: "Pending",
     });
     setSearchQuery(patient.admission_no || "");
     setShowPatientDropdown(false);
@@ -272,8 +272,8 @@ export default function Dressing() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.admission_number || !formData.status) {
-      showNotification("Please fill in Admission Number and Status", "error");
+    if (!formData.admission_number) {
+      showNotification("Please fill in Admission Number", "error");
       return;
     }
 
@@ -306,7 +306,7 @@ export default function Dressing() {
           .replace(",", ""),
         actual1: null,
         remarks: formData.remarks || null,
-        status: formData.status,
+        status: "Pending",
       };
 
       const { error } = await supabase.from("dressing").insert([dressingData]);
@@ -352,7 +352,7 @@ export default function Dressing() {
         room: "",
         bed_no: "",
         remarks: "",
-        status: "",
+        status: "Pending",
       });
       setSearchQuery("");
 
@@ -407,7 +407,7 @@ export default function Dressing() {
         room: data?.departmentInfo?.room || "",
         bed_no: data?.departmentInfo?.bedNumber || "",
         remarks: "",
-        status: "",
+        status: "Pending",
       });
       setSearchQuery(data?.personalInfo?.uhid || "");
       return;
@@ -429,7 +429,7 @@ export default function Dressing() {
         room: patientInfo.room || data.departmentInfo.room || "",
         bed_no: patientInfo.bed_no || data.departmentInfo.bedNumber || "",
         remarks: "",
-        status: "",
+        status: "Pending",
       });
       setSearchQuery(
         patientInfo.admission_number || data.personalInfo.uhid || "",
@@ -446,7 +446,7 @@ export default function Dressing() {
         room: data.departmentInfo.room || "",
         bed_no: data.departmentInfo.bedNumber || "",
         remarks: "",
-        status: "",
+        status: "Pending",
       });
       setSearchQuery(data.personalInfo.uhid || "");
     }
@@ -625,28 +625,19 @@ export default function Dressing() {
                 )}
               </div>
 
-              {/* {activeTab === 'pending' && (
-                <div className="flex gap-2 pt-2">
+              {activeTab === "pending" && (
+                <div className="pt-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      updateDressingStatus(task.id, 'Yes');
+                      updateDressingStatus(task.id, "Yes");
                     }}
-                    className="flex-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
+                    className="w-full px-3 py-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
                   >
-                    Mark Complete
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateDressingStatus(task.id, 'No');
-                    }}
-                    className="flex-1 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 transition-colors"
-                  >
-                    Cancel
+                    Mark as Done
                   </button>
                 </div>
-              )} */}
+              )}
             </div>
           </div>
         )}
@@ -744,7 +735,9 @@ export default function Dressing() {
               <option value="No" className="text-gray-900">
                 Cancelled
               </option>
-              {/* <option value="Pending" className="text-gray-900">Pending</option> */}
+              <option value="Pending" className="text-gray-900">
+                Pending
+              </option>
             </select>
 
             {/* Add New Button */}
@@ -915,7 +908,11 @@ export default function Dressing() {
                       <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
                         Status
                       </th>
-                      {/* <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">Actions</th> */}
+                      {activeTab === "pending" && (
+                        <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                          Action
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -961,45 +958,16 @@ export default function Dressing() {
                         <td className="px-4 py-3">
                           <StatusBadge status={task.status} />
                         </td>
-                        {/* <td className="px-4 py-3">
-                          {activeTab === 'pending' && (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => updateDressingStatus(task.id, 'Yes')}
-                                className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
-                              >
-                                Complete
-                              </button>
-                              <button
-                                onClick={() => updateDressingStatus(task.id, 'No')}
-                                className="px-3 py-1 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-                        </td> */}
-                        {/* <td className="px-4 py-3">
-                          <StatusBadge status={task.status} />
-                        </td> */}
-                        {/* <td className="px-4 py-3">
-                          {activeTab === 'pending' && (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => updateDressingStatus(task.id, 'Yes')}
-                                className="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
-                              >
-                                Complete
-                              </button>
-                              <button
-                                onClick={() => updateDressingStatus(task.id, 'No')}
-                                className="px-2 py-1 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-                        </td> */}
+                        {activeTab === "pending" && (
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => updateDressingStatus(task.id, "Yes")}
+                              className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors"
+                            >
+                              Mark as Done
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1049,7 +1017,7 @@ export default function Dressing() {
                     room: "",
                     bed_no: "",
                     remarks: "",
-                    status: "",
+                    status: "Pending",
                   });
                   setSearchQuery("");
                 }}
@@ -1203,25 +1171,14 @@ export default function Dressing() {
                 </div>
               </div>
 
-              {/* Status and Remarks */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-4">
-                <div>
-                  <label className="block mb-2 text-green-600 font-medium text-sm">
-                    Status *
-                  </label>
-                  <select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-3 py-2.5 rounded-lg border border-green-600 outline-none bg-white text-sm"
-                  >
-                    <option value="">Select Status</option>
-                    <option value="Yes">Yes </option>
-                    <option value="No">No </option>
-                    {/* <option value="Pending">Pending</option> */}
-                  </select>
-                </div>
+              <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                <p className="text-sm text-yellow-800">
+                  New dressing records are created with
+                  {" "}
+                  <span className="font-semibold">Pending</span>
+                  {" "}
+                  status. Use the pending tab to mark them as done.
+                </p>
               </div>
 
               <div className="mb-4">
@@ -1263,7 +1220,7 @@ export default function Dressing() {
                       room: "",
                       bed_no: "",
                       remarks: "",
-                      status: "",
+                      status: "Pending",
                     });
                     setSearchQuery("");
                   }}
