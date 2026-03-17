@@ -95,6 +95,7 @@ export default function Pharmacy() {
     }
     return "";
   };
+  const isNurse = getCurrentUserRole() === "nurse";
 
   const [formData, setFormData] = useState({
     admissionNumber: "",
@@ -812,6 +813,7 @@ export default function Pharmacy() {
   };
 
   const handleDelete = async (indentNumber) => {
+    if (isNurse) return;
     const indent = submittedIndents.find(
       (i) => i.indentNumber === indentNumber,
     );
@@ -1217,7 +1219,7 @@ export default function Pharmacy() {
                           <button
                             onClick={() => handleDelete(indent.indentNumber)}
                             disabled={
-                              isApprovedIndent(indent.status) || loading
+                              isNurse || isApprovedIndent(indent.status) || loading
                             }
                             className="flex items-center justify-center gap-1 px-2 py-2 text-xs text-white transition-colors bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                           >
@@ -1395,7 +1397,7 @@ export default function Pharmacy() {
                           <button
                             onClick={() => handleDelete(indent.indentNumber)}
                             disabled={
-                              isApprovedIndent(indent.status) || loading
+                              isNurse || isApprovedIndent(indent.status) || loading
                             }
                             className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             title="Delete Indent"
