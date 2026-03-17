@@ -448,6 +448,22 @@ export default function Lab() {
         throw new Error(`Failed to save lab record: ${labError.message}`);
       }
 
+      // Mark the IPD admission as completed so it moves out of the pending tab on the Lab Advice page
+      // (pending list is driven by ipd_admissions where actual1 is null).
+      if (admissionNo) {
+        const { error: ipdError } = await supabase
+          .from("ipd_admissions")
+          .update({ actual1: indianTime })
+          .eq("admission_no", admissionNo);
+
+        if (ipdError) {
+          console.warn(
+            "Failed to update ipd_admissions actual1 after adding lab advice:",
+            ipdError,
+          );
+        }
+      }
+
       // Reload lab data
       await fetchLabData();
 

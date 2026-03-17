@@ -97,8 +97,8 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
           .from("nurse_assign_task")
           .select("assign_nurse")
           .eq("Ipd_number", patient.ipd_number || patient.admission_no)
-          .gte("planned1", start)
-          .lte("planned1", end);
+          .order("timestamp", { ascending: false })
+          .limit(10);
         if (!error && data) {
           const uniqueNurses = [
             ...new Set(data.map((n) => n.assign_nurse?.trim()).filter(Boolean)),
@@ -189,7 +189,7 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg border border-gray-200 p-5 transition-all duration-300 hover:scale-[1.02]">
-      <div className="flex justify-between items-start mb-4 gap-4">
+      <div className="flex items-start justify-between gap-4 mb-4">
         {/* Left: Patient Info */}
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-bold text-gray-900 truncate">
@@ -229,20 +229,20 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
                 </span>
               ))
             ) : (
-              <span className="text-xs text-gray-400 italic">
+              <span className="text-xs italic text-gray-400">
                 No Nurse Assigned
               </span>
             )}
           </div>
 
           {/* Age Badge */}
-          <div className="bg-green-600 text-white rounded-full w-12 h-12 flex items-center justify-center font-bold text-sm shadow">
+          <div className="flex items-center justify-center w-12 h-12 text-sm font-bold text-white bg-green-600 rounded-full shadow">
             {age}
           </div>
         </div>
       </div>
 
-      <div className="space-y-2 mb-4 border-t pt-3">
+      <div className="pt-3 mb-4 space-y-2 border-t">
         <div className="flex justify-between text-sm">
           <span className="text-gray-600">Ward/Bed:</span>
           <span className="font-semibold text-gray-900">
@@ -281,7 +281,7 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
         )}
       </div>
 
-      <div className="flex items-center justify-between pt-3 border-t mb-4">
+      <div className="flex items-center justify-between pt-3 mb-4 border-t">
         <StatusBadge status={patCategory} />
       </div>
 
@@ -289,7 +289,7 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
       <div className="flex gap-2">
         <button
           onClick={() => onViewDetails(patient)}
-          className="flex-1 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded-lg transition-colors font-medium text-sm"
+          className="flex items-center justify-center flex-1 gap-1 px-3 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700"
         >
           <Eye className="w-4 h-4" />
           View Details

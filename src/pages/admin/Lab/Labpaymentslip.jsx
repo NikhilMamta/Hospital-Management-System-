@@ -323,8 +323,9 @@ const Payment = () => {
       };
 
       if (formData.payment === "Yes") {
+        // Mark payment as completed, but do NOT mark the patient as discharged.
+        // `actual1` is used as the discharge/completed flag in other parts of the app.
         updateData.planned2 = now;
-        updateData.actual1 = now;
       }
       if (formData.payment === "Yes" && publicUrl) {
         updateData.bill_image_url = publicUrl;

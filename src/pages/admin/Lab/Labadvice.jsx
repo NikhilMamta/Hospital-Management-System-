@@ -32,20 +32,35 @@ const LabAdvice = () => {
 
     // Set up real-time subscription for lab table
     const setupRealtimeSubscription = () => {
-      const channel = supabase
-        .channel("lab_changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "lab",
-          },
-          () => {
-            loadHistoryData();
-          },
-        )
-        .subscribe();
+      const channel = supabase.channel("lab_changes");
+
+      // Refresh history when a lab record changes
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "lab",
+        },
+        () => {
+          loadData();
+        },
+      );
+
+      // Refresh pending list when an ipd_admissions record changes (e.g., lab advice created via patient profile)
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "ipd_admissions",
+        },
+        () => {
+          loadData();
+        },
+      );
+
+      channel.subscribe();
 
       return () => {
         supabase.removeChannel(channel);
@@ -136,8 +151,29 @@ const LabAdvice = () => {
         return [];
       }
 
+      // Filter out patients who already have a lab advice record (so they do not stay in the pending list)
+      const admissionNos = (pendingPatients || []).map((p) => p.admission_no);
+      let existingLabRecords = [];
+
+      if (admissionNos.length > 0) {
+        const { data } = await supabase
+          .from("lab")
+          .select("admission_no")
+          .in("admission_no", admissionNos);
+
+        existingLabRecords = data || [];
+      }
+
+      const existingLabAdmissionNos = new Set(
+        existingLabRecords.map((r) => r.admission_no),
+      );
+
+      const filteredPatients = pendingPatients.filter(
+        (patient) => !existingLabAdmissionNos.has(patient.admission_no),
+      );
+
       // Transform data for the component
-      const transformedData = pendingPatients.map((patient) => ({
+      const transformedData = filteredPatients.map((patient) => ({
         id: patient.id,
         admission_no: patient.admission_no,
         uniqueNumber: patient.admission_no,
@@ -388,20 +424,7 @@ const LabAdvice = () => {
         throw new Error(`Failed to save lab record: ${labError.message}`);
       }
 
-      // Mark the IPD admission as completed so it moves out of pending list
-      const now = new Date()
-        .toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false,
-        })
-        .replace(",", "");
-
-      await supabase
-        .from("ipd_admissions")
-        .update({ actual1: now })
-        .eq("admission_no", selectedPatient.admission_no);
-
-      // Reload data
+      // Reload data (we keep the IPD admission active; lab advice is tracked in the `lab` table)
       await loadData();
 
       setShowModal(false);
