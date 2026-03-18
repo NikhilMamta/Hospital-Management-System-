@@ -21,7 +21,10 @@ export default function PatientProfile() {
   const [dischargedAdmissions, setDischargedAdmissions] = useState(new Set());
 
   const location = useLocation();
-  const normalizeKey = (value) => String(value || "").trim().toLowerCase();
+  const normalizeKey = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase();
 
   const getShiftTimeRange = () => {
     const now = new Date();
@@ -106,13 +109,18 @@ export default function PatientProfile() {
       if (["nurse", "ot", "ot staff"].includes(userRole)) {
         shouldFilter = true;
 
+        console.log("username", userName);
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+
         const { data, error } = await supabase
           .from("nurse_assign_task")
           .select("Ipd_number, actual1, status")
-          .eq("assign_nurse", userName)
-          .gte("planned1", start)
-          .lte("planned1", end);
+          .ilike("assign_nurse", `%${userName.trim()}%`)
+          .gte("planned1", startDate.toISOString())
+          .lte("planned1", endDate.toISOString());
 
+        console.log("Nurse Assign Task Data:", data);
         if (!error && data) {
           ipdNumbers = data.map((t) => t.Ipd_number);
         }
