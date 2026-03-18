@@ -20,6 +20,11 @@ const Roster = () => {
     { id: "C", name: "Shift C", time: "8:00 PM - 8:00 AM" },
   ];
 
+  // 🧠 Step 1 — Detect Mobile Device
+  const isTouchDevice =
+    typeof window !== "undefined" &&
+    ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+
   // Refs for scroll handling
   const tableContainerRef = useRef(null);
   const scrollIntervalRef = useRef(null);
@@ -838,6 +843,54 @@ const Roster = () => {
     };
   }, []);
 
+  // 🧠 Step 2 — Create Tap-to-Assign Function
+  const handleCellClick = (ward, shift) => {
+    // Only work in current mode
+    if (viewMode !== "current") return;
+
+    if (selectedStaff.size === 0) {
+      showToast("Select staff first", "warning");
+      return;
+    }
+
+    // 🧠 Step 7 — Optional vibration feedback (Android)
+    navigator.vibrate?.(30);
+
+    const newAssignments = { ...assignments };
+
+    const selectedStaffArray = Array.from(selectedStaff).map((id) => {
+      const [type, ...nameParts] = id.split("_");
+      const name = nameParts.join("_").replace(/_/g, " ");
+      return { id, name, type };
+    });
+
+    let assignedCount = 0;
+
+    selectedStaffArray.forEach((staff) => {
+      // Skip if on leave
+      if (isStaffOnLeave(staff.id)) return;
+
+      const exists = newAssignments[ward][shift].some((a) => a.id === staff.id);
+
+      if (!exists) {
+        newAssignments[ward][shift].push(staff);
+        assignedCount++;
+      }
+    });
+
+    setAssignments(newAssignments);
+
+    if (assignedCount > 0) {
+      showToast(
+        `Assigned ${assignedCount} staff to ${ward} - ${shift}`,
+        "success",
+      );
+    }
+
+    // Optional: clear selection after assign (recommended for mobile)
+    setSelectedStaff(new Set());
+  };
+
   // Handle staff selection
   const handleStaffSelection = (staffId) => {
     // Prevent click toggle immediately after a drag operation
@@ -1532,9 +1585,9 @@ const Roster = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="inline-block w-12 h-12 border-b-2 border-blue-600 rounded-full animate-spin"></div>
           <p className="mt-4 text-gray-600">Loading staff data...</p>
         </div>
       </div>
@@ -1544,16 +1597,16 @@ const Roster = () => {
   // Error state
   if (error && staffData.nurses.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md p-6 bg-white rounded-lg shadow-sm border border-red-200">
-          <div className="text-red-500 mb-4">⚠️</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="max-w-md p-6 text-center bg-white border border-red-200 rounded-lg shadow-sm">
+          <div className="mb-4 text-red-500">⚠️</div>
+          <h3 className="mb-2 text-lg font-semibold text-gray-800">
             Error Loading Data
           </h3>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <p className="mb-4 text-gray-600">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
           >
             Retry
           </button>
@@ -1564,45 +1617,52 @@ const Roster = () => {
 
   return (
     <div
-      className="min-h-screen bg-gray-50 p-3 md:p-4"
+      className="min-h-screen p-3 bg-gray-50 md:p-4"
       onDragOver={handleDragMove}
       onDragEnd={handleDragEnd}
     >
       <div className="w-full mx-auto">
         {/* Header - Compact */}
         <div className="mb-4">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800 text-center mb-1">
+          <h1 className="mb-1 text-xl font-bold text-center text-gray-800 md:text-2xl">
             Hospital Roster Management
           </h1>
 
           {error && (
             <div className="mt-1 text-center">
-              <p className="text-amber-600 text-xs inline-block bg-amber-50 px-2 py-1 rounded">
+              <p className="inline-block px-2 py-1 text-xs rounded text-amber-600 bg-amber-50">
                 ⚠️ Using fallback data
               </p>
             </div>
           )}
           {loadingRoster && (
             <div className="mt-1 text-center">
-              <p className="text-blue-600 text-xs inline-block bg-blue-50 px-2 py-1 rounded">
+              <p className="inline-block px-2 py-1 text-xs text-blue-600 rounded bg-blue-50">
                 Loading roster data...
               </p>
             </div>
           )}
           {leaveLoading && (
             <div className="mt-1 text-center">
-              <p className="text-amber-600 text-xs inline-block bg-amber-50 px-2 py-1 rounded">
+              <p className="inline-block px-2 py-1 text-xs rounded text-amber-600 bg-amber-50">
                 Loading leave data...
               </p>
             </div>
           )}
+
+          {/* 🧠 Step 5 — Improve UX (Highly Recommended) */}
+          {isTouchDevice && (
+            <p className="inline-block px-2 py-1 mx-auto mt-2 mb-1 text-xs text-center text-blue-600 rounded bg-blue-50">
+              👆 Tap staff → then tap a cell to assign
+            </p>
+          )}
         </div>
 
         {/* Compact Controls & Navigation */}
-        <div className="flex flex-col gap-2 mb-4 bg-white p-3 rounded-lg shadow-sm">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div className="flex flex-col gap-2 p-3 mb-4 bg-white rounded-lg shadow-sm">
+          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
             {/* Navigation Buttons */}
-            <div className="flex bg-gray-100 rounded p-1">
+            <div className="flex p-1 bg-gray-100 rounded">
               <button
                 className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${viewMode === "previous" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 onClick={() => setViewMode("previous")}
@@ -1657,7 +1717,7 @@ const Roster = () => {
           {/* Previous Date Picker */}
           {viewMode === "previous" && (
             <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-              <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+              <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
                 📅 View past roster for:
               </span>
               <input
@@ -1665,7 +1725,7 @@ const Roster = () => {
                 value={previousSelectedDate}
                 max={getYesterdayStr()}
                 onChange={(e) => setPreviousSelectedDate(e.target.value)}
-                className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white"
+                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
               {previousSelectedDate && (
                 <span className="text-xs text-gray-400">
@@ -1680,7 +1740,7 @@ const Roster = () => {
           {/* Next Date Picker */}
           {viewMode === "next" && (
             <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-              <span className="text-xs text-purple-500 font-medium whitespace-nowrap">
+              <span className="text-xs font-medium text-purple-500 whitespace-nowrap">
                 📅 View planned roster for:
               </span>
               <input
@@ -1688,7 +1748,7 @@ const Roster = () => {
                 value={nextSelectedDate}
                 min={getTomorrowStr()}
                 onChange={(e) => setNextSelectedDate(e.target.value)}
-                className="border border-purple-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                className="px-2 py-1 text-xs bg-white border border-purple-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-400"
               />
               {nextSelectedDate && (
                 <span className="text-xs text-gray-400">
@@ -1702,12 +1762,12 @@ const Roster = () => {
         </div>
 
         {/* Main Content - Responsive Layout */}
-        <div className="flex flex-col lg:flex-row gap-4 mb-4">
+        <div className="flex flex-col gap-4 mb-4 lg:flex-row">
           {/* Left Column - Staff Lists - HIDDEN IN PREVIOUS/NEXT */}
           {viewMode === "current" && (
             <div className="lg:w-1/4 xl:w-1/5">
-              <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm h-full">
-                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+              <div className="h-full p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-200">
                   <h2 className="text-base font-semibold text-gray-700">
                     Available Staff
                   </h2>
@@ -1718,7 +1778,7 @@ const Roster = () => {
                 </div>
 
                 {/* Tab Navigation - Compact */}
-                <div className="flex border-b border-gray-200 mb-2">
+                <div className="flex mb-2 border-b border-gray-200">
                   <button
                     className={`flex-1 py-1.5 text-xs font-medium ${activeTab === "nurses" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
                     onClick={() => setActiveTab("nurses")}
@@ -1802,7 +1862,7 @@ const Roster = () => {
                       return (
                         <div
                           key={index}
-                          className={`flex items-center p-2 rounded cursor-pointer transition-all select-none ${
+                          className={`flex items-center p-3 rounded cursor-pointer transition-all select-none ${
                             isSelected
                               ? activeTab === "nurses"
                                 ? "bg-blue-50 border border-blue-200 shadow-xs"
@@ -1812,14 +1872,18 @@ const Roster = () => {
                               : "bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:shadow-xs"
                           }`}
                           onClick={() => handleStaffSelection(staffId)}
-                          draggable="true"
-                          onDragStart={(e) =>
-                            handleDragStart(e, staffId, staff, staffType)
+                          // 🧠 Step 4 — Disable Drag on Mobile (IMPORTANT)
+                          draggable={!isTouchDevice}
+                          onDragStart={
+                            !isTouchDevice
+                              ? (e) =>
+                                  handleDragStart(e, staffId, staff, staffType)
+                              : undefined
                           }
                         >
                           <div className="flex items-center flex-1">
                             <div
-                              className={`w-3 h-3 rounded mr-2 flex items-center justify-center ${
+                              className={`w-4 h-4 rounded mr-2 flex items-center justify-center ${
                                 isSelected
                                   ? activeTab === "nurses"
                                     ? "bg-blue-500"
@@ -1830,21 +1894,23 @@ const Roster = () => {
                               }`}
                             >
                               {isSelected && (
-                                <span className="text-white text-xs">✓</span>
+                                <span className="text-xs text-white">✓</span>
                               )}
                             </div>
-                            <span className="text-gray-700 text-xs truncate">
+                            <span className="text-sm text-gray-700 truncate">
                               {staff}
                             </span>
                           </div>
-                          <div className="text-gray-400 text-xs bg-gray-100 px-1 py-0.5 rounded text-nowrap">
-                            Drag
-                          </div>
+                          {!isTouchDevice && (
+                            <div className="text-gray-400 text-xs bg-gray-100 px-1 py-0.5 rounded text-nowrap">
+                              Drag
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                     {getActiveTabStaff().length === 0 && (
-                      <div className="text-center py-4 text-gray-400 text-xs italic">
+                      <div className="py-4 text-xs italic text-center text-gray-400">
                         No{" "}
                         {activeTab === "nurses"
                           ? "nursing"
@@ -1864,7 +1930,7 @@ const Roster = () => {
           <div
             className={`${viewMode === "current" ? "lg:w-1/2 xl:w-3/5" : "w-full"}`}
           >
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-full flex flex-col">
+            <div className="flex flex-col h-full bg-white border border-gray-200 rounded-lg shadow-sm">
               <div className="p-3 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1872,7 +1938,9 @@ const Roster = () => {
                       Roster Assignments
                     </h2>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Drag staff from left and drop into shift cells below
+                      {isTouchDevice
+                        ? "Tap staff → then tap a cell to assign"
+                        : "Drag staff from left and drop into shift cells below"}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       Each save creates new database rows
@@ -1892,7 +1960,7 @@ const Roster = () => {
               >
                 <div className="min-w-full">
                   <table className="w-full border-collapse">
-                    <thead className="sticky top-0 bg-gray-50 z-10">
+                    <thead className="sticky top-0 z-10 bg-gray-50">
                       <tr className="border-b border-gray-200">
                         <th className="text-left py-2 px-2 text-xs font-semibold text-gray-600 bg-gray-50 min-w-[120px] sticky left-0 z-20 border-r border-gray-200 whitespace-nowrap">
                           Ward / Department
@@ -1922,20 +1990,37 @@ const Roster = () => {
                             <div className="truncate">{ward}</div>
                           </td>
                           {shifts.map((shift) => (
+                            // 🧠 Step 3 — Modified Table Cell (<td>) with Mobile Support
                             <td
                               key={`${ward}-${shift.id}`}
-                              className={`py-2 px-2 min-h-[60px] min-w-[130px] max-w-[150px] ${
+                              // 🧠 Step 6 — Bigger Touch Targets (min-h-[80px])
+                              className={`py-2 px-2 min-h-[80px] min-w-[130px] max-w-[150px] ${
                                 draggingOver === `${ward}-${shift.name}`
                                   ? "bg-blue-50 border-2 border-dashed border-blue-300"
                                   : "bg-white"
                               }`}
-                              onDragOver={(e) =>
-                                handleDragOver(e, ward, shift.name)
+                              onClick={() => {
+                                if (isTouchDevice) {
+                                  handleCellClick(ward, shift.name);
+                                }
+                              }}
+                              onDragOver={
+                                !isTouchDevice
+                                  ? (e) => handleDragOver(e, ward, shift.name)
+                                  : undefined
                               }
-                              onDragLeave={() => setDraggingOver(null)}
-                              onDrop={(e) => handleDrop(e, ward, shift.name)}
+                              onDragLeave={
+                                !isTouchDevice
+                                  ? () => setDraggingOver(null)
+                                  : undefined
+                              }
+                              onDrop={
+                                !isTouchDevice
+                                  ? (e) => handleDrop(e, ward, shift.name)
+                                  : undefined
+                              }
                             >
-                              <div className="min-h-[50px]">
+                              <div className="min-h-[70px]">
                                 <div className="flex flex-col gap-1">
                                   {assignments[ward]?.[shift.name]?.map(
                                     (assignment, index) => (
@@ -1973,8 +2058,10 @@ const Roster = () => {
                                 </div>
                                 {assignments[ward]?.[shift.name]?.length ===
                                   0 && (
-                                  <div className="text-xs text-gray-400 text-center py-3 italic">
-                                    Drop here
+                                  <div className="py-3 text-xs italic text-center text-gray-400">
+                                    {isTouchDevice
+                                      ? "Tap to assign"
+                                      : "Drop here"}
                                   </div>
                                 )}
                               </div>
@@ -1989,7 +2076,7 @@ const Roster = () => {
 
               {/* Table Footer - Compact Stats */}
               <div className="p-2 border-t border-gray-200 bg-gray-50">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
+                <div className="flex flex-col items-start justify-between gap-1 sm:flex-row sm:items-center">
                   <div className="text-xs text-gray-600">
                     <span className="font-medium">
                       {getAvailableStaff("nurses").length +
@@ -2029,8 +2116,8 @@ const Roster = () => {
           {/* Right Column - Staff on Leave - HIDDEN IN PREVIOUS/NEXT */}
           {viewMode === "current" && (
             <div className="lg:w-1/4 xl:w-1/5">
-              <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm h-full">
-                <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+              <div className="h-full p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-200">
                   <h2 className="text-base font-semibold text-gray-700">
                     Staff on Leave
                   </h2>
@@ -2059,7 +2146,7 @@ const Roster = () => {
                   onDrop={handleDropOnLeave}
                 >
                   <div className="text-center">
-                    <div className="text-amber-500 mb-1">
+                    <div className="mb-1 text-amber-500">
                       <svg
                         className="w-6 h-6 mx-auto"
                         fill="none"
@@ -2103,7 +2190,7 @@ const Roster = () => {
                     .map((staff, index) => (
                       <div
                         key={`${staff.type}-${index}`}
-                        className="flex items-center justify-between p-2 bg-amber-50 border border-amber-200 rounded text-xs"
+                        className="flex items-center justify-between p-2 text-xs border rounded bg-amber-50 border-amber-200"
                       >
                         <div className="flex items-center">
                           <div
@@ -2123,7 +2210,7 @@ const Roster = () => {
                           onClick={() =>
                             handleRemoveFromLeave(staff.name, staff.type)
                           }
-                          className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                          className="text-xs text-gray-400 transition-colors hover:text-amber-600"
                         >
                           ×
                         </button>
@@ -2131,13 +2218,13 @@ const Roster = () => {
                     ))}
 
                   {leaveCounts.total === 0 && (
-                    <div className="text-center py-3 text-gray-400 text-xs italic">
+                    <div className="py-3 text-xs italic text-center text-gray-400">
                       No staff on leave
                     </div>
                   )}
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-gray-200">
+                <div className="pt-2 mt-3 border-t border-gray-200">
                   <div className="text-center">
                     <div className="text-xs text-gray-600">
                       <span className="font-medium">{leaveCounts.total}</span>{" "}
@@ -2154,8 +2241,8 @@ const Roster = () => {
         </div>
 
         {/* Summary Cards - Compact Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <div className="bg-white rounded border border-gray-200 p-2 shadow-xs">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="p-2 bg-white border border-gray-200 rounded shadow-xs">
             <div className="flex items-center gap-1 mb-1">
               <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
               <h3 className="text-xs font-medium text-gray-700">
@@ -2173,9 +2260,9 @@ const Roster = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded border border-gray-200 p-2 shadow-xs">
+          <div className="p-2 bg-white border border-gray-200 rounded shadow-xs">
             <div className="flex items-center gap-1 mb-1">
-              <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+              <div className="w-2 h-2 rounded-full bg-rose-500"></div>
               <h3 className="text-xs font-medium text-gray-700">RMO Staff</h3>
             </div>
             <div className="flex items-baseline">
@@ -2189,9 +2276,9 @@ const Roster = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded border border-gray-200 p-2 shadow-xs">
+          <div className="p-2 bg-white border border-gray-200 rounded shadow-xs">
             <div className="flex items-center gap-1 mb-1">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
               <h3 className="text-xs font-medium text-gray-700">OT Staff</h3>
             </div>
             <div className="flex items-baseline">
@@ -2206,7 +2293,7 @@ const Roster = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded border border-gray-200 p-2 shadow-xs">
+          <div className="p-2 bg-white border border-gray-200 rounded shadow-xs">
             <div className="flex items-center gap-1 mb-1">
               <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
               <h3 className="text-xs font-medium text-gray-700">Assignments</h3>
@@ -2224,7 +2311,7 @@ const Roster = () => {
         </div>
 
         {/* Toast Notifications */}
-        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        <div className="fixed z-50 space-y-2 bottom-4 right-4">
           {toasts.map((toast) => (
             <div
               key={toast.id}
@@ -2316,16 +2403,16 @@ const Roster = () => {
         </div>
 
         {/* Drag Instruction */}
-        {isDragging && (
+        {isDragging && !isTouchDevice && (
           <div
-            className="fixed pointer-events-none z-50"
+            className="fixed z-50 pointer-events-none"
             style={{
               left: dragPosition.x + 15,
               top: dragPosition.y + 15,
               transform: "translate(-50%, -50%)",
             }}
           >
-            <div className="bg-gray-800 text-white px-2 py-1 rounded text-xs shadow-lg flex items-center gap-1">
+            <div className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-gray-800 rounded shadow-lg">
               {dragData?.isMultiple ? (
                 <>
                   <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
@@ -2354,23 +2441,23 @@ const Roster = () => {
 
       {/* Start Date Selection Modal */}
       {showStartDateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 animate-scale-in">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="w-full max-w-sm p-6 bg-white rounded-lg shadow-xl animate-scale-in">
+            <h3 className="mb-4 text-lg font-semibold text-gray-900">
               Select Start Date
             </h3>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block mb-2 text-sm font-medium text-gray-700">
                 Roster Start Date
               </label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="mt-2 text-xs text-gray-500">
                 This date will be associated with the roster assignments.
               </p>
             </div>
