@@ -99,7 +99,7 @@ export default function PatientProfile() {
       setIsRefreshing(true);
 
       const { start, end } = getShiftTimeRange();
-
+      console.log("Current Shift Time Range:", start, end);
       let ipdNumbers = [];
       let shouldFilter = false;
 
@@ -113,10 +113,19 @@ export default function PatientProfile() {
         const startDate = new Date(start);
         const endDate = new Date(end);
 
+        console.log("TIMESTAMP", startDate, endDate);
+        console.log(
+          "TIMESTAMP TO iso string",
+          startDate.toISOString(),
+          endDate.toISOString(),
+        );
+
         const { data, error } = await supabase
           .from("nurse_assign_task")
           .select("Ipd_number, actual1, status")
-          .ilike("assign_nurse", `%${userName.trim()}%`);
+          .ilike("assign_nurse", `%${userName.trim()}%`)
+          .gte("planned1", start)
+          .lte("planned1", end);
 
         console.log("Nurse Assign Task Data:", data);
         if (!error && data) {
