@@ -116,9 +116,7 @@ export default function PatientProfile() {
         const { data, error } = await supabase
           .from("nurse_assign_task")
           .select("Ipd_number, actual1, status")
-          .ilike("assign_nurse", `%${userName.trim()}%`)
-          .gte("planned1", startDate.toISOString())
-          .lte("planned1", endDate.toISOString());
+          .ilike("assign_nurse", `%${userName.trim()}%`);
 
         console.log("Nurse Assign Task Data:", data);
         if (!error && data) {

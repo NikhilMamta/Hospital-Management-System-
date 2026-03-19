@@ -10,6 +10,7 @@ import {
   Building,
   DoorOpen,
   Hash,
+  Layers,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
@@ -24,13 +25,13 @@ const FloorBed = () => {
   const [editingFloorBed, setEditingFloorBed] = useState(null);
   const { showNotification } = useNotification();
 
-  // Form state
+  // Form state - Updated for bed count
   const [formData, setFormData] = useState({
     serial_no: "",
     floor: "",
     ward: "",
     room: "",
-    bed: "",
+    bed_count: "", // Changed from bed_start/bed_end
   });
   const [customFloor, setCustomFloor] = useState("");
   const [customWard, setCustomWard] = useState("");
@@ -237,57 +238,16 @@ const FloorBed = () => {
     }));
   };
 
-  // Generate next serial number in the same format as existing entries
-  const getNextSerialNo = () => {
-    const serials = floorBeds
-      .map((item) => item.serial_no)
-      .filter(Boolean)
-      .map((s) => s.toString().trim())
-      .filter((s) => s.length > 0);
-
-    if (serials.length === 0) return "1";
-
-    // Find the serial with the highest numeric suffix
-    let maxNum = -Infinity;
-    let bestMatch = null;
-
-    serials.forEach((serial) => {
-      const match = serial.match(/(.*?)(\d+)$/);
-      if (!match) return;
-
-      const [, prefix, numStr] = match;
-      const num = parseInt(numStr, 10);
-      if (Number.isNaN(num)) return;
-
-      if (num > maxNum) {
-        maxNum = num;
-        bestMatch = { prefix, numStrLength: numStr.length };
-      }
-    });
-
-    if (bestMatch === null) {
-      // Fallback to numeric-only increment
-      const nums = serials
-        .map((s) => parseInt(s, 10))
-        .filter((n) => !Number.isNaN(n));
-      if (nums.length === 0) return "1";
-      const max = Math.max(...nums);
-      return String(max + 1);
-    }
-
-    const nextNum = maxNum + 1;
-    const padded = String(nextNum).padStart(bestMatch.numStrLength, "0");
-    return `${bestMatch.prefix}${padded}`;
-  };
+  // ❌ REMOVED: getNextSerialNo() - Now handled by database
 
   // Reset form
   const resetForm = () => {
     setFormData({
-      serial_no: getNextSerialNo(),
+      serial_no: "",
       floor: "",
       ward: "",
       room: "",
-      bed: "",
+      bed_count: "",
     });
     setCustomFloor("");
     setCustomWard("");
@@ -300,11 +260,11 @@ const FloorBed = () => {
     if (item) {
       setEditingFloorBed(item);
       setFormData({
-        serial_no: item.serial_no || getNextSerialNo(),
+        serial_no: item.serial_no || "",
         floor: item.floor || "",
         ward: item.ward || "",
         room: item.room || "",
-        bed: item.bed || "",
+        bed_count: "", // Not used for editing
       });
     } else {
       resetForm();
@@ -342,33 +302,39 @@ const FloorBed = () => {
       return false;
     }
 
-    if (!formData.bed.trim()) {
-      showNotification("Bed number is required", "error");
-      return false;
-    }
+    if (editingFloorBed) {
+      // For editing, we need a serial number (bed number comes from the item)
+      if (!formData.serial_no.trim()) {
+        showNotification("Serial number is required", "error");
+        return false;
+      }
+    } else {
+      // For adding new, we need bed count
+      if (!formData.bed_count) {
+        showNotification("Number of beds is required", "error");
+        return false;
+      }
 
-    // Check for duplicates (same floor, ward, room, bed)
-    const duplicate = floorBeds.find(
-      (item) =>
-        item.floor === resolvedFloor &&
-        item.ward === resolvedWard &&
-        item.room === resolvedRoom &&
-        item.bed === formData.bed.trim() &&
-        (!editingFloorBed || item.id !== editingFloorBed.id),
-    );
+      const count = parseInt(formData.bed_count, 10);
 
-    if (duplicate) {
-      showNotification(
-        `Bed ${formData.bed} already exists in ${resolvedFloor} - ${resolvedWard} - ${resolvedRoom}`,
-        "error",
-      );
-      return false;
+      if (isNaN(count) || count < 1) {
+        showNotification(
+          "Please enter a valid number of beds (minimum 1)",
+          "error",
+        );
+        return false;
+      }
+
+      if (count > 100) {
+        showNotification("Maximum 100 beds can be added at once", "error");
+        return false;
+      }
     }
 
     return true;
   };
 
-  // Save floor bed
+  // Save floor bed(s)
   const saveFloorBed = async () => {
     if (!validateForm()) return;
 
@@ -377,21 +343,23 @@ const FloorBed = () => {
         formData.floor === "custom"
           ? customFloor.trim()
           : formData.floor.trim();
+
       const resolvedWard =
         formData.ward === "custom" ? customWard.trim() : formData.ward.trim();
+
       const resolvedRoom =
         formData.room === "custom" ? customRoom.trim() : formData.room.trim();
 
-      const floorBedData = {
-        serial_no: formData.serial_no.trim() || null,
-        floor: resolvedFloor,
-        ward: resolvedWard,
-        room: resolvedRoom,
-        bed: formData.bed.trim(),
-      };
-
       if (editingFloorBed) {
-        // Update existing floor bed
+        // Update existing single bed
+        const floorBedData = {
+          serial_no: formData.serial_no.trim() || null,
+          floor: resolvedFloor,
+          ward: resolvedWard,
+          room: resolvedRoom,
+          bed: editingFloorBed.bed, // Keep existing bed number
+        };
+
         const { error } = await supabase
           .from("all_floor_bed")
           .update(floorBedData)
@@ -400,16 +368,33 @@ const FloorBed = () => {
         if (error) throw error;
         showNotification("Floor bed updated successfully!", "success");
       } else {
-        // Insert new floor bed
-        const { error } = await supabase
-          .from("all_floor_bed")
-          .insert([floorBedData]);
+        // ✅ Call RPC function to add multiple beds
+        const count = parseInt(formData.bed_count, 10);
 
-        if (error) throw error;
-        showNotification("Floor bed added successfully!", "success");
+        console.log("📦 Calling RPC with:", {
+          p_floor: resolvedFloor,
+          p_ward: resolvedWard,
+          p_room: resolvedRoom,
+          p_count: count,
+        });
+
+        const { error } = await supabase.rpc("add_multiple_beds", {
+          p_floor: resolvedFloor,
+          p_ward: resolvedWard,
+          p_room: resolvedRoom,
+          p_count: count,
+        });
+
+        if (error) {
+          console.error("❌ RPC ERROR:", error);
+          showNotification(error.message, "error");
+          return;
+        }
+
+        showNotification(`${count} beds added successfully!`, "success");
       }
 
-      // Refresh list and make the new/updated bed visible in filters
+      // Refresh list and make the new/updated beds visible in filters
       await fetchFloorBeds();
       setFilters({
         floor: resolvedFloor,
@@ -419,8 +404,11 @@ const FloorBed = () => {
 
       closeModal();
     } catch (error) {
-      console.error("Error saving floor bed:", error);
-      showNotification("Error saving floor bed", "error");
+      console.error("❌ Error saving floor beds:", error);
+      showNotification(
+        "Error saving beds: " + (error.message || "Unknown error"),
+        "error",
+      );
     }
   };
 
@@ -756,7 +744,7 @@ const FloorBed = () => {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 flex items-center justify-between p-6 bg-white border-b">
               <h2 className="text-xl font-semibold text-gray-800">
-                {editingFloorBed ? "Edit Bed Details" : "Add New Bed"}
+                {editingFloorBed ? "Edit Bed Details" : "Add New Beds"}
               </h2>
               <button
                 onClick={closeModal}
@@ -767,20 +755,22 @@ const FloorBed = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Serial No */}
-              <div>
-                <label className="block mb-1 text-sm font-medium text-gray-700">
-                  Serial Number (Optional)
-                </label>
-                <input
-                  type="text"
-                  name="serial_no"
-                  value={formData.serial_no}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Auto-generated"
-                />
-              </div>
+              {/* Serial No - Only for editing */}
+              {editingFloorBed ? (
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Serial Number
+                  </label>
+                  <input
+                    type="text"
+                    name="serial_no"
+                    value={formData.serial_no}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter serial number"
+                  />
+                </div>
+              ) : null}
 
               {/* Floor */}
               <div>
@@ -878,23 +868,55 @@ const FloorBed = () => {
                 )}
               </div>
 
-              {/* Bed */}
-              <div>
-                <label className="block mb-1 text-sm font-medium text-gray-700">
-                  Bed Number *
-                </label>
-                <input
-                  type="text"
-                  name="bed"
-                  value={formData.bed}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Enter bed number"
-                  required
-                />
-              </div>
+              {/* Bed Count - Show only for adding new beds */}
+              {!editingFloorBed ? (
+                <div>
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
+                    Number of Beds *
+                  </label>
+                  <input
+                    type="number"
+                    name="bed_count"
+                    value={formData.bed_count}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter number of beds to add"
+                    min="1"
+                    max="100"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Example: 10 will create beds BED-01 through BED-10
+                  </p>
+                </div>
+              ) : null}
 
-              {/* Preview */}
+              {/* Preview for adding multiple beds */}
+              {!editingFloorBed && formData.bed_count && (
+                <div className="p-3 border border-blue-200 rounded-lg bg-blue-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers size={16} className="text-blue-600" />
+                    <h4 className="text-sm font-medium text-blue-800">
+                      Preview
+                    </h4>
+                  </div>
+                  <p className="text-xs text-blue-700">
+                    Will create: {formData.bed_count} bed(s) in{" "}
+                    <span className="font-semibold">
+                      {formData.floor === "custom"
+                        ? customFloor || "New Floor"
+                        : formData.floor || "?"}{" "}
+                      -{" "}
+                      {formData.ward === "custom"
+                        ? customWard || "New Ward"
+                        : formData.ward || "?"}{" "}
+                      -{" "}
+                      {formData.room === "custom"
+                        ? customRoom || "New Room"
+                        : formData.room || "?"}
+                    </span>
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 p-6 border-t">
