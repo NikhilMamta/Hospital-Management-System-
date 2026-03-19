@@ -10,6 +10,7 @@ export const ALL_PAGES = [
   { key: 'dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: 'LayoutDashboard', type: 'single', description: 'Overview of hospital statistics and activities' },
   { key: 'patient-profile', label: 'Patient Profile', path: '/admin/patient-profile', icon: 'User', type: 'single', description: 'Search and view detailed patient records' },
   { key: 'roster', label: 'Roster', path: '/admin/roster', icon: 'Calendar', type: 'single', description: 'Manage staff shifts and attendance' },
+  { key: 'pc-dashboard', label: 'PC Dashboard', path: '/admin/pc-dashboard', icon: 'BarChart3', type: 'single', description: 'Patient Care progress dashboard' },
 
   // Admission dropdown
   { key: 'admission', label: 'Admission', type: 'group', icon: 'LineChart', description: 'Patient registration and admission' },

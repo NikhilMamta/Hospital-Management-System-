@@ -48,6 +48,7 @@ import ManageUsers from "./pages/admin/masters/ManageUsers";
 import AssignTask from "./pages/admin/nurseStation/AssignTask";
 import TaskList from "./pages/admin/nurseStation/TaskList";
 import ScoreDashboard from "./pages/admin/nurseStation/ScoreDashboard";
+import PatientCareDashboard from "./pages/admin/nurseStation/PatientCareDashboard";
 
 // RMO Components
 import RMOAssignTask from "./pages/admin/rmo/RMOAssignTask";
@@ -338,6 +339,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="nurse-station-score-dashboard">
                 <ScoreDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="pc-dashboard"
+            element={
+              <ProtectedRoute requiredPage="pc-dashboard">
+                <PatientCareDashboard />
               </ProtectedRoute>
             }
           />
