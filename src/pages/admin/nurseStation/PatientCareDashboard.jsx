@@ -116,13 +116,13 @@ const TaskRow = ({ task, index, nurseMap, onNurseClick }) => {
         </div>
       </div>
 
-      {/* Nurse - clickable */}
+      {/* Nurse - clickable with tap feedback */}
       <div className="flex items-center gap-1.5 text-xs md:w-36">
         <User className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
         {task.assign_nurse ? (
           <span
             onClick={() => onNurseClick(task.assign_nurse)}
-            className="font-medium text-green-700 truncate cursor-pointer hover:text-green-900 underline-offset-2 hover:underline"
+            className="font-medium text-green-700 truncate cursor-pointer hover:text-green-900 underline-offset-2 hover:underline active:scale-[0.98] transition-transform"
           >
             {task.assign_nurse}
           </span>
@@ -188,7 +188,7 @@ const PatientCard = ({
       {/* Card header — always visible */}
       <button
         onClick={onToggle}
-        className="flex items-center w-full gap-4 px-4 py-4 text-left border-l-4 border-transparent md:px-5 md:py-4 hover:border-green-400 focus:outline-none"
+        className="flex items-center w-full gap-3 px-3 py-3 text-left border-l-4 border-transparent md:gap-4 md:px-5 md:py-4 hover:border-green-400 focus:outline-none active:scale-[0.99] transition-transform"
       >
         {/* Patient avatar - neutral */}
         <div className="flex items-center justify-center flex-shrink-0 text-sm font-medium text-gray-600 bg-gray-100 rounded-full w-11 h-11">
@@ -306,20 +306,22 @@ const PatientCareDashboard = () => {
   const [currentShift, setCurrentShift] = useState(getCurrentShift());
   const [activeNurse, setActiveNurse] = useState(null);
   const [showSheet, setShowSheet] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isTabletOrMobile, setIsTabletOrMobile] = useState(false);
   const [visibleCount, setVisibleCount] = useState(10);
   const { showNotification } = useNotification();
 
-  // Detect mobile
+  // Detect device: tablets (768-1024) use bottom sheet too
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    const checkDevice = () => {
+      const width = window.innerWidth;
+      // Mobile + Tablet → same UX (bottom sheet)
+      setIsTabletOrMobile(width < 1024);
     };
 
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
+    checkDevice();
+    window.addEventListener("resize", checkDevice);
 
-    return () => window.removeEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkDevice);
   }, []);
 
   // Auto-update shift every minute
@@ -372,21 +374,6 @@ const PatientCareDashboard = () => {
     }
   }, [showNotification]);
 
-  // Scroll detection for grouped patient pagination
-  useEffect(() => {
-    const handleScroll = () => {
-      if (
-        window.innerHeight + window.scrollY >=
-        document.body.offsetHeight - 200
-      ) {
-        setVisibleCount((prev) => prev + 10);
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
   // Real-time updates
   useRealtimeTable("nurse_assign_task", fetchTasks);
 
@@ -399,7 +386,7 @@ const PatientCareDashboard = () => {
   // ── Nurse interaction handlers ──
   const handleNurseClick = (nurseName) => {
     setActiveNurse(nurseName);
-    if (isMobile) {
+    if (isTabletOrMobile) {
       setShowSheet(true);
     }
   };
@@ -472,6 +459,23 @@ const PatientCareDashboard = () => {
     [filteredGroups, visibleCount],
   );
 
+  // Scroll detection for grouped patient pagination
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + window.scrollY >=
+          document.documentElement.scrollHeight - 200 &&
+        visibleCount < filteredGroups.length
+      ) {
+        setVisibleCount((prev) => Math.min(prev + 10, filteredGroups.length));
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [visibleCount, filteredGroups.length]);
+
+  // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(10);
   }, [searchTerm, statusFilter]);
@@ -506,7 +510,9 @@ const PatientCareDashboard = () => {
         {/* ── Header with shift ── */}
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <h1 className="text-2xl font-light text-gray-700">Patient Care</h1>
+            <h1 className="text-xl font-light text-gray-700 md:text-2xl">
+              Patient Care
+            </h1>
             <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
               <Clock className="w-3.5 h-3.5" />
               <span>{currentShift}</span>
@@ -517,7 +523,7 @@ const PatientCareDashboard = () => {
           </div>
           <button
             onClick={fetchTasks}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 transition-all bg-white border border-gray-200 rounded-lg hover:border-green-200 hover:text-green-700"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 transition-all bg-white border border-gray-200 rounded-lg hover:border-green-200 hover:text-green-700 active:scale-[0.98]"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -525,7 +531,7 @@ const PatientCareDashboard = () => {
         </div>
 
         {/* ── Summary Cards ── */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
           <SummaryCard
             icon={Users}
             label="Patients"
@@ -575,7 +581,7 @@ const PatientCareDashboard = () => {
                   <button
                     key={f.key}
                     onClick={() => setStatusFilter(f.key)}
-                    className={`px-3 py-1.5 rounded text-xs transition-all ${
+                    className={`px-3 py-1.5 rounded text-xs transition-all active:scale-[0.98] ${
                       statusFilter === f.key
                         ? "bg-green-600 text-white"
                         : "text-gray-500 hover:text-green-700"
@@ -627,10 +633,10 @@ const PatientCareDashboard = () => {
           </div>
         )}
 
-        {/* ── Desktop Popover ── */}
-        {activeNurse && !isMobile && (
+        {/* ── Desktop Popover (centered overlay) ── */}
+        {activeNurse && !isTabletOrMobile && (
           <div
-            className="fixed inset-0 z-50 flex items-start justify-end p-6"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
             onClick={() => setActiveNurse(null)}
           >
             <div
@@ -649,7 +655,7 @@ const PatientCareDashboard = () => {
                 <div className="flex gap-2 mt-4">
                   <a
                     href={`tel:${nurseMap[activeNurse]}`}
-                    className="flex-1 py-1.5 text-xs text-center bg-green-50 text-green-700 rounded-md hover:bg-green-100"
+                    className="flex-1 py-1.5 text-xs text-center bg-green-50 text-green-700 rounded-md hover:bg-green-100 active:scale-[0.98] transition-all"
                   >
                     Call
                   </a>
@@ -657,7 +663,7 @@ const PatientCareDashboard = () => {
                     href={`https://wa.me/${(nurseMap[activeNurse] || "").replace(/\D/g, "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 py-1.5 text-xs text-center bg-green-50 text-green-700 rounded-md hover:bg-green-100"
+                    className="flex-1 py-1.5 text-xs text-center bg-green-50 text-green-700 rounded-md hover:bg-green-100 active:scale-[0.98] transition-all"
                   >
                     WhatsApp
                   </a>
@@ -667,14 +673,14 @@ const PatientCareDashboard = () => {
           </div>
         )}
 
-        {/* ── Mobile Bottom Sheet ── */}
+        {/* ── Mobile/Tablet Bottom Sheet ── */}
         {showSheet && (
           <div
             className="fixed inset-0 z-50 flex items-end bg-black/20"
             onClick={() => setShowSheet(false)}
           >
             <div
-              className="w-full p-5 bg-white rounded-t-2xl animate-slide-up"
+              className="w-full max-w-md p-5 mx-auto bg-white rounded-t-2xl animate-slide-up"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-10 h-1 mx-auto mb-4 bg-gray-200 rounded-full"></div>
@@ -691,7 +697,7 @@ const PatientCareDashboard = () => {
                 <div className="flex gap-3 mt-5">
                   <a
                     href={`tel:${nurseMap[activeNurse]}`}
-                    className="flex-1 py-2.5 text-sm text-center bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                    className="flex-1 py-2.5 text-sm text-center bg-green-50 text-green-700 rounded-lg hover:bg-green-100 active:scale-[0.98] transition-all"
                   >
                     Call
                   </a>
@@ -699,7 +705,7 @@ const PatientCareDashboard = () => {
                     href={`https://wa.me/${(nurseMap[activeNurse] || "").replace(/\D/g, "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 py-2.5 text-sm text-center bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                    className="flex-1 py-2.5 text-sm text-center bg-green-50 text-green-700 rounded-lg hover:bg-green-100 active:scale-[0.98] transition-all"
                   >
                     WhatsApp
                   </a>
@@ -708,7 +714,7 @@ const PatientCareDashboard = () => {
 
               <button
                 onClick={() => setShowSheet(false)}
-                className="w-full mt-4 text-sm text-center text-gray-400"
+                className="w-full mt-4 text-sm text-center text-gray-400 active:scale-[0.98] transition-transform"
               >
                 Close
               </button>
