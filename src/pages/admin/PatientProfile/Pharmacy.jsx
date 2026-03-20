@@ -113,6 +113,7 @@ export default function Pharmacy() {
   const [medicineSearchTerm, setMedicineSearchTerm] = useState("");
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(null);
   const [medicinesList, setMedicinesList] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   // Investigation tests state
   const [investigationTests, setInvestigationTests] = useState({
@@ -282,6 +283,7 @@ export default function Pharmacy() {
       loadData();
       loadMedicinesList();
       loadInvestigationTests();
+      loadCategories();
     }
   }, [currentIpdNumber]);
 
@@ -454,6 +456,21 @@ export default function Pharmacy() {
       }
     } catch (error) {
       console.error("Error loading medicines list:", error);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("category")
+        .select("name")
+        .order("name");
+
+      if (error) throw error;
+
+      setCategories(data || []);
+    } catch (err) {
+      console.error("Error loading categories:", err);
     }
   };
 
@@ -1560,12 +1577,24 @@ export default function Pharmacy() {
                       <label className="block mb-1 text-sm font-medium text-gray-700">
                         Category
                       </label>
-                      <input
-                        type="text"
+                      <select
+                        name="category"
                         value={formData.category}
-                        readOnly
-                        className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
-                      />
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        <option value="">Select Category</option>
+                        {categories.map((cat) => (
+                          <option key={cat.name} value={cat.name}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      {formData.category && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Auto-filled from IPD (you can change if needed)
+                        </p>
+                      )}
                     </div>
 
                     <div>

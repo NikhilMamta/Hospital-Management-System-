@@ -44,6 +44,29 @@ const DUMMY_MEDICINE_NAMES = [
   "Gabapentin 300mg",
 ];
 
+const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
+  if (!text) return;
+
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+
+  for (let i = 0; i < words.length; i++) {
+    const testLine = line + words[i] + " ";
+    const width = ctx.measureText(testLine).width;
+
+    if (width > maxWidth && i > 0) {
+      ctx.fillText(line, x, currentY);
+      line = words[i] + " ";
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+
+  ctx.fillText(line, x, currentY);
+};
+
 // Custom Medicine Dropdown Component
 const MedicineDropdown = ({ medicine, onUpdate, index, loading }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -81,14 +104,14 @@ const MedicineDropdown = ({ medicine, onUpdate, index, loading }) => {
           value={medicine.name}
           onChange={(e) => onUpdate(medicine.id, "name", e.target.value)}
           onClick={() => setIsOpen(true)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 cursor-pointer"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
           placeholder="Select or type medicine name"
           readOnly={loading}
         />
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          className="absolute text-gray-400 transform -translate-y-1/2 right-2 top-1/2 hover:text-gray-600"
           disabled={loading}
         >
           <ChevronDown className="w-4 h-4" />
@@ -96,16 +119,16 @@ const MedicineDropdown = ({ medicine, onUpdate, index, loading }) => {
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg max-h-60">
           {/* Search Input */}
-          <div className="sticky top-0 bg-white p-2 border-b">
+          <div className="sticky top-0 p-2 bg-white border-b">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute w-4 h-4 text-gray-400 transform -translate-y-1/2 left-2 top-1/2" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full py-2 pl-8 pr-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Search medicines..."
                 autoFocus
               />
@@ -130,7 +153,7 @@ const MedicineDropdown = ({ medicine, onUpdate, index, loading }) => {
                 </button>
               ))
             ) : (
-              <div className="px-4 py-2 text-gray-500 text-center">
+              <div className="px-4 py-2 text-center text-gray-500">
                 No medicines found
               </div>
             )}
@@ -679,9 +702,9 @@ const PharmacyApproval = () => {
 
     ctx.fillStyle = "#000000";
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Ward Type:", 620, y + 17);
+    ctx.fillText("Ward Type:", 600, y + 17);
     ctx.font = "12px Arial";
-    ctx.fillText(indent.room, 695, y + 17);
+    drawWrappedText(ctx, indent.wardLocation || "-", 670, y + 15, 160, 12);
 
     // Row 4: Consultant, Nursing Staff, Category
     y += 25;
@@ -697,9 +720,9 @@ const PharmacyApproval = () => {
     ctx.fillText(indent.staffName, 470, y + 17);
 
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Category:", 650, y + 17);
+    ctx.fillText("Category:", 600, y + 17);
     ctx.font = "12px Arial";
-    ctx.fillText(indent.category, 720, y + 17);
+    drawWrappedText(ctx, indent.category || "-", 670, y + 15, 160, 12);
 
     y += 25;
 
@@ -1112,14 +1135,14 @@ const PharmacyApproval = () => {
   const filteredHistoryIndents = applyFilters(historyIndents);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Fixed Section: Header, Tabs, and Filters */}
-      <div className="flex-none shrink-0 border-b bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6">
+      <div className="flex-none bg-white border-b shrink-0">
+        <div className="px-4 py-3 mx-auto max-w-7xl sm:px-6">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          <div className="flex flex-col items-start justify-between gap-3 mb-4 sm:flex-row sm:items-center">
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">
+              <h1 className="text-xl font-bold text-gray-800 sm:text-2xl lg:text-3xl">
                 Pharmacy Approval
               </h1>
               <p className="hidden sm:block text-sm text-gray-600 mt-0.5">
@@ -1130,17 +1153,17 @@ const PharmacyApproval = () => {
             {/* Submit Button - Only if changes exist and in pending tab */}
             {activeTab === "pending" &&
               Object.keys(statusChanges).length > 0 && (
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex w-full gap-2 sm:w-auto">
                   <button
                     onClick={() => setStatusChanges({})}
-                    className="flex-1 sm:flex-none px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-gray-500 rounded-lg sm:flex-none hover:bg-gray-600"
                     disabled={loading}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveStatusChanges}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    className="flex items-center justify-center flex-1 gap-2 px-4 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg sm:flex-none hover:bg-green-700"
                     disabled={loading}
                   >
                     <Save className="w-4 h-4" />
@@ -1151,8 +1174,8 @@ const PharmacyApproval = () => {
           </div>
 
           {/* Tabs and Filters Section - Compact */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-            <div className="flex gap-4 w-full lg:w-auto border-b lg:border-none border-gray-100 pb-2 lg:pb-0 overflow-x-auto">
+          <div className="flex flex-col items-start justify-between gap-3 lg:flex-row lg:items-center">
+            <div className="flex w-full gap-4 pb-2 overflow-x-auto border-b border-gray-100 lg:w-auto lg:border-none lg:pb-0">
               <button
                 onClick={() => setActiveTab("pending")}
                 className={`pb-2 lg:pb-0 px-1 whitespace-nowrap text-sm ${
@@ -1175,7 +1198,7 @@ const PharmacyApproval = () => {
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+            <div className="flex flex-wrap w-full gap-2 lg:w-auto">
               <select
                 value={selectedPatient}
                 onChange={(e) => setSelectedPatient(e.target.value)}
@@ -1213,60 +1236,60 @@ const PharmacyApproval = () => {
       </div>
 
       {/* Main Content Area - Scrollable */}
-      <div className="flex-1 overflow-hidden p-3 md:p-4">
-        <div className="max-w-7xl mx-auto h-full flex flex-col">
+      <div className="flex-1 p-3 overflow-hidden md:p-4">
+        <div className="flex flex-col h-full mx-auto max-w-7xl">
           {/* Loading State */}
           {loading && (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
-              <span className="text-blue-800 font-medium">Loading data...</span>
+            <div className="flex items-center justify-center p-4 mb-4 border border-blue-200 rounded-lg bg-blue-50">
+              <div className="w-6 h-6 mr-3 border-b-2 border-blue-600 rounded-full animate-spin"></div>
+              <span className="font-medium text-blue-800">Loading data...</span>
             </div>
           )}
 
           {/* Pending Section */}
           {activeTab === "pending" && (
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex flex-col flex-1 min-h-0">
               {/* Desktop Table - Scrollable Container */}
-              <div className="hidden md:block flex-1 overflow-auto bg-white rounded-lg border border-gray-200 shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200 border-separate border-spacing-0">
-                  <thead className="bg-green-600 sticky top-0 z-10">
+              <div className="flex-1 hidden overflow-auto bg-white border border-gray-200 rounded-lg shadow-sm md:block">
+                <table className="min-w-full border-separate divide-y divide-gray-200 border-spacing-0">
+                  <thead className="sticky top-0 z-10 bg-green-600">
                     <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Select
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Status
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Indent No
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Admission No
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Patient Name
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         UHID
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Staff Name
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Diagnosis
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Request Type
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Planned
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
+                  <tbody className="bg-white divide-y divide-gray-200">
                     {filteredPendingIndents.length > 0 ? (
                       filteredPendingIndents.map((indent) => (
                         <tr key={indent.id} className="hover:bg-gray-50">
@@ -1287,7 +1310,7 @@ const PharmacyApproval = () => {
                                   );
                                 }
                               }}
-                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                              className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                               disabled={loading}
                             />
                           </td>
@@ -1330,22 +1353,22 @@ const PharmacyApproval = () => {
                           <td className="px-6 py-4 text-sm">
                             <div className="flex flex-wrap gap-1">
                               {indent.requestTypes.medicineSlip && (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                                   Medicine
                                 </span>
                               )}
                               {indent.requestTypes.investigation && (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                                   Investigation
                                 </span>
                               )}
                               {indent.requestTypes.package && (
-                                <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                                   Package
                                 </span>
                               )}
                               {indent.requestTypes.nonPackage && (
-                                <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                                   Non-Package
                                 </span>
                               )}
@@ -1368,7 +1391,7 @@ const PharmacyApproval = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleView(indent)}
-                                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                                className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600"
                                 title="View Details"
                                 disabled={loading}
                               >
@@ -1376,7 +1399,7 @@ const PharmacyApproval = () => {
                               </button>
                               <button
                                 onClick={() => handleEdit(indent)}
-                                className="p-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors"
+                                className="p-2 text-white transition-colors rounded-lg bg-amber-500 hover:bg-amber-600"
                                 title="Edit Indent"
                                 disabled={loading}
                               >
@@ -1389,11 +1412,11 @@ const PharmacyApproval = () => {
                     ) : (
                       <tr>
                         <td colSpan="11" className="px-6 py-12 text-center">
-                          <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                          <p className="text-gray-500 font-medium">
+                          <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="font-medium text-gray-500">
                             No pending indents
                           </p>
-                          <p className="text-gray-400 text-sm mt-1">
+                          <p className="mt-1 text-sm text-gray-400">
                             All indents have been processed
                           </p>
                         </td>
@@ -1404,14 +1427,14 @@ const PharmacyApproval = () => {
               </div>
 
               {/* Mobile Card View for Pending - Scrollable Container */}
-              <div className="md:hidden flex-1 overflow-auto space-y-4">
+              <div className="flex-1 space-y-4 overflow-auto md:hidden">
                 {filteredPendingIndents.length > 0 ? (
                   filteredPendingIndents.map((indent) => (
                     <div
                       key={indent.id}
-                      className="bg-white rounded-lg shadow p-4 space-y-3"
+                      className="p-4 space-y-3 bg-white rounded-lg shadow"
                     >
-                      <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <input
                             type="checkbox"
@@ -1429,11 +1452,11 @@ const PharmacyApproval = () => {
                                 );
                               }
                             }}
-                            className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                            className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                             disabled={loading}
                           />
                           <div>
-                            <span className="text-green-700 font-semibold">
+                            <span className="font-semibold text-green-700">
                               {indent.indentNumber}
                             </span>
                             <p className="text-xs text-gray-500 mt-0.5">
@@ -1450,7 +1473,7 @@ const PharmacyApproval = () => {
                               e.target.value,
                             )
                           }
-                          className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500 w-24"
+                          className="w-24 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
                           disabled={loading}
                         >
                           <option value="">Status</option>
@@ -1491,22 +1514,22 @@ const PharmacyApproval = () => {
 
                         <div className="flex flex-wrap gap-1 mt-1">
                           {indent.requestTypes.medicineSlip && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Medicine
                             </span>
                           )}
                           {indent.requestTypes.investigation && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Investigation
                             </span>
                           )}
                           {indent.requestTypes.package && (
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                               Package
                             </span>
                           )}
                           {indent.requestTypes.nonPackage && (
-                            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                               Non-Package
                             </span>
                           )}
@@ -1516,14 +1539,14 @@ const PharmacyApproval = () => {
                       <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                         <button
                           onClick={() => handleView(indent)}
-                          className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors flex-1 flex justify-center"
+                          className="flex justify-center flex-1 p-2 text-green-600 transition-colors bg-green-100 rounded-lg hover:bg-green-200"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleEdit(indent)}
-                          className="p-2 bg-amber-100 text-amber-600 rounded-lg hover:bg-amber-200 transition-colors flex-1 flex justify-center"
+                          className="flex justify-center flex-1 p-2 transition-colors rounded-lg bg-amber-100 text-amber-600 hover:bg-amber-200"
                           title="Edit Indent"
                         >
                           <Edit className="w-4 h-4" />
@@ -1532,9 +1555,9 @@ const PharmacyApproval = () => {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 bg-white rounded-lg shadow">
-                    <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500 font-medium">
+                  <div className="py-8 text-center bg-white rounded-lg shadow">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium text-gray-500">
                       No pending indents
                     </p>
                   </div>
@@ -1545,48 +1568,48 @@ const PharmacyApproval = () => {
 
           {/* History Section */}
           {activeTab === "history" && (
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex flex-col flex-1 min-h-0">
               {/* Desktop Table - Scrollable Container */}
-              <div className="hidden md:block flex-1 overflow-auto bg-white rounded-lg border border-gray-200 shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200 border-separate border-spacing-0">
-                  <thead className="bg-green-600 sticky top-0 z-10">
+              <div className="flex-1 hidden overflow-auto bg-white border border-gray-200 rounded-lg shadow-sm md:block">
+                <table className="min-w-full border-separate divide-y divide-gray-200 border-spacing-0">
+                  <thead className="sticky top-0 z-10 bg-green-600">
                     <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Indent No
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Admission No
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Patient Name
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         UHID
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Staff Name
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Diagnosis
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Request Type
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Status
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Planned
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Actual
                       </th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-white bg-green-600">
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
+                  <tbody className="bg-white divide-y divide-gray-200">
                     {filteredHistoryIndents.length > 0 ? (
                       filteredHistoryIndents.map((indent) => (
                         <tr key={indent.id} className="hover:bg-gray-50">
@@ -1611,22 +1634,22 @@ const PharmacyApproval = () => {
                           <td className="px-6 py-4 text-sm">
                             <div className="flex flex-wrap gap-1">
                               {indent.requestTypes.medicineSlip && (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                                   Medicine
                                 </span>
                               )}
                               {indent.requestTypes.investigation && (
-                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                                   Investigation
                                 </span>
                               )}
                               {indent.requestTypes.package && (
-                                <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                                   Package
                                 </span>
                               )}
                               {indent.requestTypes.nonPackage && (
-                                <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                                <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                                   Non-Package
                                 </span>
                               )}
@@ -1634,11 +1657,11 @@ const PharmacyApproval = () => {
                           </td>
                           <td className="px-6 py-4 text-sm">
                             {indent.status === "approved" ? (
-                              <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                              <span className="px-3 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
                                 Approved
                               </span>
                             ) : (
-                              <span className="px-3 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+                              <span className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
                                 Rejected
                               </span>
                             )}
@@ -1673,7 +1696,7 @@ const PharmacyApproval = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleView(indent)}
-                                className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                                className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600"
                                 title="View Details"
                                 disabled={loading}
                               >
@@ -1683,7 +1706,7 @@ const PharmacyApproval = () => {
                                 (indent.slipImage || indent.slipImageUrl) && (
                                   <button
                                     onClick={() => handleViewSlip(indent)}
-                                    className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                                    className="p-2 text-white transition-colors bg-green-500 rounded-lg hover:bg-green-600"
                                     title="View Slip"
                                     disabled={loading}
                                   >
@@ -1697,11 +1720,11 @@ const PharmacyApproval = () => {
                     ) : (
                       <tr>
                         <td colSpan="11" className="px-6 py-12 text-center">
-                          <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                          <p className="text-gray-500 font-medium">
+                          <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="font-medium text-gray-500">
                             No history yet
                           </p>
-                          <p className="text-gray-400 text-sm mt-1">
+                          <p className="mt-1 text-sm text-gray-400">
                             Approved and rejected indents will appear here
                           </p>
                         </td>
@@ -1712,16 +1735,16 @@ const PharmacyApproval = () => {
               </div>
 
               {/* Mobile Card View for History - Scrollable Container */}
-              <div className="md:hidden flex-1 overflow-auto space-y-4">
+              <div className="flex-1 space-y-4 overflow-auto md:hidden">
                 {filteredHistoryIndents.length > 0 ? (
                   filteredHistoryIndents.map((indent) => (
                     <div
                       key={indent.id}
-                      className="bg-white rounded-lg shadow p-4 space-y-3"
+                      className="p-4 space-y-3 bg-white rounded-lg shadow"
                     >
-                      <div className="flex justify-between items-start">
+                      <div className="flex items-start justify-between">
                         <div>
-                          <span className="text-green-700 font-semibold">
+                          <span className="font-semibold text-green-700">
                             {indent.indentNumber}
                           </span>
                           <p className="text-xs text-gray-500 mt-0.5">
@@ -1729,11 +1752,11 @@ const PharmacyApproval = () => {
                           </p>
                         </div>
                         {indent.status === "approved" ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                          <span className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
                             Approved
                           </span>
                         ) : (
-                          <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+                          <span className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
                             Rejected
                           </span>
                         )}
@@ -1781,22 +1804,22 @@ const PharmacyApproval = () => {
 
                         <div className="flex flex-wrap gap-1 mt-1">
                           {indent.requestTypes.medicineSlip && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Medicine
                             </span>
                           )}
                           {indent.requestTypes.investigation && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded">
                               Investigation
                             </span>
                           )}
                           {indent.requestTypes.package && (
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded">
                               Package
                             </span>
                           )}
                           {indent.requestTypes.nonPackage && (
-                            <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded">
+                            <span className="px-2 py-1 text-xs text-orange-700 bg-orange-100 rounded">
                               Non-Package
                             </span>
                           )}
@@ -1806,7 +1829,7 @@ const PharmacyApproval = () => {
                       <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                         <button
                           onClick={() => handleView(indent)}
-                          className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors flex-1 flex justify-center"
+                          className="flex justify-center flex-1 p-2 text-green-600 transition-colors bg-green-100 rounded-lg hover:bg-green-200"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
@@ -1815,7 +1838,7 @@ const PharmacyApproval = () => {
                           (indent.slipImage || indent.slipImageUrl) && (
                             <button
                               onClick={() => handleViewSlip(indent)}
-                              className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors flex-1 flex justify-center"
+                              className="flex justify-center flex-1 p-2 text-green-600 transition-colors bg-green-100 rounded-lg hover:bg-green-200"
                               title="View Slip"
                             >
                               <FileText className="w-4 h-4" />
@@ -1825,9 +1848,9 @@ const PharmacyApproval = () => {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 bg-white rounded-lg shadow">
-                    <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500 font-medium">No history yet</p>
+                  <div className="py-8 text-center bg-white rounded-lg shadow">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium text-gray-500">No history yet</p>
                   </div>
                 )}
               </div>
@@ -1838,9 +1861,9 @@ const PharmacyApproval = () => {
 
       {/* Edit Modal */}
       {editModal && editFormData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-amber-600 text-white px-6 py-4 flex justify-between items-center">
+            <div className="sticky top-0 flex items-center justify-between px-6 py-4 text-white bg-amber-600">
               <h2 className="text-xl font-bold">
                 Edit Indent - {editFormData.indentNumber}
               </h2>
@@ -1849,7 +1872,7 @@ const PharmacyApproval = () => {
                   setEditModal(false);
                   setEditFormData(null);
                 }}
-                className="text-white hover:bg-amber-700 rounded-full p-1"
+                className="p-1 text-white rounded-full hover:bg-amber-700"
                 disabled={loading}
               >
                 <X className="w-6 h-6" />
@@ -1859,10 +1882,10 @@ const PharmacyApproval = () => {
             <div className="p-6">
               {/* Patient Information */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Patient Information
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                   <div>
                     <p className="text-sm text-gray-500">Admission Number</p>
                     <p className="font-medium">
@@ -1878,7 +1901,7 @@ const PharmacyApproval = () => {
                     <p className="font-medium">{editFormData.uhidNumber}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
                       Diagnosis <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1897,20 +1920,20 @@ const PharmacyApproval = () => {
               {/* Medicines Section */}
               {editFormData.requestTypes.medicineSlip && (
                 <div className="mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="pb-2 text-lg font-semibold text-gray-800 border-b">
                       Medicines
                     </h3>
                   </div>
 
-                  <div className="space-y-3 mb-4">
+                  <div className="mb-4 space-y-3">
                     {editFormData.medicines.map((medicine, index) => (
-                      <div key={medicine.id} className="flex gap-3 items-end">
-                        <div className="w-8 h-10 flex items-center justify-center bg-green-600 text-white rounded font-semibold">
+                      <div key={medicine.id} className="flex items-end gap-3">
+                        <div className="flex items-center justify-center w-8 h-10 font-semibold text-white bg-green-600 rounded">
                           {index + 1}
                         </div>
                         <div className="flex-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Medicine Name
                           </label>
                           <MedicineDropdown
@@ -1921,7 +1944,7 @@ const PharmacyApproval = () => {
                           />
                         </div>
                         <div className="w-32">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Quantity
                           </label>
                           <input
@@ -1942,7 +1965,7 @@ const PharmacyApproval = () => {
                         </div>
                         <button
                           onClick={() => removeMedicine(medicine.id)}
-                          className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg h-10 disabled:bg-red-300"
+                          className="h-10 px-3 py-2 text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:bg-red-300"
                           disabled={loading}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1953,7 +1976,7 @@ const PharmacyApproval = () => {
 
                   <button
                     onClick={addMedicine}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm w-full justify-center disabled:bg-green-300"
+                    className="flex items-center justify-center w-full gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-green-300"
                     disabled={loading}
                   >
                     <Plus className="w-4 h-4" />
@@ -1966,21 +1989,21 @@ const PharmacyApproval = () => {
               {editFormData.requestTypes.investigation &&
                 editFormData.investigationAdvice && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                    <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                       Investigation Advice
                     </h3>
 
-                    <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 space-y-4 border border-green-200 rounded-lg bg-green-50">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Priority *
                           </label>
                           <select
                             name="priority"
                             value={editFormData.investigationAdvice.priority}
                             onChange={handleInvestigationAdviceChange}
-                            className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                             disabled={loading}
                           >
                             <option value="High">High</option>
@@ -1990,7 +2013,7 @@ const PharmacyApproval = () => {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Pathology & Radiology *
                           </label>
                           <select
@@ -1999,7 +2022,7 @@ const PharmacyApproval = () => {
                               editFormData.investigationAdvice.adviceCategory
                             }
                             onChange={handleInvestigationAdviceChange}
-                            className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                             disabled={loading}
                           >
                             <option value="">Select Category</option>
@@ -2013,7 +2036,7 @@ const PharmacyApproval = () => {
                       {editFormData.investigationAdvice.adviceCategory ===
                         "Pathology" && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block mb-2 text-sm font-medium text-gray-700">
                             Select Pathology Tests * (
                             {
                               editFormData.investigationAdvice.pathologyTests
@@ -2021,7 +2044,7 @@ const PharmacyApproval = () => {
                             }{" "}
                             selected)
                           </label>
-                          <div className="p-4 max-h-60 overflow-y-auto bg-white rounded-lg border border-gray-300">
+                          <div className="p-4 overflow-y-auto bg-white border border-gray-300 rounded-lg max-h-60">
                             {pathologyTests.length > 0 ? (
                               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                                 {pathologyTests.map((test) => (
@@ -2040,7 +2063,7 @@ const PharmacyApproval = () => {
                                           "pathology",
                                         )
                                       }
-                                      className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                      className="mt-1 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                       disabled={loading}
                                     />
                                     <span className="text-sm text-gray-700">
@@ -2050,7 +2073,7 @@ const PharmacyApproval = () => {
                                 ))}
                               </div>
                             ) : (
-                              <div className="text-center text-gray-500 py-8">
+                              <div className="py-8 text-center text-gray-500">
                                 <p>Loading pathology tests...</p>
                               </div>
                             )}
@@ -2063,7 +2086,7 @@ const PharmacyApproval = () => {
                         "Radiology" && (
                         <>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block mb-1 text-sm font-medium text-gray-700">
                               Radiology Type *
                             </label>
                             <select
@@ -2072,7 +2095,7 @@ const PharmacyApproval = () => {
                                 editFormData.investigationAdvice.radiologyType
                               }
                               onChange={handleInvestigationAdviceChange}
-                              className="w-full px-3 py-2 bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                               disabled={loading}
                             >
                               <option value="">Select Type</option>
@@ -2084,7 +2107,7 @@ const PharmacyApproval = () => {
 
                           {editFormData.investigationAdvice.radiologyType && (
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                              <label className="block mb-2 text-sm font-medium text-gray-700">
                                 Select{" "}
                                 {editFormData.investigationAdvice.radiologyType}{" "}
                                 Tests * (
@@ -2094,7 +2117,7 @@ const PharmacyApproval = () => {
                                 }{" "}
                                 selected)
                               </label>
-                              <div className="p-4 max-h-60 overflow-y-auto bg-white rounded-lg border border-gray-300">
+                              <div className="p-4 overflow-y-auto bg-white border border-gray-300 rounded-lg max-h-60">
                                 {(() => {
                                   const tests = getRadiologyTests();
                                   return tests.length > 0 ? (
@@ -2115,7 +2138,7 @@ const PharmacyApproval = () => {
                                                 "radiology",
                                               )
                                             }
-                                            className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                            className="mt-1 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                             disabled={loading}
                                           />
                                           <span className="text-sm text-gray-700">
@@ -2125,7 +2148,7 @@ const PharmacyApproval = () => {
                                       ))}
                                     </div>
                                   ) : (
-                                    <div className="text-center text-gray-500 py-8">
+                                    <div className="py-8 text-center text-gray-500">
                                       <p>
                                         Loading{" "}
                                         {
@@ -2145,7 +2168,7 @@ const PharmacyApproval = () => {
 
                       {/* Remarks */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Remarks
                         </label>
                         <textarea
@@ -2154,7 +2177,7 @@ const PharmacyApproval = () => {
                           onChange={handleInvestigationAdviceChange}
                           rows="3"
                           placeholder="Add any additional notes or instructions..."
-                          className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           disabled={loading}
                         />
                       </div>
@@ -2169,19 +2192,19 @@ const PharmacyApproval = () => {
                     setEditModal(false);
                     setEditFormData(null);
                   }}
-                  className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium disabled:bg-gray-100"
+                  className="px-6 py-2 font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:bg-gray-100"
                   disabled={loading}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:bg-green-300"
+                  className="flex items-center gap-2 px-6 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-green-300"
                   disabled={loading}
                 >
                   {loading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <div className="w-4 h-4 border-b-2 border-white rounded-full animate-spin"></div>
                       Saving...
                     </>
                   ) : (
@@ -2199,9 +2222,9 @@ const PharmacyApproval = () => {
 
       {/* View Details Modal */}
       {viewModal && selectedIndent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
+            <div className="sticky top-0 flex items-center justify-between px-6 py-4 text-white bg-green-600">
               <h2 className="text-xl font-bold">
                 Indent Details - {selectedIndent.indentNumber}
               </h2>
@@ -2210,7 +2233,7 @@ const PharmacyApproval = () => {
                   setViewModal(false);
                   setSelectedIndent(null);
                 }}
-                className="text-white hover:bg-green-700 rounded-full p-1"
+                className="p-1 text-white rounded-full hover:bg-green-700"
                 disabled={loading}
               >
                 <X className="w-6 h-6" />
@@ -2220,10 +2243,10 @@ const PharmacyApproval = () => {
             <div className="p-6">
               {/* Patient Information */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Patient Information
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                   <div>
                     <p className="text-sm text-gray-500">Admission Number</p>
                     <p className="font-medium">
@@ -2277,27 +2300,27 @@ const PharmacyApproval = () => {
 
               {/* Request Types */}
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                   Request Types
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {selectedIndent.requestTypes.medicineSlip && (
-                    <span className="px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg">
                       Medicine Slip
                     </span>
                   )}
                   {selectedIndent.requestTypes.investigation && (
-                    <span className="px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg">
                       Investigation
                     </span>
                   )}
                   {selectedIndent.requestTypes.package && (
-                    <span className="px-3 py-2 bg-purple-100 text-purple-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg">
                       Package
                     </span>
                   )}
                   {selectedIndent.requestTypes.nonPackage && (
-                    <span className="px-3 py-2 bg-orange-100 text-orange-700 text-sm rounded-lg font-medium">
+                    <span className="px-3 py-2 text-sm font-medium text-orange-700 bg-orange-100 rounded-lg">
                       Non-Package
                     </span>
                   )}
@@ -2308,25 +2331,25 @@ const PharmacyApproval = () => {
               {selectedIndent.requestTypes.medicineSlip &&
                 selectedIndent.medicines.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                    <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                       Medicines
                     </h3>
-                    <div className="bg-gray-50 rounded-lg overflow-hidden">
+                    <div className="overflow-hidden rounded-lg bg-gray-50">
                       <table className="min-w-full">
-                        <thead className="bg-green-600 text-white">
+                        <thead className="text-white bg-green-600">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
+                            <th className="px-4 py-3 text-sm font-semibold text-left">
                               #
                             </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
+                            <th className="px-4 py-3 text-sm font-semibold text-left">
                               Medicine Name
                             </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
+                            <th className="px-4 py-3 text-sm font-semibold text-left">
                               Quantity
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
+                        <tbody className="bg-white divide-y divide-gray-200">
                           {selectedIndent.medicines.map((medicine, index) => (
                             <tr key={medicine.id || index}>
                               <td className="px-4 py-3 text-sm">{index + 1}</td>
@@ -2348,10 +2371,10 @@ const PharmacyApproval = () => {
               {selectedIndent.requestTypes.investigation &&
                 selectedIndent.investigationAdvice && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                    <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                       Investigation Advice
                     </h3>
-                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="p-4 border border-green-200 rounded-lg bg-green-50">
                       <div className="space-y-3 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Priority:</span>
@@ -2371,7 +2394,7 @@ const PharmacyApproval = () => {
                         </div>
                         <div>
                           <span className="text-gray-600">Category:</span>
-                          <div className="font-medium text-gray-900 mt-1">
+                          <div className="mt-1 font-medium text-gray-900">
                             {selectedIndent.investigationAdvice.adviceCategory}
                           </div>
                         </div>
@@ -2389,12 +2412,12 @@ const PharmacyApproval = () => {
                                 }
                                 ):
                               </span>
-                              <div className="mt-2 flex flex-wrap gap-2">
+                              <div className="flex flex-wrap gap-2 mt-2">
                                 {selectedIndent.investigationAdvice.pathologyTests.map(
                                   (test, index) => (
                                     <span
                                       key={index}
-                                      className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full"
+                                      className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full"
                                     >
                                       {test}
                                     </span>
@@ -2411,7 +2434,7 @@ const PharmacyApproval = () => {
                               <span className="text-gray-600">
                                 Radiology Type:
                               </span>
-                              <div className="font-medium text-gray-900 mt-1">
+                              <div className="mt-1 font-medium text-gray-900">
                                 {
                                   selectedIndent.investigationAdvice
                                     .radiologyType
@@ -2429,12 +2452,12 @@ const PharmacyApproval = () => {
                                   }
                                   ):
                                 </span>
-                                <div className="mt-2 flex flex-wrap gap-2">
+                                <div className="flex flex-wrap gap-2 mt-2">
                                   {selectedIndent.investigationAdvice.radiologyTests.map(
                                     (test, index) => (
                                       <span
                                         key={index}
-                                        className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full"
+                                        className="px-2 py-1 text-xs text-purple-700 bg-purple-100 rounded-full"
                                       >
                                         {test}
                                       </span>
@@ -2449,7 +2472,7 @@ const PharmacyApproval = () => {
                         {selectedIndent.investigationAdvice.remarks && (
                           <div>
                             <span className="text-gray-600">Remarks:</span>
-                            <div className="font-medium text-gray-900 mt-1 p-2 bg-white rounded border border-gray-200">
+                            <div className="p-2 mt-1 font-medium text-gray-900 bg-white border border-gray-200 rounded">
                               {selectedIndent.investigationAdvice.remarks}
                             </div>
                           </div>
@@ -2462,7 +2485,7 @@ const PharmacyApproval = () => {
               {/* Status */}
               {selectedIndent.status && selectedIndent.status !== "pending" && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
+                  <h3 className="pb-2 mb-4 text-lg font-semibold text-gray-800 border-b">
                     Status
                   </h3>
                   <div className="flex items-center gap-4">
@@ -2499,7 +2522,7 @@ const PharmacyApproval = () => {
                     setViewModal(false);
                     setSelectedIndent(null);
                   }}
-                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                  className="px-6 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
                 >
                   Close
                 </button>
@@ -2513,9 +2536,9 @@ const PharmacyApproval = () => {
       {slipModal &&
         selectedIndent &&
         (selectedIndent.slipImage || selectedIndent.slipImageUrl) && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
             <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
+              <div className="sticky top-0 flex items-center justify-between px-6 py-4 text-white bg-green-600">
                 <h2 className="text-xl font-bold">
                   Pharmacy Slip - {selectedIndent.indentNumber}
                 </h2>
@@ -2524,27 +2547,27 @@ const PharmacyApproval = () => {
                     setSlipModal(false);
                     setSelectedIndent(null);
                   }}
-                  className="text-white hover:bg-green-700 rounded-full p-1"
+                  className="p-1 text-white rounded-full hover:bg-green-700"
                 >
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               <div className="p-6">
-                <div className="bg-gray-100 p-4 rounded-lg mb-4">
+                <div className="p-4 mb-4 bg-gray-100 rounded-lg">
                   <img
                     src={
                       selectedIndent.slipImageUrl || selectedIndent.slipImage
                     }
                     alt="Pharmacy Slip"
-                    className="w-full rounded border border-gray-300"
+                    className="w-full border border-gray-300 rounded"
                   />
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
                   <button
                     onClick={() => downloadSlip(selectedIndent)}
-                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                    className="flex items-center gap-2 px-6 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
                   >
                     <Download className="w-4 h-4" />
                     Download Slip
@@ -2554,7 +2577,7 @@ const PharmacyApproval = () => {
                       setSlipModal(false);
                       setSelectedIndent(null);
                     }}
-                    className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium"
+                    className="px-6 py-2 font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
                   >
                     Close
                   </button>
