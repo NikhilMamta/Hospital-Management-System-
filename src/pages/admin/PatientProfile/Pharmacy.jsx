@@ -307,7 +307,10 @@ export default function Pharmacy() {
               ipdNumber: currentIpdNumber || "",
               age: data.personalInfo.age || "",
               gender: data.personalInfo.gender || "",
-              wardLocation: data.departmentInfo?.ward || "",
+              wardLocation:
+                data.departmentInfo?.ward_type ||
+                data.departmentInfo?.ward ||
+                "",
               consultantName: data.personalInfo.consultantDr || "",
               room: data.departmentInfo?.room || "",
               admissionNumber: ipdData?.admission_no || "",
