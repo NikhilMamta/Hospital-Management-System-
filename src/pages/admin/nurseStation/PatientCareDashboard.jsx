@@ -53,20 +53,28 @@ const getTaskStatus = (task) => {
   return "In progress";
 };
 
-// Current shift helper
+// Current shift helper with color coding
 const getCurrentShift = () => {
   const now = new Date();
   const hour = now.getHours();
 
-  if (hour >= 8 && hour < 14) return "Shift A (08:00–14:00)";
-  if (hour >= 14 && hour < 20) return "Shift B (14:00–20:00)";
-  return "Shift C (20:00–08:00)";
+  if (hour >= 8 && hour < 14)
+    return { name: "Shift A (08:00–14:00)", code: "A" };
+  if (hour >= 14 && hour < 20)
+    return { name: "Shift B (14:00–20:00)", code: "B" };
+  return { name: "Shift C (20:00–08:00)", code: "C" };
+};
+
+const getShiftColor = (shiftCode) => {
+  if (shiftCode === "A") return "bg-green-50 text-green-700 border-green-200";
+  if (shiftCode === "B") return "bg-blue-50 text-blue-700 border-blue-200";
+  return "bg-purple-50 text-purple-700 border-purple-200";
 };
 
 // ─── Sub-components ────────────────────────────────────────
 
 const SummaryCard = ({ icon: Icon, label, value }) => (
-  <div className="p-4 transition-all bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-green-200">
+  <div className="p-4 transition-all bg-white border border-gray-200 rounded-xl hover:shadow-lg hover:scale-[1.01] hover:border-green-200">
     <div className="flex items-center gap-3">
       <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-green-50">
         <Icon className="w-5 h-5 text-green-600" />
@@ -96,7 +104,7 @@ const TaskRow = ({ task, index, nurseMap, onNurseClick }) => {
       {/* Task name + status */}
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-gray-700 truncate">
+          <span className="text-sm font-medium text-gray-800 truncate">
             {task.task || "Unnamed Task"}
           </span>
           <span
@@ -116,15 +124,16 @@ const TaskRow = ({ task, index, nurseMap, onNurseClick }) => {
         </div>
       </div>
 
-      {/* Nurse - clickable with tap feedback */}
+      {/* Nurse - clickable with tap feedback and role context */}
       <div className="flex items-center gap-1.5 text-xs md:w-36">
-        <User className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+        <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         {task.assign_nurse ? (
           <span
             onClick={() => onNurseClick(task.assign_nurse)}
             className="font-medium text-green-700 truncate cursor-pointer hover:text-green-900 underline-offset-2 hover:underline active:scale-[0.98] transition-transform"
           >
             {task.assign_nurse}
+            <span className="text-[10px] text-gray-500 ml-1">Nurse</span>
           </span>
         ) : (
           <span className="text-gray-500 truncate">—</span>
@@ -132,24 +141,31 @@ const TaskRow = ({ task, index, nurseMap, onNurseClick }) => {
       </div>
 
       {/* Planned */}
-      <div className="text-xs text-gray-500 md:w-36">
-        <span className="font-medium text-gray-400 md:hidden">Planned: </span>
+      <div className="text-xs text-gray-600 md:w-36">
+        <span className="font-medium text-gray-500 md:hidden">Planned: </span>
         <span>{planned.date}</span>{" "}
         <span className="text-gray-600">{planned.time}</span>
       </div>
 
       {/* Actual */}
-      <div className="text-xs text-gray-500 md:w-36">
-        <span className="font-medium text-gray-400 md:hidden">Actual: </span>
+      <div className="text-xs text-gray-600 md:w-36">
+        <span className="font-medium text-gray-500 md:hidden">Actual: </span>
         <span>{actual.date}</span>{" "}
         <span className="text-gray-600">{actual.time}</span>
       </div>
 
-      {/* Delay - soft warning */}
-      <div
-        className={`text-xs md:w-28 ${delay?.minutes > 0 ? "text-yellow-600" : "text-gray-400"}`}
-      >
-        {delay ? delay.text : "—"}
+      {/* Delay - with visual indicator */}
+      <div className="flex items-center gap-1 text-xs md:w-28">
+        {delay?.minutes > 0 && (
+          <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
+        )}
+        <span
+          className={`font-medium ${
+            delay?.minutes > 0 ? "text-yellow-700" : "text-gray-500"
+          }`}
+        >
+          {delay ? delay.text : "—"}
+        </span>
       </div>
     </div>
   );
@@ -169,20 +185,35 @@ const PatientCard = ({
   const total = tasks.length;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  // Progress bar color based on completion - now always visible
+  // Check for delays in patient tasks
+  const hasDelay = tasks.some(
+    (t) => computeDelay(t.planned1, t.actual1)?.minutes > 10,
+  );
+
+  // Progress bar color based on completion
   const getProgressBarColor = () => {
     if (progress >= 80) return "bg-green-500";
     if (progress >= 50) return "bg-green-400";
     if (progress >= 20) return "bg-yellow-400";
-    return "bg-red-400"; // Low progress - visible red
+    return "bg-red-400";
+  };
+
+  // Progress meaning text
+  const getProgressMeaning = () => {
+    if (progress === 100) return "Done";
+    if (progress > 70) return "On track";
+    if (progress > 30) return "Ongoing";
+    return "Attention";
   };
 
   return (
     <div
-      className={`bg-white rounded-xl border transition-all duration-300 overflow-hidden ${
+      className={`bg-white rounded-xl border transition-all duration-300 hover:shadow-lg hover:scale-[1.01] overflow-hidden ${
+        hasDelay ? "border-yellow-300 bg-yellow-50/30" : ""
+      } ${
         isExpanded
           ? "shadow-md border-green-200 ring-1 ring-green-100"
-          : "shadow-sm border-gray-200 hover:border-green-200 hover:shadow-md"
+          : "shadow-sm border-gray-200 hover:border-green-200"
       }`}
     >
       {/* Card header — always visible */}
@@ -212,9 +243,10 @@ const PatientCard = ({
               IPD: {patient.Ipd_number || "N/A"}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-400">
+          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
             <span className="flex items-center gap-1">
-              <Bed className="w-3 h-3" /> Bed {patient.bed_no || "N/A"}
+              <Bed className="w-3 h-3 text-gray-400" /> Bed{" "}
+              {patient.bed_no || "N/A"}
             </span>
             <span>
               {patient.ward_type || ""} • {patient.room || ""}
@@ -226,10 +258,12 @@ const PatientCard = ({
         <div className="items-center hidden gap-4 sm:flex">
           <div className="w-24">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-400">
+              <span className="text-xs font-medium text-gray-600">
                 {completed}/{total}
               </span>
-              <span className="text-xs text-gray-400">{progress}%</span>
+              <span className="text-xs font-medium text-gray-600">
+                {progress}%
+              </span>
             </div>
             <div className="h-1 overflow-hidden bg-gray-100 rounded-full">
               <div
@@ -237,11 +271,14 @@ const PatientCard = ({
                 style={{ width: `${progress}%` }}
               />
             </div>
+            <span className="text-[11px] text-gray-500 font-medium mt-0.5 block text-right">
+              {getProgressMeaning()}
+            </span>
           </div>
         </div>
 
         {/* Expand icon */}
-        <div className="flex-shrink-0 text-gray-300">
+        <div className="flex-shrink-0 text-gray-400">
           {isExpanded ? (
             <ChevronUp className="w-5 h-5" />
           ) : (
@@ -252,11 +289,16 @@ const PatientCard = ({
 
       {/* Mobile progress */}
       <div className="px-4 pb-4 -mt-2 sm:hidden">
-        <div className="flex items-center justify-between mb-1 text-xs text-gray-400">
+        <div className="flex items-center justify-between mb-1 text-xs font-medium text-gray-600">
           <span>
             {completed}/{total} tasks
           </span>
-          <span>{progress}%</span>
+          <span className="flex items-center gap-1">
+            <span>{progress}%</span>
+            <span className="text-[10px] text-gray-500">
+              ({getProgressMeaning()})
+            </span>
+          </span>
         </div>
         <div className="h-1 overflow-hidden bg-gray-100 rounded-full">
           <div
@@ -268,9 +310,9 @@ const PatientCard = ({
 
       {/* Expanded task list */}
       {isExpanded && (
-        <div className="border-t border-gray-100">
+        <div className="border-t border-gray-100 animate-fade-in">
           {/* Table header (desktop) */}
-          <div className="hidden md:flex items-center px-4 py-2 bg-gray-50/50 text-[10px] text-gray-400 border-b border-gray-100">
+          <div className="sticky top-0 z-10 hidden bg-white md:flex items-center px-4 py-2 bg-gray-50/50 text-[10px] text-gray-500 border-b border-gray-100">
             <div className="flex-1">Task</div>
             <div className="w-36">Nurse</div>
             <div className="w-36">Planned</div>
@@ -308,13 +350,13 @@ const PatientCareDashboard = () => {
   const [showSheet, setShowSheet] = useState(false);
   const [isTabletOrMobile, setIsTabletOrMobile] = useState(false);
   const [visibleCount, setVisibleCount] = useState(10);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
   const { showNotification } = useNotification();
 
   // Detect device: tablets (768-1024) use bottom sheet too
   useEffect(() => {
     const checkDevice = () => {
       const width = window.innerWidth;
-      // Mobile + Tablet → same UX (bottom sheet)
       setIsTabletOrMobile(width < 1024);
     };
 
@@ -366,6 +408,7 @@ const PatientCareDashboard = () => {
 
       if (error) throw error;
       setRawTasks(data || []);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error("Error loading data:", err);
       showNotification("Error loading patient care data", "error");
@@ -495,39 +538,55 @@ const PatientCareDashboard = () => {
   // ── Loading ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4 sm:p-6 bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen p-4 text-gray-800 sm:p-6 bg-gray-50">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 border-2 border-gray-200 rounded-full border-t-green-500 animate-spin" />
-          <p className="text-sm text-gray-400">Loading...</p>
+          <p className="text-sm text-gray-500">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 bg-gray-50">
+    <div className="min-h-screen p-4 text-gray-800 sm:p-6 bg-gray-50">
       <div className="mx-auto space-y-6 max-w-7xl">
-        {/* ── Header with shift ── */}
+        {/* ── Header with shift and live pulse ── */}
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <h1 className="text-xl font-light text-gray-700 md:text-2xl">
-              Patient Care
-            </h1>
-            <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{currentShift}</span>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-light text-gray-800 md:text-2xl">
+                Patient Care
+              </h1>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                Live updates enabled
+              </div>
             </div>
-            <p className="mt-2 text-xs text-gray-400">
+            <div className="flex items-center gap-2 mt-1 text-xs">
+              <span
+                className={`px-2 py-1 rounded-full border ${getShiftColor(currentShift.code)}`}
+              >
+                🟢 {currentShift.name}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
               Monitoring view • Tap a nurse name to view contact details
             </p>
           </div>
           <button
             onClick={fetchTasks}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 transition-all bg-white border border-gray-200 rounded-lg hover:border-green-200 hover:text-green-700 active:scale-[0.98]"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 transition-all bg-white border border-gray-200 rounded-lg hover:border-green-200 hover:text-green-700 active:scale-[0.98]"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
           </button>
+        </div>
+
+        {/* ── Quick Stats Bar ── */}
+        <div className="flex gap-4 text-xs font-medium text-gray-600">
+          <span>⚡ Active: {stats.inProgress}</span>
+          <span>✅ Done: {stats.completed}</span>
+          <span>👥 Patients: {stats.totalPatients}</span>
         </div>
 
         {/* ── Summary Cards ── */}
@@ -560,19 +619,19 @@ const PatientCareDashboard = () => {
             <div className="flex flex-col gap-2 sm:flex-row">
               {/* Search */}
               <div className="relative flex-1">
-                <Search className="absolute w-3.5 h-3.5 text-gray-300 -translate-y-1/2 left-3 top-1/2" />
+                <Search className="absolute w-3.5 h-3.5 text-gray-400 -translate-y-1/2 left-3 top-1/2" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search patient, IPD, or bed..."
-                  className="w-full py-2 pr-3 text-sm text-gray-600 placeholder-gray-300 transition-all border border-gray-200 rounded-lg pl-9 focus:ring-2 focus:ring-green-200 focus:border-green-300"
+                  className="w-full py-2 pr-3 text-sm text-gray-700 placeholder-gray-400 transition-all border border-gray-200 rounded-lg pl-9 focus:ring-2 focus:ring-green-200 focus:border-green-300"
                 />
               </div>
 
               {/* Filter */}
               <div className="flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5 text-gray-300" />
+                <Filter className="w-3.5 h-3.5 text-gray-400" />
                 {[
                   { key: "all", label: "All" },
                   { key: "in-progress", label: "In Progress" },
@@ -584,7 +643,7 @@ const PatientCareDashboard = () => {
                     className={`px-3 py-1.5 rounded text-xs transition-all active:scale-[0.98] ${
                       statusFilter === f.key
                         ? "bg-green-600 text-white"
-                        : "text-gray-500 hover:text-green-700"
+                        : "text-gray-600 hover:text-green-700"
                     }`}
                   >
                     {f.label}
@@ -599,8 +658,13 @@ const PatientCareDashboard = () => {
         <div className="space-y-3">
           {filteredGroups.length === 0 ? (
             <div className="p-12 text-center bg-white border border-gray-200 rounded-xl">
-              <ClipboardList className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-              <p className="text-sm text-gray-400">No patients found</p>
+              <ClipboardList className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              <p className="text-sm text-gray-500">
+                No patients match your filters
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Try adjusting search or status filter
+              </p>
             </div>
           ) : (
             visibleGroups.map((group) => (
@@ -628,7 +692,7 @@ const PatientCareDashboard = () => {
 
         {/* Infinite scroll loading indicator */}
         {visibleGroups.length < filteredGroups.length && (
-          <div className="py-4 text-sm text-center text-gray-400">
+          <div className="py-4 text-sm text-center text-gray-500">
             Loading more...
           </div>
         )}
@@ -647,7 +711,7 @@ const PatientCareDashboard = () => {
                 {activeNurse}
               </div>
 
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="mt-2 text-xs text-gray-600">
                 📞 {nurseMap[activeNurse] || "No number available"}
               </div>
 
@@ -689,7 +753,7 @@ const PatientCareDashboard = () => {
                 {activeNurse}
               </h3>
 
-              <p className="mt-2 text-xs text-center text-gray-500">
+              <p className="mt-2 text-xs text-center text-gray-600">
                 📞 {nurseMap[activeNurse] || "No number available"}
               </p>
 
@@ -714,7 +778,7 @@ const PatientCareDashboard = () => {
 
               <button
                 onClick={() => setShowSheet(false)}
-                className="w-full mt-4 text-sm text-center text-gray-400 active:scale-[0.98] transition-transform"
+                className="w-full mt-4 text-sm text-center text-gray-500 active:scale-[0.98] transition-transform"
               >
                 Close
               </button>
@@ -722,10 +786,15 @@ const PatientCareDashboard = () => {
           </div>
         )}
 
-        {/* ── Footer count ── */}
+        {/* ── Footer with last updated and count ── */}
         {filteredGroups.length > 0 && (
-          <div className="pb-2 text-xs text-center text-gray-300">
-            Showing {visibleGroups.length} of {filteredGroups.length}
+          <div className="flex items-center justify-between pb-2">
+            <p className="text-xs text-gray-500">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+            <div className="text-xs text-center text-gray-500">
+              Showing {visibleGroups.length} of {filteredGroups.length}
+            </div>
           </div>
         )}
       </div>
@@ -742,6 +811,20 @@ const PatientCareDashboard = () => {
         }
         .animate-slide-up {
           animation: slide-up 0.25s ease-out;
+        }
+
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.25s ease;
         }
       `}</style>
     </div>

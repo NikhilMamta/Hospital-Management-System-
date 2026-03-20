@@ -61,6 +61,7 @@ const Roster = () => {
     next: null,
   });
   const [currentSetDate, setCurrentSetDate] = useState(null);
+  const [staffSearchTerm, setStaffSearchTerm] = useState("");
 
   // Date pickers for Previous / Next views
   const getTodayStr = () =>
@@ -1534,9 +1535,16 @@ const Roster = () => {
     return total;
   }, [assignments]);
 
-  // Get staff list for active tab
+  // Get filtered staff list for active tab by search query
+  const getFilteredStaff = (category) => {
+    const list = getAvailableStaff(category);
+    if (!staffSearchTerm.trim()) return list;
+    const query = staffSearchTerm.toLowerCase();
+    return list.filter((name) => name.toLowerCase().includes(query));
+  };
+
   const getActiveTabStaff = () => {
-    return getAvailableStaff(activeTab);
+    return getFilteredStaff(activeTab);
   };
 
   // Get selected count for active tab
@@ -1777,6 +1785,16 @@ const Roster = () => {
                   </div>
                 </div>
 
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={staffSearchTerm}
+                    onChange={(e) => setStaffSearchTerm(e.target.value)}
+                    placeholder="Search nurse/rmo/ot..."
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-300"
+                  />
+                </div>
+
                 {/* Tab Navigation - Compact */}
                 <div className="flex mb-2 border-b border-gray-200">
                   <button
@@ -1785,7 +1803,7 @@ const Roster = () => {
                   >
                     <div className="flex items-center justify-center gap-1">
                       <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                      <span>Nurses ({getAvailableStaff("nurses").length})</span>
+                      <span>Nurses ({getFilteredStaff("nurses").length})</span>
                     </div>
                   </button>
                   <button
@@ -1794,7 +1812,7 @@ const Roster = () => {
                   >
                     <div className="flex items-center justify-center gap-1">
                       <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
-                      <span>RMO ({getAvailableStaff("rmos").length})</span>
+                      <span>RMO ({getFilteredStaff("rmos").length})</span>
                     </div>
                   </button>
                   <button
@@ -1803,7 +1821,7 @@ const Roster = () => {
                   >
                     <div className="flex items-center justify-center gap-1">
                       <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                      <span>OT ({getAvailableStaff("otStaff").length})</span>
+                      <span>OT ({getFilteredStaff("otStaff").length})</span>
                     </div>
                   </button>
                 </div>
