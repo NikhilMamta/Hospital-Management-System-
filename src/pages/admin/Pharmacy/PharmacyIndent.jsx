@@ -27,6 +27,7 @@ const PharmacyIndents = () => {
   const [admissionPatients, setAdmissionPatients] = useState([]);
   const [activePatientsData, setactivePatientsData] = useState([]);
   const [medicinesList, setMedicinesList] = useState([]);
+  const [categories, setCategories] = useState([]); // ✅ NEW: Categories state
   const [investigationTests, setInvestigationTests] = useState({
     Pathology: [],
     "X-ray": [],
@@ -43,6 +44,7 @@ const PharmacyIndents = () => {
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const dropdownRef = useRef(null);
+
   // Get user name from localStorage
   const getCurrentUser = () => {
     try {
@@ -185,6 +187,29 @@ const PharmacyIndents = () => {
     "Serum Homocysteine",
   ];
 
+  // ✅ NEW: Load categories from database
+  const loadCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("category")
+        .select("name")
+        .order("name");
+
+      if (error) throw error;
+      setCategories(data || []);
+      console.log("Categories loaded:", data);
+    } catch (err) {
+      console.error("Error loading categories:", err);
+      // Fallback to hardcoded categories if database fetch fails
+      setCategories([
+        { name: "General" },
+        { name: "Critical" },
+        { name: "Private" },
+        { name: "Emergency" },
+      ]);
+    }
+  };
+
   // Show popup message (legacy - use showNotification)
   const showPopup = (message, type = "success") => {
     showNotification(message, type);
@@ -209,6 +234,7 @@ const PharmacyIndents = () => {
     loadData();
     loadMedicinesList();
     loadInvestigationTests();
+    loadCategories(); // ✅ ADD THIS: Load categories
     setupRealtimeSubscription();
   }, []);
 
@@ -578,7 +604,7 @@ const PharmacyIndents = () => {
         age: selectedPatient.age || "",
         gender: selectedPatient.gender || "",
         wardLocation: `${selectedPatient.ward_type || ""} - ${selectedPatient.floor || ""}`,
-        category: "",
+        category: "", // ✅ User will select manually from dropdown
         room: selectedPatient.room || "",
         diagnosis: "",
       });
@@ -836,7 +862,7 @@ const PharmacyIndents = () => {
         age: formData.age,
         gender: formData.gender,
         ward_location: formData.wardLocation,
-        category: formData.category,
+        category: formData.category, // ✅ Using selected category from dropdown
         room: formData.room,
         diagnosis: formData.diagnosis.trim(),
         request_types: JSON.stringify(requestTypes),
@@ -987,7 +1013,7 @@ const PharmacyIndents = () => {
       age: indent.age,
       gender: indent.gender,
       wardLocation: indent.ward_location,
-      category: indent.category,
+      category: indent.category || "",
       room: indent.room,
       diagnosis: indent.diagnosis,
     });
@@ -1594,16 +1620,19 @@ const PharmacyIndents = () => {
                     <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Category
                     </label>
+                    {/* ✅ DYNAMIC CATEGORY DROPDOWN - REPLACED HARDCODED OPTIONS */}
                     <select
                       name="category"
                       value={formData.category}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-sm"
                     >
-                      <option value="General">General</option>
-                      <option value="Critical">Critical</option>
-                      <option value="Private">Private</option>
-                      <option value="Emergency">Emergency</option>
+                      <option value="">Select Category</option>
+                      {categories.map((cat) => (
+                        <option key={cat.name} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -2178,16 +2207,6 @@ const PharmacyIndents = () => {
                 >
                   View Details
                 </button>
-                {/* <button
-                  onClick={() => {
-                    setSuccessModal(false);
-                    resetForm();
-                    setShowModal(true);
-                  }}
-                  className="flex-1 px-4 py-2 font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
-                >
-                  Create New Indent
-                </button> */}
               </div>
             </div>
           </div>

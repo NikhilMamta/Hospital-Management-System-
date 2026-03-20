@@ -68,7 +68,7 @@ const FormStepper = ({ currentStep }) => {
             className={`text-xs ${
               currentStep === step.id
                 ? "text-green-600 font-medium"
-                : "text-gray-400"
+                : "text-gray-500"
             }`}
           >
             {step.name}
@@ -290,12 +290,14 @@ export default function Pharmacy() {
     const fetchAdmissionDetails = async () => {
       if (currentIpdNumber) {
         try {
-          // Fetch admission_no from ipd_admissions table
+          // ✅ FIX: Fetch admission_no AND pat_category from ipd_admissions table
           const { data: ipdData, error } = await supabase
             .from("ipd_admissions")
-            .select("admission_no")
+            .select("admission_no, pat_category")
             .eq("ipd_number", currentIpdNumber)
             .single();
+          console.log("IPD NUMBER:", currentIpdNumber);
+          console.log("IPD DATA:", ipdData);
 
           if (data?.personalInfo) {
             setFormData((prev) => ({
@@ -306,10 +308,10 @@ export default function Pharmacy() {
               age: data.personalInfo.age || "",
               gender: data.personalInfo.gender || "",
               wardLocation: data.departmentInfo?.ward || "",
-              // New fields population
               consultantName: data.personalInfo.consultantDr || "",
               room: data.departmentInfo?.room || "",
               admissionNumber: ipdData?.admission_no || "",
+              category: ipdData?.pat_category?.trim() || "", // ✅ ADD THIS - Category from IPD admissions
             }));
           }
         } catch (err) {
@@ -382,7 +384,7 @@ export default function Pharmacy() {
         age: indent.age,
         gender: indent.gender,
         wardLocation: indent.ward_location,
-        category: indent.category,
+        category: indent.category || "", // ✅ FIX: Use category from pharmacy table (will be populated from formData)
         room: indent.room,
         ipdNumber: indent.ipd_number,
         slip_image: indent.slip_image,
@@ -801,7 +803,7 @@ export default function Pharmacy() {
         age: formData.age || "",
         gender: formData.gender || "",
         ward_location: formData.wardLocation || "",
-        category: formData.category || "",
+        category: formData.category?.trim() || "", // ✅ CORRECT: Use formData.category (from IPD admissions)
         room: formData.room || "",
         diagnosis: formData.diagnosis.trim(),
         request_types: JSON.stringify(requestTypes),
@@ -1006,6 +1008,7 @@ export default function Pharmacy() {
       ...prev,
       diagnosis: indent.diagnosis || "",
       staffName: indent.staffName || "",
+      category: indent.category || "", // ✅ Preserve category from the indent
     }));
     setRequestTypes({ ...indent.requestTypes });
     setMedicines([...indent.medicines]);
@@ -1061,7 +1064,7 @@ export default function Pharmacy() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* FAB for mobile - hidden on desktop */}
+            {/* Create Indent Button - hidden on mobile */}
             <button
               onClick={() => {
                 resetForm();
@@ -1189,12 +1192,17 @@ export default function Pharmacy() {
                         <p className="text-xs text-gray-500">
                           IPD: {indent.admissionNo || indent.ipdNumber}
                         </p>
+                        {indent.category && (
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Category: {indent.category}
+                          </p>
+                        )}
                       </div>
                       <StatusBadge status={indent.status || "Pending"} />
                     </div>
 
                     {/* Quick insights */}
-                    <div className="flex justify-between mb-2 text-xs text-gray-400">
+                    <div className="flex justify-between mb-2 text-xs text-gray-500">
                       <span>🕒 {indent.plannedTime || "Not scheduled"}</span>
                       {indent.requestTypes?.medicineSlip && (
                         <span>💊 {indent.medicines?.length || 0} meds</span>
@@ -1320,6 +1328,9 @@ export default function Pharmacy() {
                       IPD No
                     </th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
+                      Category
+                    </th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Planned Time
                     </th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
@@ -1330,9 +1341,6 @@ export default function Pharmacy() {
                     </th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Approval
-                    </th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
-                      Indent Status
                     </th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-700 uppercase">
                       Actions
@@ -1360,6 +1368,11 @@ export default function Pharmacy() {
                       <td className="px-4 py-3">
                         <span className="font-medium text-gray-700">
                           {indent.admissionNo || indent.ipdNumber}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-1 text-xs text-gray-600 bg-gray-100 rounded-full">
+                          {indent.category || "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
@@ -1396,21 +1409,6 @@ export default function Pharmacy() {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={indent.status || "Pending"} />
-                      </td>
-                      <td className="px-4 py-3">
-                        {indent.actual2 ? (
-                          <span className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
-                            Complete
-                          </span>
-                        ) : indent.status?.toLowerCase() === "rejected" ? (
-                          <span className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full">
-                            Rejected
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs font-medium text-yellow-700 bg-yellow-100 rounded-full">
-                            Pending
-                          </span>
-                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
@@ -1553,6 +1551,18 @@ export default function Pharmacy() {
                           className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block mb-1 text-sm font-medium text-gray-700">
+                        Category
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.category}
+                        readOnly
+                        className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
+                      />
                     </div>
 
                     <div>
@@ -2038,6 +2048,8 @@ export default function Pharmacy() {
                       <span className="font-medium">
                         {formData.patientName}
                       </span>
+                      <span className="text-gray-600">Category:</span>
+                      <span className="font-medium">{formData.category}</span>
                       <span className="text-gray-600">Diagnosis:</span>
                       <span className="font-medium">{formData.diagnosis}</span>
                       <span className="text-gray-600">IPD:</span>
@@ -2170,11 +2182,7 @@ export default function Pharmacy() {
                     <button
                       onClick={handleNext}
                       disabled={loading}
-                      className={`flex-1 py-3 text-sm font-medium text-white rounded-lg active:scale-[0.98] transition-all ${
-                        formStep === 1
-                          ? "bg-green-600 hover:bg-green-700"
-                          : "bg-green-600 hover:bg-green-700"
-                      }`}
+                      className="flex-1 py-3 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 active:scale-[0.98] transition-all"
                     >
                       Next
                     </button>
@@ -2296,6 +2304,12 @@ export default function Pharmacy() {
                     </p>
                   </div>
                   <div>
+                    <p className="text-gray-500">Category</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedIndent.category || "—"}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-gray-500">UHID Number</p>
                     <p className="font-medium text-gray-900">
                       {selectedIndent.uhidNumber}
@@ -2305,12 +2319,6 @@ export default function Pharmacy() {
                     <p className="text-gray-500">Age / Gender</p>
                     <p className="font-medium text-gray-900">
                       {selectedIndent.age} / {selectedIndent.gender}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Category</p>
-                    <p className="font-medium text-gray-900">
-                      {selectedIndent.category}
                     </p>
                   </div>
                   <div>
