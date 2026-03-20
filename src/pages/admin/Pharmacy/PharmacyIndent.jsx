@@ -1085,7 +1085,7 @@ const PharmacyIndents = () => {
   );
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Fixed Section: Header and Search */}
       <div className="flex-none bg-white border-b shrink-0">
         <div className="px-4 py-3 mx-auto max-w-7xl sm:px-6">
