@@ -16,34 +16,6 @@ import {
 import supabase from "../../../SupabaseClient"; // Adjust the path as needed
 import { useNotification } from "../../../contexts/NotificationContext";
 
-const DUMMY_MEDICINE_NAMES = [
-  "Paracetamol 500mg",
-  "Amoxicillin 250mg",
-  "Ibuprofen 400mg",
-  "Cough Syrup",
-  "Vitamin D3",
-  "Omeprazole 20mg",
-  "Aspirin 75mg",
-  "Metformin 500mg",
-  "Cetirizine 10mg",
-  "Azithromycin 500mg",
-  "Ciprofloxacin 500mg",
-  "Diclofenac 50mg",
-  "Atorvastatin 20mg",
-  "Losartan 50mg",
-  "Levothyroxine 50mcg",
-  "Pantoprazole 40mg",
-  "Clopidogrel 75mg",
-  "Insulin Glargine",
-  "Salbutamol Inhaler",
-  "Prednisolone 5mg",
-  "Metronidazole 400mg",
-  "Ranitidine 150mg",
-  "Furosemide 40mg",
-  "Amlodipine 5mg",
-  "Gabapentin 300mg",
-];
-
 const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
   if (!text) return;
 
@@ -68,12 +40,12 @@ const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
 };
 
 // Custom Medicine Dropdown Component
-const MedicineDropdown = ({ medicine, onUpdate, index, loading }) => {
+const MedicineDropdown = ({ medicine, onUpdate, index, loading, medicines }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef(null);
 
-  const filteredMedicines = DUMMY_MEDICINE_NAMES.filter((med) =>
+  const filteredMedicines = (medicines || []).filter((med) =>
     med.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
@@ -183,6 +155,9 @@ const PharmacyApproval = () => {
   const [ctScanTests, setCtScanTests] = useState([]);
   const [usgTests, setUsgTests] = useState([]);
 
+  // Medicines from database
+  const [medicines, setMedicines] = useState([]);
+
   // Filter States
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -268,6 +243,26 @@ const PharmacyApproval = () => {
       showPopup("Error loading investigation tests", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch medicines from Supabase
+  const fetchMedicines = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("medicine")
+        .select("medicine_name")
+        .order("medicine_name");
+
+      if (error) {
+        console.error("Error fetching medicines:", error);
+        showPopup("Error loading medicines", "error");
+      } else {
+        setMedicines(data.map((item) => item.medicine_name));
+      }
+    } catch (error) {
+      console.error("Error in fetchMedicines:", error);
+      showPopup("Error loading medicines", "error");
     }
   };
 
@@ -374,6 +369,7 @@ const PharmacyApproval = () => {
   useEffect(() => {
     loadData();
     fetchInvestigationTests();
+    fetchMedicines();
 
     // Incrementally update state from a single realtime event
     const handleRealtimeChange = (payload) => {
@@ -468,6 +464,17 @@ const PharmacyApproval = () => {
         },
         (payload) => {
           handleRealtimeChange(payload);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "medicine",
+        },
+        () => {
+          fetchMedicines();
         },
       )
       .subscribe();
@@ -1941,6 +1948,7 @@ const PharmacyApproval = () => {
                             onUpdate={updateMedicine}
                             index={index}
                             loading={loading}
+                            medicines={medicines}
                           />
                         </div>
                         <div className="w-32">
