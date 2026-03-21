@@ -49,6 +49,7 @@ import AssignTask from "./pages/admin/nurseStation/AssignTask";
 import TaskList from "./pages/admin/nurseStation/TaskList";
 import ScoreDashboard from "./pages/admin/nurseStation/ScoreDashboard";
 import PatientCareDashboard from "./pages/admin/nurseStation/PatientCareDashboard";
+import TaskDelegation from "./pages/admin/nurseStation/TaskDelegation";
 
 // RMO Components
 import RMOAssignTask from "./pages/admin/rmo/RMOAssignTask";
@@ -204,17 +205,13 @@ function App() {
         {/* Root Route - Redirect to Login or Dashboard */}
         <Route
           path="/"
-          element={
-            <Navigate to={user ? defaultRoute : "/login"} replace />
-          }
+          element={<Navigate to={user ? defaultRoute : "/login"} replace />}
         />
 
         {/* Public Routes */}
         <Route
           path="/login"
-          element={
-            user ? <Navigate to={defaultRoute} replace /> : <Login />
-          }
+          element={user ? <Navigate to={defaultRoute} replace /> : <Login />}
         />
 
         {/* Admin Routes */}
@@ -339,6 +336,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="nurse-station-score-dashboard">
                 <ScoreDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="task-delegation"
+            element={
+              <ProtectedRoute requiredPage="task-delegation">
+                <TaskDelegation />
               </ProtectedRoute>
             }
           />
