@@ -264,6 +264,14 @@ export const ALL_PAGES = [
     description: "Request medicines for patients",
   },
   {
+    key: "pharmacy-workflow-dashboard",
+    label: "Workflow Dashboard",
+    path: "/admin/pharmacy/workflow-dashboard",
+    type: "item",
+    parent: "pharmacy",
+    description: "Track pharmacy orders across verification and dispensing",
+  },
+  {
     key: "pharmacy-approval",
     label: "Approval",
     path: "/admin/pharmacy/approval",

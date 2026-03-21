@@ -20,6 +20,7 @@ import Pathology from "./pages/admin/Lab/Pathology";
 import PharmacyIndent from "./pages/admin/Pharmacy/PharmacyIndent";
 import PharmacyApproval from "./pages/admin/Pharmacy/PharmacyApproval";
 import PharmacyStore from "./pages/admin/Pharmacy/PharmacyStore";
+import PharmacyWorkflowDashboard from "./pages/admin/Pharmacy/PharmacyWorkflowDashboard";
 import DischargePatient from "./pages/admin/Discharge/Dischargepatient";
 import InitiationRMO from "./pages/admin/Discharge/InitiationRMO";
 import CompleteFileWork from "./pages/admin/Discharge/CompleteFileWork";
@@ -457,6 +458,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="pharmacy-indent">
                 <PharmacyIndent />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="pharmacy/workflow-dashboard"
+            element={
+              <ProtectedRoute requiredPage="pharmacy-workflow-dashboard">
+                <PharmacyWorkflowDashboard />
               </ProtectedRoute>
             }
           />
