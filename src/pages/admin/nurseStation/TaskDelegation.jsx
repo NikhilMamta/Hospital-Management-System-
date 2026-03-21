@@ -100,11 +100,14 @@ const TaskDelegation = () => {
       setLoadingTasks(true);
       setDelegationSuccess(false);
 
+      const normalizedFromNurse = fromNurse.trim();
+      const normalizedShift = selectedShift.trim();
+
       const { data, error } = await supabase
         .from("nurse_assign_task")
         .select("*")
-        .ilike("assign_nurse", fromNurse)
-        .ilike("shift", selectedShift)
+        .ilike("assign_nurse", `%${normalizedFromNurse}%`)
+        .ilike("shift", normalizedShift)
         .is("actual1", null)
         .order("timestamp", { ascending: false });
 
@@ -150,13 +153,15 @@ const TaskDelegation = () => {
     try {
       setDelegating(true);
 
+      const normalizedFromNurse = fromNurse.trim();
+      const normalizedToNurse = toNurse.trim();
       const taskIds = pendingTasks.map((t) => t.id);
 
       const { error } = await supabase
         .from("nurse_assign_task")
         .update({
-          assign_nurse: toNurse,
-          delegated_from: fromNurse,
+          assign_nurse: normalizedToNurse,
+          delegated_from: normalizedFromNurse,
         })
         .in("id", taskIds);
 
@@ -343,7 +348,8 @@ const TaskDelegation = () => {
                                     fromNurse === nurse ? "bg-green-100" : ""
                                   }`}
                                   onClick={() => {
-                                    setFromNurse(nurse);
+                                    const cleaned = nurse.trim();
+                                    setFromNurse(cleaned);
                                     setFromNurseSearch("");
                                     setShowFromDropdown(false);
                                   }}
@@ -554,7 +560,8 @@ const TaskDelegation = () => {
                                 toNurse === nurse ? "bg-green-100" : ""
                               }`}
                               onClick={() => {
-                                setToNurse(nurse);
+                                const cleaned = nurse.trim();
+                                setToNurse(cleaned);
                                 setToNurseSearch("");
                                 setShowToDropdown(false);
                               }}

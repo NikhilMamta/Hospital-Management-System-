@@ -465,6 +465,28 @@ const ManageUsers = () => {
           .eq("id", editingUser.id);
 
         if (error) throw error;
+
+        // Also update the all_staff table if there's a matching record
+        try {
+          const { error: staffError } = await supabase
+            .from("all_staff")
+            .update({
+              name: formData.name.trim(),
+              email: formData.email,
+              phone_number: formData.phone_no,
+              department: formData.department,
+              designation: formData.role.toLowerCase().trim(),
+            })
+            .eq("email", editingUser.email);
+
+          // Don't throw error if no matching record in all_staff (user might not be in all_staff)
+          if (staffError && !staffError.message.includes("No rows found")) {
+            console.warn("Could not update all_staff table:", staffError);
+          }
+        } catch (staffUpdateError) {
+          console.warn("Could not update all_staff table:", staffUpdateError);
+        }
+
         showNotification("User updated successfully", "success");
       } else {
         const { data: insertedUser, error } = await supabase
@@ -882,7 +904,7 @@ const ManageUsers = () => {
                   Access Control
                 </p>
                 {hasAllPagesAccess(user.pages) ? (
-                  <div className="flex items-center gap-1.5 text-green-600 text-[10px] font-bold bg-green-50 px-2 py-1 rounded-md inline-flex">
+                  <div className="inline-flex items-center gap-1.5 text-green-600 text-[10px] font-bold bg-green-50 px-2 py-1 rounded-md">
                     <CheckCircle size={12} />
                     FULL ACCESS
                   </div>

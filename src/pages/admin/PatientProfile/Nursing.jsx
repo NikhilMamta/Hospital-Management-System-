@@ -65,7 +65,8 @@ export default function Nursing() {
 
       // 🔒 Restrict non-admin users to their own tasks
       if (!isAdmin && userName) {
-        query = query.eq("assign_nurse", userName);
+        const normalizedUserName = userName.trim();
+        query = query.ilike("assign_nurse", `%${normalizedUserName}%`);
       }
 
       // ✅ Execute query

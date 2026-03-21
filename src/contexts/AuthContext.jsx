@@ -627,6 +627,7 @@ export function AuthProvider({ children }) {
     getDefaultRoute: () => getDefaultRoute(userPages),
     getAccessibleSidebarItems,
     getAccessibleGroupRoutes,
+    setUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

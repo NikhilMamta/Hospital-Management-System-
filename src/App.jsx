@@ -61,6 +61,9 @@ import RMOScoreDashboard from "./pages/admin/rmo/RMOScoreDashboard";
 // OT Components
 import AssignOtTime from "./pages/admin/OT/AssignOtTime";
 
+// User Profile Component
+import UserProfile from "./pages/admin/UserProfile";
+
 // Patient Profile Components
 import PatientOverview from "./pages/admin/PatientProfile/PatientOverview";
 import GivenTask from "./pages/admin/PatientProfile/GivenTask";
@@ -236,6 +239,9 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* User Profile */}
+          <Route path="profile" element={<UserProfile />} />
 
           {/* Roster */}
           <Route
