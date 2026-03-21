@@ -297,6 +297,14 @@ export const ALL_PAGES = [
     description: "Initiate discharge for patients",
   },
   {
+    key: "discharge-workflow-dashboard",
+    label: "Workflow Dashboard",
+    path: "/admin/discharge/workflow-dashboard",
+    type: "item",
+    parent: "discharge",
+    description: "Track discharge progress across all workflow stages",
+  },
+  {
     key: "discharge-initiation",
     label: "Initiation",
     path: "/admin/discharge/initiation",

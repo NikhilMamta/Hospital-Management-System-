@@ -26,6 +26,7 @@ import CompleteFileWork from "./pages/admin/Discharge/CompleteFileWork";
 import ConcernDepartment from "./pages/admin/Discharge/ConcernDepartment";
 import ConcernAuthority from "./pages/admin/Discharge/ConcernAuthority";
 import DischargeBill from "./pages/admin/Discharge/DischargeBill";
+import DischargeWorkflowDashboard from "./pages/admin/Discharge/DischargeWorkflowDashboard";
 import ProfilePatient from "./pages/admin/PatientProfile/ProfilePatient";
 import ProfilePatientDetails from "./pages/admin/PatientProfile/ProfilePatientDetails";
 import Treatment from "./pages/admin/PatientProfile/Treatment";
@@ -529,6 +530,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="discharge-bill">
                 <DischargeBill />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="discharge/workflow-dashboard"
+            element={
+              <ProtectedRoute requiredPage="discharge-workflow-dashboard">
+                <DischargeWorkflowDashboard />
               </ProtectedRoute>
             }
           />
