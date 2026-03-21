@@ -43,6 +43,9 @@ const TaskDelegation = () => {
   // Delegation
   const [delegating, setDelegating] = useState(false);
   const [delegationSuccess, setDelegationSuccess] = useState(false);
+  const [patients, setPatients] = useState([]);
+  const [selectedPatient, setSelectedPatient] = useState("");
+
 
   // Load nurses from all_staff
   useEffect(() => {
@@ -114,6 +117,14 @@ const TaskDelegation = () => {
       if (error) throw error;
 
       setPendingTasks(data || []);
+
+      // Step 2: Extract unique patients
+      const uniquePatients = [
+        ...new Set((data || []).map((t) => t.patient_name)),
+      ].filter(Boolean);
+
+      setPatients(uniquePatients);
+
     } catch (error) {
       console.error("Error fetching pending tasks:", error);
       showNotification("Error loading pending tasks", "error");
@@ -137,6 +148,11 @@ const TaskDelegation = () => {
       showNotification("Please select a shift", "error");
       return;
     }
+    // Step 6: Validation
+    if (!selectedPatient) {
+      showNotification("Please select a patient", "error");
+      return;
+    }
     if (!toNurse) {
       showNotification("Please select the nurse to delegate to", "error");
       return;
@@ -145,17 +161,27 @@ const TaskDelegation = () => {
       showNotification("Cannot delegate to the same nurse", "error");
       return;
     }
-    if (pendingTasks.length === 0) {
-      showNotification("No pending tasks to delegate", "info");
+
+    const tasksToDelegate = pendingTasks.filter(
+      (t) => t.patient_name === selectedPatient,
+    );
+    if (tasksToDelegate.length === 0) {
+      showNotification("No pending tasks for this patient to delegate", "info");
       return;
     }
+
 
     try {
       setDelegating(true);
 
       const normalizedFromNurse = fromNurse.trim();
       const normalizedToNurse = toNurse.trim();
-      const taskIds = pendingTasks.map((t) => t.id);
+
+      // Step 5: Fix delegation logic (Patient-specific)
+      const taskIds = pendingTasks
+        .filter((t) => t.patient_name === selectedPatient)
+        .map((t) => t.id);
+
 
       const { error } = await supabase
         .from("nurse_assign_task")
@@ -182,8 +208,10 @@ const TaskDelegation = () => {
         setToNurse("");
         setToNurseSearch("");
         setSelectedShift("");
+        setSelectedPatient("");
         setDelegationSuccess(false);
       }, 3000);
+
     } catch (error) {
       console.error("Error delegating tasks:", error);
       showNotification("Error delegating tasks. Please try again.", "error");
@@ -228,6 +256,13 @@ const TaskDelegation = () => {
     if (step === 3) return toNurse ? "completed" : "pending";
     return "pending";
   };
+
+
+  // Step 4: Filter Tasks
+  const filteredTasks = selectedPatient
+    ? pendingTasks.filter((t) => t.patient_name === selectedPatient)
+    : [];
+
 
   return (
     <div className="min-h-screen p-4 sm:p-6 bg-gray-50">
@@ -420,6 +455,29 @@ const TaskDelegation = () => {
               </div>
             </div>
 
+            {/* Step 3: Patient Dropdown UI */}
+            {fromNurse && selectedShift && patients.length > 0 && (
+              <div className="p-4 border rounded-lg bg-gray-50 border-gray-200 animate-fade-in shadow-sm">
+                <label className="block mb-2 text-sm font-medium text-gray-700">
+                  Select Patient
+                </label>
+
+                <select
+                  value={selectedPatient}
+                  onChange={(e) => setSelectedPatient(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white transition-all shadow-sm"
+                >
+                  <option value="">Select Patient</option>
+                  {patients.map((p, i) => (
+                    <option key={i} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+
             {/* Pending Tasks Preview - Section wrapper with animation */}
             {fromNurse && selectedShift && (
               <div className="relative z-10 p-4 border border-gray-200 rounded-lg bg-gray-50 animate-fade-in">
@@ -434,8 +492,9 @@ const TaskDelegation = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-1 text-xs font-bold text-yellow-900 bg-yellow-200 rounded-full">
-                      {pendingTasks.length}
+                      {filteredTasks.length}
                     </span>
+
                     <button
                       type="button"
                       onClick={fetchPendingTasks}
@@ -463,9 +522,10 @@ const TaskDelegation = () => {
                 ) : (
                   <>
                     <p className="mt-1 mb-3 text-xs text-gray-500">
-                      Showing {pendingTasks.length} latest pending task
-                      {pendingTasks.length !== 1 ? "s" : ""}
+                      Showing {filteredTasks.length} latest pending task
+                      {filteredTasks.length !== 1 ? "s" : ""}
                     </p>
+
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="text-xs text-gray-600 uppercase bg-gray-100">
@@ -479,7 +539,8 @@ const TaskDelegation = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {pendingTasks.map((task, idx) => (
+                          {filteredTasks.map((task, idx) => (
+
                             <tr key={task.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3 text-gray-500">
                                 {idx + 1}
@@ -514,7 +575,8 @@ const TaskDelegation = () => {
             )}
 
             {/* To Nurse - Section wrapper with animation */}
-            {fromNurse && selectedShift && pendingTasks.length > 0 && (
+            {fromNurse && selectedShift && filteredTasks.length > 0 && (
+
               <div className="relative z-10 p-4 border border-gray-200 rounded-lg bg-gray-50 animate-fade-in">
                 <div className="relative" ref={toRef}>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -610,11 +672,12 @@ const TaskDelegation = () => {
                           {toNurse}
                         </span>
                         <span className="text-gray-500">
-                          ({pendingTasks.length} task
-                          {pendingTasks.length !== 1 ? "s" : ""} •{" "}
+                          ({filteredTasks.length} task
+                          {filteredTasks.length !== 1 ? "s" : ""} •{" "}
                           {selectedShift})
                         </span>
                       </div>
+
 
                       <button
                         type="button"
@@ -639,10 +702,11 @@ const TaskDelegation = () => {
                     {/* Preview before action */}
                     <p className="pt-2 mt-2 text-xs text-center text-gray-600 border-t border-green-200">
                       You are about to move{" "}
-                      <strong>{pendingTasks.length}</strong> task
-                      {pendingTasks.length !== 1 ? "s" : ""} from{" "}
+                      <strong>{filteredTasks.length}</strong> task
+                      {filteredTasks.length !== 1 ? "s" : ""} from{" "}
                       <strong>{fromNurse}</strong> to <strong>{toNurse}</strong>
                     </p>
+
                   </div>
                 </div>
               )}
