@@ -110,26 +110,23 @@ export default function PatientProfile() {
         shouldFilter = true;
 
         console.log("username", userName);
-        const startDate = new Date(start);
-        const endDate = new Date(end);
-
-        console.log("TIMESTAMP", startDate, endDate);
-        console.log(
-          "TIMESTAMP TO iso string",
-          startDate.toISOString(),
-          endDate.toISOString(),
-        );
 
         const { data, error } = await supabase
           .from("nurse_assign_task")
-          .select("Ipd_number, actual1, status")
+          .select("Ipd_number")
           .ilike("assign_nurse", `%${userName.trim()}%`)
-          .gte("planned1", start)
-          .lte("planned1", end);
+          .not("Ipd_number", "is", null); // include all assigned patients until discharge
 
         console.log("Nurse Assign Task Data:", data);
         if (!error && data) {
-          ipdNumbers = data.map((t) => t.Ipd_number);
+          ipdNumbers = Array.from(
+            new Set(
+              data
+                .map((t) => t.Ipd_number)
+                .filter((num) => num)
+                .map((num) => String(num).trim()),
+            ),
+          );
         }
       }
 
