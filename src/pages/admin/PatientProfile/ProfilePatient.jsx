@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { Eye, Trash2, Edit, Filter, Search, RefreshCw } from "lucide-react";
+import { Eye, Trash2, Edit, Filter, Search, RefreshCw, Layers, LayoutDashboard } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import supabase from "../../../SupabaseClient"; // Adjust the path to your supabase client
 import PatientCard from "../../../components/PatientCard";
@@ -19,6 +19,8 @@ export default function PatientProfile() {
   const [statusFilter, setStatusFilter] = useState("Active");
   const [doctorTab, setDoctorTab] = useState("active");
   const [dischargedAdmissions, setDischargedAdmissions] = useState(new Set());
+  const [compactView, setCompactView] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(12);
 
   const location = useLocation();
   const normalizeKey = (value) =>
@@ -282,6 +284,34 @@ export default function PatientProfile() {
     return matchesSearch && matchesWard && matchesCategory && matchesStatus;
   });
 
+  // Infinite Scroll Logic
+  const visiblePatients = filteredPatients.slice(0, visibleCount);
+
+  // Scroll Handler Effect
+  useEffect(() => {
+    const container = document.getElementById("scroll-container");
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (
+        scrollTop + clientHeight >= scrollHeight - 300 && 
+        visibleCount < filteredPatients.length
+      ) {
+        // Load more patients
+        setVisibleCount(prev => Math.min(prev + 12, filteredPatients.length));
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [visibleCount, filteredPatients.length]);
+
+  // Reset count when filters change
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [searchTerm, wardFilter, filterCategory, statusFilter, doctorTab]);
+
   const handleViewDetails = (patient) => {
     navigate(`/admin/patient-profile/${patient.id}`, { state: { patient } });
   };
@@ -373,10 +403,10 @@ export default function PatientProfile() {
                   <Search className="absolute w-4 h-4 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
                   <input
                     type="text"
-                    placeholder="Search by name, IPD No, doctor, or department..."
+                    placeholder="Search patients..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full py-2 pl-10 pr-4 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                    className="w-full py-2 pl-10 pr-4 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
                   />
                 </div>
                 <button
@@ -399,9 +429,24 @@ export default function PatientProfile() {
                   <RefreshCw
                     className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
                   />
-                  <span className="text-sm">
+                  <span className="hidden sm:inline text-sm">
                     {isRefreshing ? "Refreshing..." : "Refresh"}
                   </span>
+                </button>
+                <button
+                  onClick={() => setCompactView(!compactView)}
+                  className={`flex items-center gap-2 px-4 py-2 transition-all rounded-lg border font-bold text-sm ${
+                    compactView 
+                      ? "bg-blue-50 border-blue-200 text-blue-700" 
+                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {compactView ? (
+                    <Layers className="w-4 h-4" />
+                  ) : (
+                    <LayoutDashboard className="w-4 h-4" />
+                  )}
+                  <span className="hidden md:inline">{compactView ? "Normal" : "Compact"}</span>
                 </button>
               </div>
             </div>
@@ -517,7 +562,10 @@ export default function PatientProfile() {
         )}
 
         {/* Patients Grid - Scrollable */}
-        <div className="flex-1 px-4 pb-4 overflow-y-auto lg:px-6 lg:pb-6">
+        <div 
+          id="scroll-container"
+          className="flex-1 px-4 pb-4 overflow-y-auto lg:px-6 lg:pb-12"
+        >
           <div className="max-w-full mx-auto">
             {isRefreshing && patientsData.length > 0 && (
               <div className="mb-4 text-center">
@@ -528,16 +576,18 @@ export default function PatientProfile() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredPatients.length > 0 ? (
-                filteredPatients.map((patient) => (
-                  <PatientCard
-                    key={patient.id}
-                    patient={patient}
-                    onViewDetails={handleViewDetails}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
+            <div className={`flex flex-col gap-6 ${compactView ? 'md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'md:grid md:grid-cols-2 lg:grid-cols-3'}`}>
+              {visiblePatients.length > 0 ? (
+                visiblePatients.map((patient) => (
+                  <div key={patient.id} className="animate-fade-in">
+                    <PatientCard
+                      patient={patient}
+                      onViewDetails={handleViewDetails}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      compactView={compactView}
+                    />
+                  </div>
                 ))
               ) : (
                 <div className="py-12 text-center bg-white rounded-lg shadow-md col-span-full">
@@ -556,7 +606,7 @@ export default function PatientProfile() {
                           setFilterCategory("All");
                           setSearchTerm("");
                         }}
-                        className="mt-4 text-sm text-green-600 hover:text-green-700"
+                        className="mt-4 text-sm text-green-600 hover:text-green-700 font-bold"
                       >
                         Clear filters to see all patients
                       </button>
@@ -566,18 +616,32 @@ export default function PatientProfile() {
               )}
             </div>
 
-            {/* Show total count */}
-            {filteredPatients.length > 0 && (
-              <div className="mt-6 text-sm text-center text-gray-500">
-                Showing {filteredPatients.length} of {patientsData.length}{" "}
-                patients
-                {wardFilter !== "All Patients" && ` in ${wardFilter}`}
-                {lastUpdated && ` • Last updated: ${lastUpdated}`}
-              </div>
+            {/* Infinite Scroll Footer */}
+            {visiblePatients.length < filteredPatients.length && (
+               <div className="py-12 flex flex-col items-center justify-center gap-4">
+                  <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Loading more patients...</p>
+               </div>
+            )}
+
+            {!loading && visiblePatients.length === filteredPatients.length && filteredPatients.length > 0 && (
+               <div className="py-12 text-center text-xs font-bold text-gray-300 uppercase tracking-widest">
+                  End of list
+               </div>
             )}
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.4s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

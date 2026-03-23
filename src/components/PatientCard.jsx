@@ -7,32 +7,32 @@ const StatusBadge = ({ status }) => {
   const getColors = () => {
     const statusUpper = (status || "").toUpperCase();
     if (statusUpper.includes("PRIVATE") || statusUpper === "VIP") {
-      return "bg-purple-100 text-purple-700";
+      return "bg-purple-50 text-purple-700 border-purple-100";
     } else if (
       statusUpper.includes("INSURANCE") ||
       statusUpper.includes("CORPORATE")
     ) {
-      return "bg-blue-100 text-blue-700";
+      return "bg-blue-50 text-blue-700 border-blue-100";
     } else if (
       statusUpper.includes("AYUSHMAN") ||
       statusUpper.includes("GJAY")
     ) {
-      return "bg-green-100 text-green-700";
+      return "bg-green-50 text-green-700 border-green-100";
     }
-    return "bg-gray-100 text-gray-700";
+    return "bg-gray-50 text-gray-700 border-gray-100";
   };
 
   return (
-    <span
-      className={`px-3 py-1 rounded-full text-xs font-semibold ${getColors()}`}
-    >
-      {status}
-    </span>
+    <div className={`px-3 py-1.5 rounded-xl border font-bold text-[10px] uppercase tracking-wider max-w-[150px] sm:max-w-[180px] lg:max-w-[200px] ${getColors()}`} title={status}>
+      <p className="break-words line-clamp-2 leading-tight">
+        {status}
+      </p>
+    </div>
   );
 };
 
 // Patient Card Component
-const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
+const PatientCard = ({ patient, onViewDetails, onEdit, onDelete, compactView }) => {
   const [assignedNurses, setAssignedNurses] = useState([]);
   const [currentShift, setCurrentShift] = useState("");
   const [otDays, setOtDays] = useState(null);
@@ -71,27 +71,17 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
         .toISOString()
         .split("T")[0];
       let shift = "";
-      let start = "";
-      let end = "";
       if (hour >= 8 && hour < 14) {
         shift = "A";
-        start = `${today} 08:00:00`;
-        end = `${today} 14:00:00`;
       } else if (hour >= 14 && hour < 20) {
         shift = "B";
-        start = `${today} 14:00:00`;
-        end = `${today} 20:00:00`;
       } else if (hour >= 20) {
         shift = "C";
-        start = `${today} 20:00:00`;
-        end = `${today} 23:59:59`;
       } else {
         shift = "C";
-        start = `${yesterday} 20:00:00`;
-        end = `${today} 08:00:00`;
       }
       setCurrentShift(shift);
-      // Fetch nurse assignments for this patient and shift
+      
       try {
         const { data, error } = await supabase
           .from("nurse_assign_task")
@@ -103,7 +93,6 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
           const uniqueNurses = [
             ...new Set(data.map((n) => n.assign_nurse?.trim()).filter(Boolean)),
           ];
-
           setAssignedNurses(uniqueNurses);
         } else {
           setAssignedNurses([]);
@@ -115,10 +104,7 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
     fetchNurses();
   }, [patient.ipd_number, patient.admission_no]);
 
-  // Fetch OT Days:
-  //  - If OT is cancelled (status === "Cancel") → hide field.
-  //  - If OT is completed (actual2 is set) → show days since completion.
-  //  - Otherwise → hide field.
+  // Fetch OT Days
   useEffect(() => {
     const fetchOTDays = async () => {
       const ipd = patient.ipd_number || patient.admission_no;
@@ -134,19 +120,14 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
 
         if (!error && data && data.length > 0) {
           const record = data[0];
-
-          // If OT was cancelled — hide the field entirely
           if (record.status === "Cancel") {
             setOtDays(null);
-            setOtDaysLabel("Days Since OT Done:");
             return;
           }
-
           const today = new Date();
           today.setHours(0, 0, 0, 0);
 
           if (record.actual2) {
-            // OT is completed — count days since completion
             const completedDate = new Date(record.actual2);
             completedDate.setHours(0, 0, 0, 0);
             const diffMs = today - completedDate;
@@ -154,13 +135,10 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
             setOtDays(diffDays < 0 ? 0 : diffDays);
             setOtDaysLabel("Days Since OT Done:");
           } else {
-            // OT not yet completed — hide the field
             setOtDays(null);
-            setOtDaysLabel("Days Since OT Done:");
           }
         } else {
-          setOtDays(null); // null = no OT record → field hidden
-          setOtDaysLabel("Days Since OT Done:");
+          setOtDays(null);
         }
       } catch (err) {
         setOtDays(null);
@@ -172,127 +150,84 @@ const PatientCard = ({ patient, onViewDetails, onEdit, onDelete }) => {
   const patientName = patient.patient_name || patient.name || "N/A";
   const consultantDr = patient.consultant_dr || patient.doctor || "N/A";
   const age = patient.age || "N/A";
-  const bedLocation =
-    patient.bed_location || patient.location_status || patient.ward || "N/A";
+  const bedLocation = patient.bed_location || patient.location_status || patient.ward || "N/A";
   const bedNo = patient.bed_no || patient.bedNumber || "N/A";
   const ipdNo = patient.ipd_number || patient.admission_no || "N/A";
-  const patCategory =
-    patient.pat_category || patient.patientCategory || "General";
-  const timeInWard =
-    patient.time_in_ward ||
-    calculateTimeInWard(patient.admission_date) ||
-    "N/A";
+  const patCategory = patient.pat_category || patient.patientCategory || "General";
+  const timeInWard = patient.time_in_ward || calculateTimeInWard(patient.admission_date) || "N/A";
   const mobileNumber = patient.phone_no || patient.mobileNumber || "N/A";
-  const wardType = patient.ward_type || "N/A";
   const roomNo = patient.room || patient.room_no || "N/A";
   const department = patient.department || "N/A";
 
+  const initial = patientName.charAt(0).toUpperCase();
+
   return (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-lg border border-gray-200 p-5 transition-all duration-300 hover:scale-[1.02]">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        {/* Left: Patient Info */}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-bold text-gray-900 truncate">
-            {patientName}
-          </h3>
-
-          <p className="text-sm text-gray-600 truncate">{consultantDr}</p>
-
-          <p className="text-xs text-gray-500 mt-0.5 truncate">{department}</p>
+    <div className={`bg-white rounded-2xl shadow-sm hover:shadow-xl border border-gray-100 transition-all duration-300 hover:scale-[1.01] ${compactView ? 'p-3' : 'p-4 sm:p-5'}`}>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-start gap-3 min-w-0">
+          {/* Avatar Initial */}
+          <div className={`shrink-0 flex items-center justify-center font-bold text-gray-600 bg-gray-100 rounded-full ${compactView ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm'}`}>
+            {initial}
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <h3 className={`font-bold text-gray-900 break-words line-clamp-2 leading-tight ${compactView ? 'text-sm' : 'text-base sm:text-lg'}`}>
+              {patientName}
+            </h3>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+               <p className="text-xs font-semibold text-green-600 truncate">{consultantDr}</p>
+               <span className="text-[10px] text-gray-300 hidden sm:inline">|</span>
+               <p className="text-[11px] text-gray-500 font-medium truncate">{department}</p>
+            </div>
+          </div>
         </div>
 
-        {/* Right: Shift + Nurse + Age */}
         <div className="flex flex-col items-end gap-2 shrink-0">
-          {/* Shift Badge */}
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide
-        ${
-          currentShift === "Night"
-            ? "bg-indigo-100 text-indigo-700"
-            : currentShift === "Evening"
-              ? "bg-orange-100 text-orange-700"
-              : "bg-green-100 text-green-700"
-        }`}
-          >
-            Shift {currentShift || "N/A"}
-          </span>
-
-          {/* Assigned Nurses */}
-          <div className="flex flex-wrap justify-end gap-1 max-w-[180px]">
-            {assignedNurses.length > 0 ? (
-              assignedNurses.map((nurse, i) => (
-                <span
-                  key={i}
-                  className="px-2 py-0.5 bg-green-50 text-green-700 text-[11px] font-semibold rounded-full border border-green-200 truncate"
-                >
-                  {nurse}
-                </span>
-              ))
-            ) : (
-              <span className="text-xs italic text-gray-400">
-                No Nurse Assigned
-              </span>
-            )}
-          </div>
-
-          {/* Age Badge */}
-          <div className="flex items-center justify-center w-12 h-12 text-sm font-bold text-white bg-green-600 rounded-full shadow">
+          <div className={`flex items-center justify-center font-black text-white bg-green-600 rounded-full shadow-sm ring-2 ring-green-50 ${compactView ? 'w-8 h-8 text-[10px]' : 'w-10 h-10 text-xs sm:text-sm'}`}>
             {age}
           </div>
-        </div>
-      </div>
-
-      <div className="pt-3 mb-4 space-y-2 border-t">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Ward/Bed:</span>
-          <span className="font-semibold text-gray-900">
-            {bedLocation} / {bedNo}
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-bold border border-green-200">
+            Active
           </span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">IPD No:</span>
-          <span className="font-semibold text-gray-900">{ipdNo}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Mobile:</span>
-          <span className="font-semibold text-gray-900">{mobileNumber}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Ward Type:</span>
-          <span className="font-semibold text-blue-600">{wardType}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Room:</span>
-          <span className="font-semibold text-gray-900">{roomNo}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Time in Ward:</span>
-          <span className="font-semibold text-green-600">{timeInWard}</span>
-        </div>
-        {otDays !== null && (
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">{otDaysLabel}</span>
-            <span className="font-semibold text-purple-600">
-              {otDays === 0
-                ? "Today"
-                : `${otDays} day${otDays !== 1 ? "s" : ""}`}
-            </span>
-          </div>
-        )}
       </div>
 
-      <div className="flex items-center justify-between pt-3 mb-4 border-t">
+      {!compactView && (
+        <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100/50">
+           <div className="space-y-0.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Location</p>
+              <p className="text-xs font-bold text-gray-700 truncate">{bedLocation} ({bedNo})</p>
+           </div>
+           <div className="space-y-0.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">IPD Number</p>
+              <p className="text-xs font-bold text-gray-700">{ipdNo}</p>
+           </div>
+           <div className="space-y-0.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Time In Ward</p>
+              <p className="text-xs font-bold text-green-600">{timeInWard}</p>
+           </div>
+           <div className="space-y-0.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Room / Mobile</p>
+              <p className="text-xs font-bold text-gray-700 truncate">R:{roomNo} / {mobileNumber}</p>
+           </div>
+        </div>
+      )}
+
+      {compactView && (
+        <div className="flex gap-4 mb-3 text-[11px] font-semibold text-gray-500 px-1">
+           <span className="truncate">Bed: {bedNo}</span>
+           <span>IPD: {ipdNo}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-3 gap-2 border-t border-gray-100">
         <StatusBadge status={patCategory} />
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex gap-2">
         <button
           onClick={() => onViewDetails(patient)}
-          className="flex items-center justify-center flex-1 gap-1 px-3 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700"
+          className={`flex items-center justify-center gap-2 font-bold transition-all bg-green-50 text-green-700 rounded-lg border border-green-100 hover:bg-green-600 hover:text-white active:scale-95 ${compactView ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm flex-1'}`}
         >
-          <Eye className="w-4 h-4" />
-          View Details
+          <Eye className={compactView ? "w-3 h-3" : "w-4 h-4"} />
+          View Profile
         </button>
       </div>
     </div>

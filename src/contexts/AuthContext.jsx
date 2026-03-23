@@ -135,6 +135,14 @@ export const ALL_PAGES = [
     parent: "nurse-station",
     description: "Performance metrics for nursing staff",
   },
+  {
+    key: "shift-handover",
+    label: "Shift Handover",
+    path: "/admin/shift-handover",
+    icon: "Users",
+    type: "single",
+    description: "Manage patient delegation and shift handovers (Admin Only)",
+  },
 
   // Task Delegation standalone page (not nested under Nurse Station)
   {
