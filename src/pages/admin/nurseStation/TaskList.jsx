@@ -69,6 +69,10 @@ const TaskList = () => {
   const [userRole, setUserRole] = useState("");
   const [userName, setUserName] = useState("");
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+
   const tableRef = useRef(null);
   const refreshIntervalRef = useRef(null);
   const nurseInputRef = useRef(null);
@@ -891,6 +895,17 @@ const TaskList = () => {
     return false;
   });
 
+  // Reset current page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterDate, activeTab]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
+
   // Toggle card expansion on mobile
   const toggleCardExpansion = (taskId) => {
     if (expandedCard === taskId) {
@@ -916,7 +931,7 @@ const TaskList = () => {
           className="p-4 cursor-pointer"
           onClick={() => toggleCardExpansion(task.id)}
         >
-          <div className="flex justify-between items-start">
+          <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <span
@@ -935,7 +950,7 @@ const TaskList = () => {
                 </span>
               </div>
 
-              <h3 className="font-bold text-gray-800 text-base mb-1">
+              <h3 className="mb-1 text-base font-bold text-gray-800">
                 {task.patientName}
               </h3>
 
@@ -967,7 +982,7 @@ const TaskList = () => {
 
         {/* Card Body - Expanded Content */}
         {isExpanded && (
-          <div className="px-4 pb-4 border-t border-gray-100 pt-4 animate-fade-in">
+          <div className="px-4 pt-4 pb-4 border-t border-gray-100 animate-fade-in">
             {/* Action Buttons for Pending Tasks */}
             {activeTab === "Pending" && (
               <div className="flex gap-2 mb-4">
@@ -976,7 +991,7 @@ const TaskList = () => {
                     e.stopPropagation();
                     handleStatusUpdate(task.id, task.taskId, "Completed");
                   }}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
+                  className="flex-1 px-3 py-2 text-sm font-medium text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700"
                 >
                   Mark Done
                 </button>
@@ -985,7 +1000,7 @@ const TaskList = () => {
                     e.stopPropagation();
                     handleEditTask(task);
                   }}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors flex items-center justify-center gap-1"
+                  className="flex items-center justify-center flex-1 gap-1 px-3 py-2 text-sm font-medium text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700"
                 >
                   <Edit className="w-4 h-4" />
                   Edit
@@ -996,16 +1011,16 @@ const TaskList = () => {
             {/* Task Details */}
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <label className="block mb-1 text-xs font-medium text-gray-500">
                     Task ID
                   </label>
                   <span className="text-sm font-medium text-blue-600">
                     {task.taskId}
                   </span>
                 </div>
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <label className="block mb-1 text-xs font-medium text-gray-500">
                     Shift
                   </label>
                   <span
@@ -1024,8 +1039,8 @@ const TaskList = () => {
                 </div>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+              <div className="p-3 rounded-lg bg-gray-50">
+                <label className="block mb-1 text-xs font-medium text-gray-500">
                   Planned Task
                 </label>
                 <div className="flex items-center gap-1 font-medium text-gray-700">
@@ -1037,8 +1052,8 @@ const TaskList = () => {
               </div>
 
               {activeTab === "History" && (
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <label className="block mb-1 text-xs font-medium text-gray-500">
                     Actual Task
                   </label>
                   <div className="flex items-center gap-1 font-medium text-green-700">
@@ -1050,8 +1065,8 @@ const TaskList = () => {
                 </div>
               )}
 
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+              <div className="p-3 rounded-lg bg-gray-50">
+                <label className="block mb-1 text-xs font-medium text-gray-500">
                   Start Date
                 </label>
                 <div className="flex items-center gap-1">
@@ -1062,8 +1077,8 @@ const TaskList = () => {
                 </div>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+              <div className="p-3 rounded-lg bg-gray-50">
+                <label className="block mb-1 text-xs font-medium text-gray-500">
                   Location
                 </label>
                 <span className="text-sm text-gray-700">
@@ -1071,20 +1086,20 @@ const TaskList = () => {
                 </span>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <label className="flex text-xs font-medium text-gray-500 mb-1 items-center justify-between">
+              <div className="p-3 rounded-lg bg-gray-50">
+                <label className="flex items-center justify-between mb-1 text-xs font-medium text-gray-500">
                   <span>Tasks</span>
                   <span className="text-xs text-gray-400">
                     {task.taskNames.length} task(s)
                   </span>
                 </label>
-                <div className="space-y-2 mt-2">
+                <div className="mt-2 space-y-2">
                   {task.taskNames.map((taskName, index) => (
                     <div key={index} className="flex items-start gap-2">
                       <span className="text-xs text-gray-400 mt-0.5">
                         {index + 1}.
                       </span>
-                      <span className="text-sm text-gray-700 flex-1">
+                      <span className="flex-1 text-sm text-gray-700">
                         {taskName}
                       </span>
                     </div>
@@ -1092,8 +1107,8 @@ const TaskList = () => {
                 </div>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+              <div className="p-3 rounded-lg bg-gray-50">
+                <label className="block mb-1 text-xs font-medium text-gray-500">
                   Reminder
                 </label>
                 <div className="flex items-center gap-1">
@@ -1151,9 +1166,9 @@ const TaskList = () => {
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-        <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-fade-in">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-purple-50 to-purple-100">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+        <div className="w-full max-w-md overflow-hidden bg-white shadow-2xl rounded-xl animate-fade-in">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-purple-100">
+            <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800">
               <Plus className="w-6 h-6 text-purple-600" />
               Add Custom Task
             </h2>
@@ -1162,7 +1177,7 @@ const TaskList = () => {
                 setShowCustomTaskModal(false);
                 setNewCustomTask("");
               }}
-              className="p-2 hover:bg-gray-100 rounded-full transition"
+              className="p-2 transition rounded-full hover:bg-gray-100"
               disabled={addingCustomTask}
             >
               <X className="w-5 h-5 text-gray-600" />
@@ -1172,9 +1187,9 @@ const TaskList = () => {
           <div className="p-6">
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block mb-2 text-sm font-medium text-gray-700">
                   Enter New Task Name
-                  <span className="text-red-500 ml-1">*</span>
+                  <span className="ml-1 text-red-500">*</span>
                 </label>
                 <input
                   ref={customTaskInputRef}
@@ -1182,24 +1197,24 @@ const TaskList = () => {
                   value={localTask}
                   onChange={handleLocalChange}
                   onKeyPress={handleKeyPress}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="e.g., New Patient Assessment"
                   disabled={addingCustomTask}
                 />
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="mt-2 text-xs text-gray-500">
                   This task will be saved to the database for future use.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+          <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={() => {
                 setShowCustomTaskModal(false);
                 setNewCustomTask("");
               }}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium"
+              className="px-4 py-2 text-sm font-medium text-gray-700 transition-colors bg-gray-200 rounded-lg hover:bg-gray-300"
               disabled={addingCustomTask}
             >
               Cancel
@@ -1207,11 +1222,11 @@ const TaskList = () => {
             <button
               onClick={handleSave}
               disabled={!localTask.trim() || addingCustomTask}
-              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-4 py-2 font-medium text-white transition-colors duration-200 bg-purple-600 rounded-lg shadow-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {addingCustomTask ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <div className="w-4 h-4 border-b-2 border-white rounded-full animate-spin"></div>
                   Adding...
                 </>
               ) : (
@@ -1310,11 +1325,11 @@ const TaskList = () => {
     if (!editingTask) return null;
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-visible animate-fade-in">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="w-full max-w-md overflow-visible bg-white shadow-2xl rounded-xl animate-fade-in">
           {/* Header */}
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-blue-50 to-blue-100">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
+            <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800">
               <Edit className="w-6 h-6 text-blue-600" />
               Edit Task Details
             </h2>
@@ -1325,7 +1340,7 @@ const TaskList = () => {
                 setNurseSearchQueryEdit("");
                 setShowNurseDropdownEdit(false);
               }}
-              className="p-2 hover:bg-gray-100 rounded-full transition"
+              className="p-2 transition rounded-full hover:bg-gray-100"
             >
               <X className="w-5 h-5 text-gray-600" />
             </button>
@@ -1334,14 +1349,14 @@ const TaskList = () => {
           {/* Body */}
           <div className="p-6 space-y-4">
             {/* Task Info */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
+            <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+              <h3 className="mb-2 text-sm font-medium text-gray-700">
                 Task Details
               </h3>
               <div className="space-y-2 text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span className="font-medium">Task ID:</span>
-                  <span className="text-blue-600 font-semibold">
+                  <span className="font-semibold text-blue-600">
                     {editingTask.taskNo}
                   </span>
                 </div>
@@ -1386,9 +1401,9 @@ const TaskList = () => {
             <div className="space-y-4">
               {/* Staff Type Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block mb-2 text-sm font-medium text-gray-700">
                   Staff Type
-                  <span className="text-red-500 ml-1">*</span>
+                  <span className="ml-1 text-red-500">*</span>
                 </label>
                 <div className="flex gap-2">
                   {["Regular", "OT Staff"].map((staffOption) => (
@@ -1411,16 +1426,16 @@ const TaskList = () => {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="mt-1 text-xs text-gray-500">
                   OT Staff rows will be highlighted in orange color in the table
                 </p>
               </div>
 
               {/* Shift Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block mb-2 text-sm font-medium text-gray-700">
                   Shift
-                  <span className="text-red-500 ml-1">*</span>
+                  <span className="ml-1 text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {["Shift A", "Shift B", "Shift C", "General"].map(
@@ -1456,7 +1471,7 @@ const TaskList = () => {
 
               {/* Nurse Search Field */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block mb-2 text-sm font-medium text-gray-700">
                   Assign Nurse
                   <span className="text-red-500">*</span>
                 </label>
@@ -1472,10 +1487,10 @@ const TaskList = () => {
                       setShowNurseDropdownEdit(true);
                     }}
                     onFocus={() => setShowNurseDropdownEdit(true)}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Search or select nurse..."
                   />
-                  <User className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <User className="absolute w-5 h-5 text-gray-400 -translate-y-1/2 right-3 top-1/2" />
 
                   {/* Nurse Dropdown */}
                   {showNurseDropdownEdit && (
@@ -1484,9 +1499,9 @@ const TaskList = () => {
                         className="fixed inset-0 z-0"
                         onClick={() => setShowNurseDropdownEdit(false)}
                       />
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                      <div className="absolute z-10 w-full mt-1 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg max-h-60">
                         {/* Search box inside dropdown */}
-                        <div className="sticky top-0 bg-white p-2 border-b border-gray-200">
+                        <div className="sticky top-0 p-2 bg-white border-b border-gray-200">
                           <input
                             type="text"
                             value={nurseSearchQueryEdit}
@@ -1494,7 +1509,7 @@ const TaskList = () => {
                               setNurseSearchQueryEdit(e.target.value)
                             }
                             placeholder="Search nurses..."
-                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                             autoFocus
                             onClick={(e) => e.stopPropagation()}
                           />
@@ -1507,19 +1522,19 @@ const TaskList = () => {
                               <button
                                 key={nurse.value}
                                 type="button"
-                                className="w-full text-left px-4 py-3 hover:bg-blue-50 text-sm flex items-center border-b border-gray-100 last:border-b-0"
+                                className="flex items-center w-full px-4 py-3 text-sm text-left border-b border-gray-100 hover:bg-blue-50 last:border-b-0"
                                 onClick={() => {
                                   handleEditChange("assignNurse", nurse.value);
                                   setNurseSearchQueryEdit("");
                                   setShowNurseDropdownEdit(false);
                                 }}
                               >
-                                <User className="w-4 h-4 text-blue-500 mr-3" />
+                                <User className="w-4 h-4 mr-3 text-blue-500" />
                                 <span>{nurse.label}</span>
                               </button>
                             ))
                           ) : (
-                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                            <div className="px-4 py-3 text-sm text-center text-gray-500">
                               No nurses found
                             </div>
                           )}
@@ -1533,14 +1548,14 @@ const TaskList = () => {
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+          <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={() => {
                 setEditingTask(null);
                 setNurseSearchQueryEdit("");
                 setShowNurseDropdownEdit(false);
               }}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
             >
               Cancel
             </button>
@@ -1553,7 +1568,7 @@ const TaskList = () => {
                 !editingTask.shift ||
                 !editingTask.staff
               }
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 font-medium text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               Update Task
@@ -1582,22 +1597,22 @@ const TaskList = () => {
       : availableNurses;
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
         <div className="bg-white w-full max-w-6xl rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-fade-in">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-100">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-100">
+            <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800">
               <Plus className="w-6 h-6 text-green-600" />
               Add New Task
             </h2>
             <button
               onClick={resetAddTaskForm}
-              className="p-2 hover:bg-gray-100 rounded-full transition"
+              className="p-2 transition rounded-full hover:bg-gray-100"
             >
               <X className="w-5 h-5 text-gray-600" />
             </button>
           </div>
 
-          <div className="p-6 overflow-y-auto flex-1 space-y-6">
+          <div className="flex-1 p-6 space-y-6 overflow-y-auto">
             {/* Bed Selection - Only show if no bed selected */}
             {!selectedPatientInfo ? (
               <div className="space-y-4">
@@ -1608,10 +1623,10 @@ const TaskList = () => {
                   </h3>
                 </div>
 
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 overflow-y-auto p-2">
+                <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                  <div className="grid grid-cols-1 gap-3 p-2 overflow-y-auto md:grid-cols-2 lg:grid-cols-3 max-h-60">
                     {occupiedBeds.length === 0 ? (
-                      <div className="col-span-full text-center py-4 text-gray-500">
+                      <div className="py-4 text-center text-gray-500 col-span-full">
                         <Bed className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                         <p>No occupied beds found</p>
                         <p className="text-sm">
@@ -1661,7 +1676,7 @@ const TaskList = () => {
             ) : (
               <div className="space-y-6">
                 {/* Patient Information */}
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <div className="p-4 border border-green-200 rounded-lg bg-green-50">
                   <div className="flex items-center gap-2 mb-3">
                     <Users className="w-5 h-5 text-green-600" />
                     <h3 className="text-lg font-semibold text-gray-800">
@@ -1677,49 +1692,49 @@ const TaskList = () => {
                       Change Bed
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                      <label className="block mb-1 text-xs font-medium text-gray-500">
                         Patient Name
                       </label>
                       <input
                         type="text"
                         value={selectedPatientInfo.patientName}
                         readOnly
-                        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                      <label className="block mb-1 text-xs font-medium text-gray-500">
                         IPD Number
                       </label>
                       <input
                         type="text"
                         value={selectedPatientInfo.ipdNumber}
                         readOnly
-                        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                      <label className="block mb-1 text-xs font-medium text-gray-500">
                         Location
                       </label>
                       <input
                         type="text"
                         value={selectedPatientInfo.location}
                         readOnly
-                        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                      <label className="block mb-1 text-xs font-medium text-gray-500">
                         Bed Number
                       </label>
                       <input
                         type="text"
                         value={selectedPatientInfo.bedNo}
                         readOnly
-                        className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
                       />
                     </div>
                   </div>
@@ -1734,40 +1749,40 @@ const TaskList = () => {
                     </h3>
                   </div>
 
-                  <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-4 space-y-4 bg-white border border-gray-200 rounded-lg">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                       {/* Staff Type Selection */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Staff Type
-                          <span className="text-red-500 ml-1">*</span>
+                          <span className="ml-1 text-red-500">*</span>
                         </label>
                         <select
                           value={newTaskData.staff || "Regular"}
                           onChange={(e) =>
                             handleNewTaskChange("staff", e.target.value)
                           }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="Regular">Regular Staff</option>
                           <option value="OT Staff">OT Staff</option>
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="mt-1 text-xs text-gray-500">
                           OT Staff rows will be highlighted in orange
                         </p>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Shift
-                          <span className="text-red-500 ml-1">*</span>
+                          <span className="ml-1 text-red-500">*</span>
                         </label>
                         <select
                           value={newTaskData.shift}
                           onChange={(e) =>
                             handleNewTaskChange("shift", e.target.value)
                           }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="Shift A">Shift A (Morning)</option>
                           <option value="Shift B">Shift B (Evening)</option>
@@ -1777,9 +1792,9 @@ const TaskList = () => {
                       </div>
 
                       <div className="relative">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Assign Nurse
-                          <span className="text-red-500 ml-1">*</span>
+                          <span className="ml-1 text-red-500">*</span>
                         </label>
                         <div className="relative">
                           <input
@@ -1794,10 +1809,10 @@ const TaskList = () => {
                               setShowNewNurseDropdown(true);
                             }}
                             onFocus={() => setShowNewNurseDropdown(true)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Search or select nurse..."
                           />
-                          <User className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <User className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 right-3 top-1/2" />
 
                           {/* Nurse Dropdown for Add Task */}
                           {showNewNurseDropdown && (
@@ -1806,8 +1821,8 @@ const TaskList = () => {
                                 className="fixed inset-0 z-0"
                                 onClick={() => setShowNewNurseDropdown(false)}
                               />
-                              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
-                                <div className="sticky top-0 bg-white p-2 border-b border-gray-200">
+                              <div className="absolute z-10 w-full mt-1 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg max-h-60">
+                                <div className="sticky top-0 p-2 bg-white border-b border-gray-200">
                                   <input
                                     type="text"
                                     value={newNurseSearchQuery}
@@ -1815,7 +1830,7 @@ const TaskList = () => {
                                       setNewNurseSearchQuery(e.target.value)
                                     }
                                     placeholder="Search nurses..."
-                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     autoFocus
                                     onClick={(e) => e.stopPropagation()}
                                   />
@@ -1826,7 +1841,7 @@ const TaskList = () => {
                                       <button
                                         key={nurse.value}
                                         type="button"
-                                        className="w-full text-left px-4 py-3 hover:bg-blue-50 text-sm flex items-center border-b border-gray-100 last:border-b-0"
+                                        className="flex items-center w-full px-4 py-3 text-sm text-left border-b border-gray-100 hover:bg-blue-50 last:border-b-0"
                                         onClick={() => {
                                           handleNewTaskChange(
                                             "assignNurse",
@@ -1836,12 +1851,12 @@ const TaskList = () => {
                                           setShowNewNurseDropdown(false);
                                         }}
                                       >
-                                        <User className="w-4 h-4 text-blue-500 mr-3" />
+                                        <User className="w-4 h-4 mr-3 text-blue-500" />
                                         <span>{nurse.label}</span>
                                       </button>
                                     ))
                                   ) : (
-                                    <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                    <div className="px-4 py-3 text-sm text-center text-gray-500">
                                       No nurses found
                                     </div>
                                   )}
@@ -1853,7 +1868,7 @@ const TaskList = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Reminder
                         </label>
                         <select
@@ -1861,7 +1876,7 @@ const TaskList = () => {
                           onChange={(e) =>
                             handleNewTaskChange("reminder", e.target.value)
                           }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="No">No</option>
                           <option value="Yes">Yes</option>
@@ -1869,9 +1884,9 @@ const TaskList = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block mb-1 text-sm font-medium text-gray-700">
                           Start Date
-                          <span className="text-red-500 ml-1">*</span>
+                          <span className="ml-1 text-red-500">*</span>
                         </label>
                         <input
                           type="date"
@@ -1879,18 +1894,18 @@ const TaskList = () => {
                           onChange={(e) =>
                             handleNewTaskChange("startDate", e.target.value)
                           }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                     </div>
 
                     {/* Tasks List */}
                     <div>
-                      <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center justify-between mb-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">
                             Tasks
-                            <span className="text-red-500 ml-1">*</span>
+                            <span className="ml-1 text-red-500">*</span>
                           </label>
                           <p className="text-xs text-gray-500">
                             Add tasks for the selected patient
@@ -1907,10 +1922,10 @@ const TaskList = () => {
                         </button>
                       </div>
 
-                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 max-h-60 overflow-y-auto space-y-3">
+                      <div className="p-4 space-y-3 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 max-h-60">
                         {newTaskData.tasks.map((task, index) => (
-                          <div key={index} className="flex gap-3 items-center">
-                            <span className="text-gray-500 text-sm font-medium w-6">
+                          <div key={index} className="flex items-center gap-3">
+                            <span className="w-6 text-sm font-medium text-gray-500">
                               {index + 1}.
                             </span>
                             <div className="flex-1">
@@ -1920,7 +1935,7 @@ const TaskList = () => {
                                   onChange={(e) =>
                                     handleTaskItemChange(index, e.target.value)
                                   }
-                                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none pr-10"
+                                  className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg appearance-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 >
                                   <option value="">Select a task...</option>
                                   <optgroup label="Predefined Tasks">
@@ -1938,13 +1953,13 @@ const TaskList = () => {
                                   <optgroup label="Add New">
                                     <option
                                       value="__custom__"
-                                      className="text-purple-600 font-medium"
+                                      className="font-medium text-purple-600"
                                     >
                                       Add Custom Task
                                     </option>
                                   </optgroup>
                                 </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                                <div className="absolute inset-y-0 right-0 flex items-center px-2 text-gray-400 pointer-events-none">
                                   <svg
                                     className="w-4 h-4"
                                     fill="none"
@@ -1981,10 +1996,10 @@ const TaskList = () => {
             )}
           </div>
 
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+          <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={resetAddTaskForm}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium"
+              className="px-4 py-2 text-sm font-medium text-gray-700 transition-colors bg-gray-200 rounded-lg hover:bg-gray-300"
             >
               Cancel
             </button>
@@ -2002,7 +2017,7 @@ const TaskList = () => {
                   !newTaskData.assignNurse.trim() ||
                   newTaskData.tasks.filter((t) => t.trim()).length === 0
                 }
-                className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-4 py-2 font-medium text-white transition-colors duration-200 bg-green-600 rounded-lg shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
                 Create Task
@@ -2014,24 +2029,106 @@ const TaskList = () => {
     );
   };
 
+  // Pagination Controls Component
+  const PaginationControls = ({ totalPages, currentPage, onPageChange }) => {
+    if (totalPages <= 1) return null;
+
+    const getPageNumbers = () => {
+      const pages = [];
+      const maxPagesToShow = 5;
+
+      if (totalPages <= maxPagesToShow) {
+        for (let i = 1; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+
+        const startPage = Math.max(2, currentPage - 1);
+        const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+        if (startPage > 2) pages.push("...");
+
+        for (let i = startPage; i <= endPage; i++) {
+          pages.push(i);
+        }
+
+        if (endPage < totalPages - 1) pages.push("...");
+
+        pages.push(totalPages);
+      }
+
+      return pages;
+    };
+
+    return (
+      <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200 md:px-6 md:py-4 rounded-b-xl">
+        <div className="text-sm text-gray-600">
+          Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
+          <span className="font-medium">
+            {Math.min(endIndex, filteredTasks.length)}
+          </span>{" "}
+          of <span className="font-medium">{filteredTasks.length}</span> tasks
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+
+          <div className="flex gap-1">
+            {getPageNumbers().map((page, index) => (
+              <button
+                key={index}
+                onClick={() => typeof page === "number" && onPageChange(page)}
+                disabled={page === "..." || page === currentPage}
+                className={`px-2 md:px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  page === currentPage
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : page === "..."
+                      ? "text-gray-400 cursor-default"
+                      : "text-gray-600 bg-gray-100 hover:bg-gray-200"
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="p-4 md:p-6 bg-gray-50 min-h-screen flex flex-col max-w-full overflow-x-hidden">
+    <div className="flex flex-col max-w-full min-h-screen p-4 overflow-x-hidden md:p-6 bg-gray-50">
       {/* Notification Popup logic handled by global NotificationProvider */}
 
-      <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-w-0">
+      <div className="flex flex-col flex-1 w-full min-w-0 mx-auto max-w-7xl">
         {/* Header with Add Task Button - Fixed at top */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 md:gap-4 mb-3 md:mb-6 w-full overflow-hidden">
+        <div className="flex flex-col items-start justify-between w-full gap-2 mb-3 overflow-hidden md:flex-row md:items-center md:gap-4 md:mb-6">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <ClipboardList className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
+            <h1 className="flex items-center gap-2 text-xl font-bold text-gray-900 md:text-2xl">
+              <ClipboardList className="w-6 h-6 text-blue-600 md:w-8 md:h-8" />
               Nurse Tasks
             </h1>
-            <p className="text-gray-500 text-sm mt-1 hidden md:block">
+            <p className="hidden mt-1 text-sm text-gray-500 md:block">
               Manage and track patient care tasks
             </p>
           </div>
 
-          <div className="flex items-center justify-between md:justify-end gap-2 md:gap-4 w-full md:w-auto">
+          <div className="flex items-center justify-between w-full gap-2 md:justify-end md:gap-4 md:w-auto">
             <div className="flex bg-white rounded-lg p-0.5 md:p-1 shadow-sm border border-gray-200">
               <button
                 onClick={() => setActiveTab("Pending")}
@@ -2067,9 +2164,9 @@ const TaskList = () => {
         </div>
 
         {/* Filters - Fixed below header */}
-        <div className="bg-white p-2 md:p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-2 md:gap-4 mb-3 md:mb-6">
+        <div className="flex flex-col gap-2 p-2 mb-3 bg-white border border-gray-200 shadow-sm md:p-4 rounded-xl md:flex-row md:gap-4 md:mb-6">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 md:w-5 md:h-5" />
+            <Search className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 left-3 top-1/2 md:w-5 md:h-5" />
             <input
               type="text"
               placeholder="Search tasks..."
@@ -2079,7 +2176,7 @@ const TaskList = () => {
             />
           </div>
           <div className="relative w-full md:w-48">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 md:w-5 md:h-5" />
+            <Calendar className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 left-3 top-1/2 md:w-5 md:h-5" />
             <input
               type="date"
               value={filterDate}
@@ -2090,88 +2187,88 @@ const TaskList = () => {
         </div>
 
         {/* Main Content Area - Scrollable Section */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Loading State */}
           {loading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="flex items-center justify-center flex-1">
+              <div className="w-12 h-12 border-b-2 border-blue-600 rounded-full animate-spin"></div>
               <p className="ml-4 text-gray-600">Loading tasks...</p>
             </div>
           ) : (
             <>
               {/* Desktop Table View - Scrollable within container */}
-              <div className="hidden md:block flex-1 min-h-0 overflow-hidden w-full">
+              <div className="flex-1 hidden w-full min-h-0 overflow-hidden md:block">
                 <div
                   ref={contentContainerRef}
-                  className="bg-white rounded-xl shadow-lg border border-gray-200 h-full flex flex-col"
+                  className="flex flex-col h-full bg-white border border-gray-200 shadow-lg rounded-xl"
                 >
                   <div
                     ref={tableRef}
-                    className="overflow-auto flex-1 scroll-container"
+                    className="flex-1 overflow-auto scroll-container"
                   >
                     <table className="w-full whitespace-nowrap">
-                      <thead className="bg-gray-50 border-b border-gray-200 text-left sticky top-0 z-10 shadow-sm">
+                      <thead className="sticky top-0 z-10 text-left border-b border-gray-200 shadow-sm bg-gray-50">
                         <tr>
                           {activeTab === "Pending" && (
                             <>
-                              <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                                 Action
                               </th>
-                              <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                                 Edit
                               </th>
                             </>
                           )}
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Task ID
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Status
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Staff Type
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Start Date
                           </th>
                           {activeTab === "Pending" ? (
-                            <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                               Planned Task
                             </th>
                           ) : (
                             <>
-                              <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                                 Planned Task
                               </th>
-                              <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                                 Actual Task
                               </th>
                             </>
                           )}
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             IPD No.
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Patient Name
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Location
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Assigned Nurse
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Shift
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Tasks
                           </th>
-                          <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-4 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                             Reminder
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 text-sm">
+                      <tbody className="text-sm divide-y divide-gray-200">
                         {filteredTasks.length === 0 ? (
                           <tr>
                             <td
@@ -2179,9 +2276,9 @@ const TaskList = () => {
                               className="px-6 py-8 text-center text-gray-500"
                             >
                               <div className="flex flex-col items-center justify-center">
-                                <ClipboardList className="w-12 h-12 text-gray-300 mb-2" />
+                                <ClipboardList className="w-12 h-12 mb-2 text-gray-300" />
                                 <p>No {activeTab.toLowerCase()} tasks found</p>
-                                <p className="text-xs text-gray-400 mt-1">
+                                <p className="mt-1 text-xs text-gray-400">
                                   {activeTab === "Pending"
                                     ? "Tasks with planned date but not yet completed"
                                     : "Tasks that have been completed"}
@@ -2190,7 +2287,7 @@ const TaskList = () => {
                             </td>
                           </tr>
                         ) : (
-                          filteredTasks.map((task) => (
+                          paginatedTasks.map((task) => (
                             <tr
                               key={task.id}
                               className={`hover:bg-gray-50 transition-colors ${task.staff === "OT Staff" ? "ot-staff-row" : ""}`}
@@ -2206,7 +2303,7 @@ const TaskList = () => {
                                           "Completed",
                                         )
                                       }
-                                      className="text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs transition"
+                                      className="px-3 py-1 text-xs text-white transition bg-green-600 rounded hover:bg-green-700"
                                     >
                                       Mark Done
                                     </button>
@@ -2214,7 +2311,7 @@ const TaskList = () => {
                                   <td className="px-6 py-4">
                                     <button
                                       onClick={() => handleEditTask(task)}
-                                      className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"
+                                      className="p-1 text-blue-600 rounded hover:text-blue-800 hover:bg-blue-50"
                                     >
                                       <Edit className="w-4 h-4" />
                                     </button>
@@ -2249,20 +2346,20 @@ const TaskList = () => {
                                 </div>
                               </td>
                               {activeTab === "Pending" ? (
-                                <td className="px-6 py-4 text-gray-700 font-medium">
+                                <td className="px-6 py-4 font-medium text-gray-700">
                                   {task.planned1Date} {task.planned1Time}
                                 </td>
                               ) : (
                                 <>
-                                  <td className="px-6 py-4 text-gray-700 font-medium">
+                                  <td className="px-6 py-4 font-medium text-gray-700">
                                     {task.planned1Date} {task.planned1Time}
                                   </td>
-                                  <td className="px-6 py-4 text-green-700 font-medium">
+                                  <td className="px-6 py-4 font-medium text-green-700">
                                     {task.actual1Date} {task.actual1Time}
                                   </td>
                                 </>
                               )}
-                              <td className="px-6 py-4 text-gray-900 font-medium">
+                              <td className="px-6 py-4 font-medium text-gray-900">
                                 {task.ipdNumber}
                               </td>
                               <td className="px-6 py-4 text-gray-700">
@@ -2298,7 +2395,7 @@ const TaskList = () => {
                               <td className="px-6 py-4 text-gray-700">
                                 <div className="max-w-xs">
                                   {task.taskNames.map((taskName, index) => (
-                                    <div key={index} className="text-sm mb-1">
+                                    <div key={index} className="mb-1 text-sm">
                                       {taskName}
                                     </div>
                                   ))}
@@ -2323,15 +2420,15 @@ const TaskList = () => {
               </div>
 
               {/* Mobile Card View - Scrollable within container */}
-              <div className="md:hidden flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-hidden md:hidden">
                 <div
                   ref={contentContainerRef}
-                  className="h-full overflow-y-auto scroll-container pb-4"
+                  className="h-full pb-4 overflow-y-auto scroll-container"
                 >
                   {filteredTasks.length === 0 ? (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-                      <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500 mb-1">
+                    <div className="p-8 text-center bg-white border border-gray-200 shadow-sm rounded-xl">
+                      <ClipboardList className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="mb-1 text-gray-500">
                         No {activeTab.toLowerCase()} tasks found
                       </p>
                       <p className="text-xs text-gray-400">
@@ -2341,7 +2438,7 @@ const TaskList = () => {
                       </p>
                     </div>
                   ) : (
-                    filteredTasks.map((task) => (
+                    paginatedTasks.map((task) => (
                       <MobileTaskCard key={task.id} task={task} />
                     ))
                   )}
@@ -2350,6 +2447,15 @@ const TaskList = () => {
             </>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {filteredTasks.length > 0 && (
+          <PaginationControls
+            totalPages={totalPages}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </div>
 
       {/* Edit Modal - Now allows editing shift, assign_nurse, and staff */}
@@ -2364,17 +2470,17 @@ const TaskList = () => {
       {/* Vitals Check Modal */}
       {showVitalsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm animate-fade-in overflow-hidden">
-            <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-100">
+          <div className="w-full max-w-sm overflow-hidden bg-white shadow-2xl rounded-xl animate-fade-in">
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-green-50 to-emerald-100">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-6 h-6 text-green-600" />
-                <h3 className="font-bold text-lg text-gray-800">
+                <h3 className="text-lg font-bold text-gray-800">
                   Vitals Check
                 </h3>
               </div>
               <button
                 onClick={() => setShowVitalsModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition"
+                className="p-2 transition rounded-full hover:bg-gray-100"
                 disabled={loading}
               >
                 <X className="w-5 h-5 text-gray-600" />
@@ -2382,13 +2488,13 @@ const TaskList = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600 font-medium italic">
+              <p className="text-sm italic font-medium text-gray-600">
                 Record performed vitals:
               </p>
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
                     Blood Pressure
                   </label>
                   <input
@@ -2407,7 +2513,7 @@ const TaskList = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
                     Pulse Rate (bpm)
                   </label>
                   <input
@@ -2426,7 +2532,7 @@ const TaskList = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
                     Temperature (°F)
                   </label>
                   <input
@@ -2445,7 +2551,7 @@ const TaskList = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
                     SPO2 (%)
                   </label>
                   <input
@@ -2464,7 +2570,7 @@ const TaskList = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
                     Respiratory Rate (breaths/min)
                   </label>
                   <input
@@ -2481,10 +2587,10 @@ const TaskList = () => {
               </div>
             </div>
 
-            <div className="p-4 border-t flex gap-3 bg-gray-50">
+            <div className="flex gap-3 p-4 border-t bg-gray-50">
               <button
                 onClick={() => setShowVitalsModal(false)}
-                className="flex-1 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors"
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 transition-colors bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={loading}
               >
                 Cancel
@@ -2492,11 +2598,11 @@ const TaskList = () => {
               <button
                 onClick={handleSubmitVitals}
                 disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm disabled:opacity-50"
+                className="flex items-center justify-center flex-1 gap-2 px-4 py-2 text-sm font-bold text-white transition-all bg-green-600 rounded-lg shadow-sm hover:bg-green-700 disabled:opacity-50"
               >
                 {loading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    <div className="w-4 h-4 border-2 border-white rounded-full animate-spin border-t-transparent"></div>
                     <span>Saving...</span>
                   </>
                 ) : (
