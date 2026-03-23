@@ -14,6 +14,7 @@ const StoreMedicinePage = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [patientNames, setPatientNames] = useState([]);
   const { showNotification } = useNotification();
 
@@ -237,6 +238,26 @@ const StoreMedicinePage = () => {
   // Apply filters to indents
   const applyFilters = (indents) => {
     return indents.filter((indent) => {
+      // Search filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const indentNo = indent.indent_no || `IND-${indent.id}`;
+        const matchesSearch =
+          indentNo.toLowerCase().includes(searchLower) ||
+          (indent.admission_number &&
+            indent.admission_number.toLowerCase().includes(searchLower)) ||
+          (indent.patient_name &&
+            indent.patient_name.toLowerCase().includes(searchLower)) ||
+          (indent.uhid_number &&
+            indent.uhid_number.toLowerCase().includes(searchLower)) ||
+          (indent.staff_name &&
+            indent.staff_name.toLowerCase().includes(searchLower)) ||
+          (indent.diagnosis &&
+            indent.diagnosis.toLowerCase().includes(searchLower));
+
+        if (!matchesSearch) return false;
+      }
+
       // Filter by patient name
       if (selectedPatient && indent.patient_name !== selectedPatient) {
         return false;
@@ -303,6 +324,32 @@ const StoreMedicinePage = () => {
 
             {/* Filters - Desktop */}
             <div className="flex gap-3 items-center">
+              {/* Search Filter */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by indent no, patient, UHID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[200px]"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg
+                    className="h-4 w-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
               {/* Patient Name Filter */}
               <select
                 value={selectedPatient}
@@ -326,11 +373,12 @@ const StoreMedicinePage = () => {
               />
 
               {/* Clear Filters Button */}
-              {(selectedPatient || selectedDate) && (
+              {(selectedPatient || selectedDate || searchTerm) && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
                     setSelectedDate("");
+                    setSearchTerm("");
                   }}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
                 >
@@ -368,6 +416,32 @@ const StoreMedicinePage = () => {
 
             {/* Filters - Mobile */}
             <div className="flex flex-wrap gap-2">
+              {/* Search Filter */}
+              <div className="relative flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="Search by indent no, patient, UHID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8 pr-4 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm w-full"
+                />
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                  <svg
+                    className="h-3.5 w-3.5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
               {/* Patient Name Filter */}
               <select
                 value={selectedPatient}
@@ -391,11 +465,12 @@ const StoreMedicinePage = () => {
               />
 
               {/* Clear Filters Button */}
-              {(selectedPatient || selectedDate) && (
+              {(selectedPatient || selectedDate || searchTerm) && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
                     setSelectedDate("");
+                    setSearchTerm("");
                   }}
                   className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-xs sm:text-sm font-medium whitespace-nowrap"
                 >
