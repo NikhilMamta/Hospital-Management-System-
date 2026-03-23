@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { Eye, Trash2, Edit, Filter, Search, RefreshCw, Layers, LayoutDashboard } from "lucide-react";
+import {
+  Eye,
+  Trash2,
+  Edit,
+  Filter,
+  Search,
+  RefreshCw,
+  Layers,
+  LayoutDashboard,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import supabase from "../../../SupabaseClient"; // Adjust the path to your supabase client
 import PatientCard from "../../../components/PatientCard";
@@ -295,11 +304,11 @@ export default function PatientProfile() {
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
       if (
-        scrollTop + clientHeight >= scrollHeight - 300 && 
+        scrollTop + clientHeight >= scrollHeight - 300 &&
         visibleCount < filteredPatients.length
       ) {
         // Load more patients
-        setVisibleCount(prev => Math.min(prev + 12, filteredPatients.length));
+        setVisibleCount((prev) => Math.min(prev + 12, filteredPatients.length));
       }
     };
 
@@ -436,8 +445,8 @@ export default function PatientProfile() {
                 <button
                   onClick={() => setCompactView(!compactView)}
                   className={`flex items-center gap-2 px-4 py-2 transition-all rounded-lg border font-bold text-sm ${
-                    compactView 
-                      ? "bg-blue-50 border-blue-200 text-blue-700" 
+                    compactView
+                      ? "bg-blue-50 border-blue-200 text-blue-700"
                       : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                   }`}
                 >
@@ -446,7 +455,9 @@ export default function PatientProfile() {
                   ) : (
                     <LayoutDashboard className="w-4 h-4" />
                   )}
-                  <span className="hidden md:inline">{compactView ? "Normal" : "Compact"}</span>
+                  <span className="hidden md:inline">
+                    {compactView ? "Normal" : "Compact"}
+                  </span>
                 </button>
               </div>
             </div>
@@ -562,7 +573,7 @@ export default function PatientProfile() {
         )}
 
         {/* Patients Grid - Scrollable */}
-        <div 
+        <div
           id="scroll-container"
           className="flex-1 px-4 pb-4 overflow-y-auto lg:px-6 lg:pb-12"
         >
@@ -576,7 +587,9 @@ export default function PatientProfile() {
               </div>
             )}
 
-            <div className={`flex flex-col gap-6 ${compactView ? 'md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'md:grid md:grid-cols-2 lg:grid-cols-3'}`}>
+            <div
+              className={`flex flex-col gap-6 ${compactView ? "md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "md:grid md:grid-cols-2 lg:grid-cols-3"}`}
+            >
               {visiblePatients.length > 0 ? (
                 visiblePatients.map((patient) => (
                   <div key={patient.id} className="animate-fade-in">
@@ -618,25 +631,35 @@ export default function PatientProfile() {
 
             {/* Infinite Scroll Footer */}
             {visiblePatients.length < filteredPatients.length && (
-               <div className="py-12 flex flex-col items-center justify-center gap-4">
-                  <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Loading more patients...</p>
-               </div>
+              <div className="py-12 flex flex-col items-center justify-center gap-4">
+                <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  Loading more patients...
+                </p>
+              </div>
             )}
 
-            {!loading && visiblePatients.length === filteredPatients.length && filteredPatients.length > 0 && (
-               <div className="py-12 text-center text-xs font-bold text-gray-300 uppercase tracking-widest">
+            {!loading &&
+              visiblePatients.length === filteredPatients.length &&
+              filteredPatients.length > 0 && (
+                <div className="py-12 text-center text-xs font-bold text-gray-300 uppercase tracking-widest">
                   End of list
-               </div>
-            )}
+                </div>
+              )}
           </div>
         </div>
       </div>
 
       <style jsx>{`
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         .animate-fade-in {
           animation: fadeIn 0.4s ease-out;
