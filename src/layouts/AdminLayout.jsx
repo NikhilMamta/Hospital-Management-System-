@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import {
+  Activity,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -33,6 +34,7 @@ import Footer from "../components/Footer";
 
 // Icon mapping
 const iconComponents = {
+  Activity,
   LayoutDashboard,
   User,
   FileText,

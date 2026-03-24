@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, X, Clock, CheckCircle, Upload, Image as ImageIcon } from 'lucide-react';
+import { FileText, X, Clock, CheckCircle, Upload, Image as ImageIcon, Search } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
 
 const InitiationByRMO = () => {
   const [activeTab, setActiveTab] = useState('pending');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [visibleCount, setVisibleCount] = useState(10);
   const [pendingPatients, setPendingPatients] = useState([]);
   const [historyPatients, setHistoryPatients] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -377,6 +379,41 @@ const InitiationByRMO = () => {
     setViewImageModal(true);
   };
 
+  const filterFn = (p) => {
+    const q = searchTerm.toLowerCase();
+    return (
+      (p.patientName || "").toLowerCase().includes(q) ||
+      (p.admissionNo || "").toLowerCase().includes(q)
+    );
+  };
+
+  const filteredPending = pendingPatients.filter(filterFn);
+  const filteredHistory = historyPatients.filter(filterFn);
+
+  const visiblePending = filteredPending.slice(0, visibleCount);
+  const visibleHistory = filteredHistory.slice(0, visibleCount);
+
+  useEffect(() => {
+    const container = document.getElementById("scroll-container");
+    if (!container) return;
+
+    const handleScroll = () => {
+      if (
+        container.scrollTop + container.clientHeight >=
+        container.scrollHeight - 200
+      ) {
+        setVisibleCount((prev) => prev + 10);
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [filteredPending.length, filteredHistory.length]);
+
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [activeTab, searchTerm]);
+
   return (
     <div className="p-2 space-y-3 md:p-6 md:space-y-4 bg-white min-h-screen">
       {/* Header */}
@@ -389,13 +426,25 @@ const InitiationByRMO = () => {
             Manage RMO initiation records for discharged patients
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {isLoading && (
             <div className="text-xs text-gray-600 flex items-center gap-1.5 md:text-sm md:gap-2">
               <div className="w-3.5 h-3.5 border-2 border-green-600 border-t-transparent rounded-full animate-spin md:w-4 md:h-4"></div>
               Loading...
             </div>
           )}
+          
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 left-3 top-1/2" />
+            <input
+              type="text"
+              placeholder="Search name / admission..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+
           <button
             onClick={loadData}
             className="px-2.5 py-1.5 text-xs text-green-600 bg-green-50 rounded-lg hover:bg-green-100 md:px-3 md:text-sm"
@@ -406,7 +455,7 @@ const InitiationByRMO = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 flex gap-2">
         <button
           onClick={() => setActiveTab('pending')}
           className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'pending'
@@ -447,7 +496,7 @@ const InitiationByRMO = () => {
       {activeTab === 'pending' && (
         <div>
           {/* Desktop Table */}
-          <div className="hidden overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm md:block">
+          <div className="hidden overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-green-600 text-white">
                 <tr>
@@ -461,8 +510,8 @@ const InitiationByRMO = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {pendingPatients.length > 0 ? (
-                  pendingPatients.map((patient) => (
+                {visiblePending.length > 0 ? (
+                  visiblePending.map((patient) => (
                     <tr key={patient.id} className="hover:bg-green-50">
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
                         <button
@@ -497,8 +546,8 @@ const InitiationByRMO = () => {
                   <tr>
                     <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
                       <Clock className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                      <p className="text-lg font-medium text-gray-900">No pending initiations</p>
-                      <p className="text-sm">All planned discharges have been initiated</p>
+                      <p className="text-lg font-medium text-gray-900">🎉 All discharges initiated</p>
+                      <p className="text-sm">No pending patients match your criteria</p>
                     </td>
                   </tr>
                 )}
@@ -507,24 +556,35 @@ const InitiationByRMO = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div className="space-y-2 md:hidden">
-            {pendingPatients.length > 0 ? (
-              pendingPatients.map((patient) => (
-                <div key={patient.id} className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div id="scroll-container" className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+            <div className="text-center text-[10px] text-gray-300 mb-2 md:hidden">
+              ↓ Pull to refresh
+            </div>
+            {visiblePending.length > 0 ? (
+              visiblePending.map((patient) => (
+                <div key={patient.id} className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <div className="text-xs font-medium text-green-600 mb-0.5">
-                        {patient.admissionNo}
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <div className="text-xs font-medium text-green-600">
+                          {patient.admissionNo}
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                          Pending
+                        </span>
                       </div>
-                      <h3 className="text-sm font-semibold text-gray-900">
+                      <h3 className="text-sm font-semibold text-gray-900 leading-tight">
                         {patient.patientName}
                       </h3>
+                      <p className="text-[10px] text-red-500 font-medium mt-0.5">
+                        {calculateDelay(patient.planned1)}
+                      </p>
                     </div>
                     <button
                       onClick={() => handleInitiation(patient)}
-                      className="flex flex-shrink-0 gap-0.5 items-center px-2 py-1 text-[10px] text-white bg-green-600 rounded-lg shadow-sm"
+                      className="flex flex-shrink-0 gap-1 items-center px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg shadow-sm hover:bg-green-700 transition-colors"
                     >
-                      <FileText className="w-3 h-3" />
+                      <FileText className="w-3.5 h-3.5" />
                       Initiation
                     </button>
                   </div>
@@ -550,11 +610,16 @@ const InitiationByRMO = () => {
                 </div>
               ))
             ) : (
-              <div className="p-6 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
+              <div className="col-span-full p-6 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
                 <Clock className="mx-auto mb-2 w-10 h-10 text-gray-300" />
-                <p className="text-sm font-medium text-gray-900">No pending initiations</p>
-                <p className="text-xs text-gray-600 mt-0.5">All planned discharges have been initiated</p>
+                <p className="text-sm font-medium text-gray-900">🎉 All discharges initiated</p>
+                <p className="text-xs text-gray-600 mt-0.5">No pending patients found</p>
               </div>
+            )}
+            {visiblePending.length < filteredPending.length && (
+              <p className="col-span-full text-center text-xs text-gray-400 py-4">
+                Loading more...
+              </p>
             )}
           </div>
         </div>
@@ -564,7 +629,7 @@ const InitiationByRMO = () => {
       {activeTab === 'history' && (
         <div>
           {/* Desktop Table */}
-          <div className="hidden overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm md:block">
+          <div className="hidden overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-green-600 text-white">
                 <tr>
@@ -581,8 +646,8 @@ const InitiationByRMO = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {historyPatients.length > 0 ? (
-                  historyPatients.map((patient) => (
+                {visibleHistory.length > 0 ? (
+                  visibleHistory.map((patient) => (
                     <tr key={patient.id} className="hover:bg-green-50">
                       <td className="px-4 py-3 text-sm font-medium text-green-600 whitespace-nowrap">
                         {patient.admissionNo}
@@ -643,20 +708,23 @@ const InitiationByRMO = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div className="space-y-2 md:hidden">
-            {historyPatients.length > 0 ? (
-              historyPatients.map((patient) => (
-                <div key={patient.id} className="p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div id="scroll-container-history" className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+            <div className="text-center text-[10px] text-gray-300 mb-2 md:hidden">
+              ↓ Pull to refresh
+            </div>
+            {visibleHistory.length > 0 ? (
+              visibleHistory.map((patient) => (
+                <div key={patient.id} className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <div className="text-xs font-medium text-green-600 mb-0.5">
                         {patient.admissionNo}
                       </div>
-                      <h3 className="text-sm font-semibold text-gray-900">
+                      <h3 className="text-sm font-semibold text-gray-900 leading-tight">
                         {patient.patientName}
                       </h3>
                     </div>
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">
                       {patient.rmo_status || 'N/A'}
                     </span>
                   </div>
@@ -686,29 +754,34 @@ const InitiationByRMO = () => {
                       <span className="text-gray-600">RMO Name:</span>
                       <span className="font-medium text-gray-900">{patient.rmo_name || 'N/A'}</span>
                     </div>
-                    <div className="pt-1.5 mt-1.5 border-t border-gray-200">
-                      <span className="text-gray-600">Summary Report:</span>
+                    <div className="pt-1.5 mt-1.5 border-t border-gray-200 flex justify-between items-center">
+                      <span className="text-gray-600 font-medium">Summary Report:</span>
                       {patient.summary_report_image ? (
                         <button
                           onClick={() => openImageViewer(patient.summary_report_image)}
-                          className="flex items-center gap-0.5 mt-1 px-2 py-1 text-[10px] text-green-600 bg-green-50 rounded hover:bg-green-100"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
                         >
-                          <FileText className="w-3 h-3" />
+                          <FileText className="w-3.5 h-3.5" />
                           View Report
                         </button>
                       ) : (
-                        <p className="mt-0.5 text-gray-500">No image</p>
+                        <span className="text-gray-500">No image</span>
                       )}
                     </div>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="p-6 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
+              <div className="col-span-full p-6 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
                 <CheckCircle className="mx-auto mb-2 w-10 h-10 text-gray-300" />
                 <p className="text-sm font-medium text-gray-900">No history records</p>
-                <p className="text-xs text-gray-600 mt-0.5">Initiated patients will appear here</p>
+                <p className="text-xs text-gray-600 mt-0.5">No initiated patients found</p>
               </div>
+            )}
+            {visibleHistory.length < filteredHistory.length && (
+              <p className="col-span-full text-center text-xs text-gray-400 py-4">
+                Loading more...
+              </p>
             )}
           </div>
         </div>

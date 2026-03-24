@@ -199,6 +199,15 @@ export const ALL_PAGES = [
     description: "Laboratory and diagnostic services",
   },
   {
+    key: "lab-workflow",
+    label: "Lab Workflow",
+    path: "/admin/lab/workflow",
+    icon: "Activity",
+    type: "item",
+    parent: "lab",
+    description: "Track lab samples and results lifecycle",
+  },
+  {
     key: "lab-advice",
     label: "Advice",
     path: "/admin/lab/advice",
@@ -578,7 +587,19 @@ export function AuthProvider({ children }) {
     if (userPages.includes("all")) return true;
 
     // Check if user has this specific page
-    return userPages.includes(pageKey);
+    if (userPages.includes(pageKey)) return true;
+
+    // Special case: anyone with lab advice or reception access gets workflow
+    if (
+      pageKey === "lab-workflow" &&
+      (userPages.includes("lab-advice") ||
+        userPages.includes("lab-receive-sample") ||
+        userPages.includes("lab-pathology"))
+    ) {
+      return true;
+    }
+
+    return false;
   };
 
   // Memoize accessible sidebar items

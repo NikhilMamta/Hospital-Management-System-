@@ -14,6 +14,7 @@ import ReceiveSample from "./pages/admin/Lab/ReceiveSample";
 import LabXray from "./pages/admin/Lab/Labxray";
 import LabCT from "./pages/admin/Lab/LabCT";
 import LabUSG from "./pages/admin/Lab/Labusg";
+import LabWorkflowDashboard from "./pages/admin/Lab/LabWorkflowDashboard";
 import AdminLayout from "./layouts/AdminLayout";
 import NotFound from "./pages/NotFound";
 import Pathology from "./pages/admin/Lab/Pathology";
@@ -427,6 +428,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="lab-receive-sample">
                 <ReceiveSample />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="lab/workflow"
+            element={
+              <ProtectedRoute requiredPage="lab-workflow">
+                <LabWorkflowDashboard />
               </ProtectedRoute>
             }
           />
