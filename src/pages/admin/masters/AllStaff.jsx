@@ -1,40 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Save, User, Tag, Building, ChevronDown, ChevronUp } from 'lucide-react';
-import supabase from '../../../SupabaseClient';
-import { useNotification } from '../../../contexts/NotificationContext';
-import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import React, { useState, useEffect } from "react";
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  X,
+  Save,
+  User,
+  Tag,
+  Building,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import supabase from "../../../SupabaseClient";
+import { useNotification } from "../../../contexts/NotificationContext";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
 
 const AllStaff = () => {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const { showNotification } = useNotification();
 
   // Form state
   const [formData, setFormData] = useState({
-    name: '',
-    phone_number: '',
-    email: '',
-    designation: '',
-    department: ''
+    name: "",
+    phone_number: "",
+    email: "",
+    designation: "",
+    department: "",
   });
 
   // Designation and Department management
   const [designations, setDesignations] = useState([
-    'Doctor', 'Nurse', 'Receptionist', 'Lab Technician',
-    'Pharmacist', 'Administrator', 'Accountant', 'Cleaner', 'Security', 'Other'
+    "Doctor",
+    "Nurse",
+    "Receptionist",
+    "Lab Technician",
+    "Pharmacist",
+    "Administrator",
+    "Accountant",
+    "Cleaner",
+    "Security",
+    "Other",
   ]);
   const [departments, setDepartments] = useState([
-    'Emergency', 'ICU', 'Cardiology', 'Neurology', 'Orthopedics',
-    'Pediatrics', 'Gynecology', 'Radiology', 'Pathology',
-    'Pharmacy', 'Administration', 'Housekeeping', 'Security'
+    "Emergency",
+    "ICU",
+    "Cardiology",
+    "Neurology",
+    "Orthopedics",
+    "Pediatrics",
+    "Gynecology",
+    "Radiology",
+    "Pathology",
+    "Pharmacy",
+    "Administration",
+    "Housekeeping",
+    "Security",
   ]);
 
   // State for new designation/department inputs
-  const [newDesignation, setNewDesignation] = useState('');
-  const [newDepartment, setNewDepartment] = useState('');
+  const [newDesignation, setNewDesignation] = useState("");
+  const [newDepartment, setNewDepartment] = useState("");
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
   const [showCustomDepartment, setShowCustomDepartment] = useState(false);
 
@@ -43,26 +73,34 @@ const AllStaff = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('all_staff')
-        .select('*')
-        .order('timestamp', { ascending: false });
+        .from("all_staff")
+        .select("*")
+        .order("timestamp", { ascending: false });
 
       if (error) throw error;
       setStaff(data || []);
 
       // Extract unique designations and departments from existing staff
-      const uniqueDesignations = [...new Set(data?.map(s => s.designation).filter(Boolean))];
-      const uniqueDepartments = [...new Set(data?.map(s => s.department).filter(Boolean))];
+      const uniqueDesignations = [
+        ...new Set(data?.map((s) => s.designation).filter(Boolean)),
+      ];
+      const uniqueDepartments = [
+        ...new Set(data?.map((s) => s.department).filter(Boolean)),
+      ];
 
       // Merge with default options
-      const allDesignations = [...new Set([...designations, ...uniqueDesignations])];
-      const allDepartments = [...new Set([...departments, ...uniqueDepartments])];
+      const allDesignations = [
+        ...new Set([...designations, ...uniqueDesignations]),
+      ];
+      const allDepartments = [
+        ...new Set([...departments, ...uniqueDepartments]),
+      ];
 
       setDesignations(allDesignations);
       setDepartments(allDepartments);
     } catch (error) {
-      console.error('Error fetching staff:', error);
-      showNotification('Error loading staff data', 'error');
+      console.error("Error fetching staff:", error);
+      showNotification("Error loading staff data", "error");
     } finally {
       setLoading(false);
     }
@@ -72,70 +110,72 @@ const AllStaff = () => {
     fetchStaff();
   }, []);
 
-  useRealtimeTable('all_staff', fetchStaff);
+  useRealtimeTable("all_staff", fetchStaff);
 
   // Normalize designation
   const normalizeDesignation = (designation) =>
-    designation?.toLowerCase().trim() || '';
+    designation?.toLowerCase().trim() || "";
 
   // Convert designation to display label
   const getDisplayDesignation = (designation) => {
     const normalized = normalizeDesignation(designation);
 
-    if (normalized === 'nurse' || normalized === 'staff nurse') return 'Nurse';
-    if (normalized === 'doctor') return 'Doctor';
-    if (normalized === 'ot staff' || normalized === 'ot') return 'OT Staff';
-    if (normalized === 'rmo') return 'RMO';
-    if (normalized === 'ot superwiser') return 'OT Superwiser';
+    if (normalized === "nurse" || normalized === "staff nurse") return "Nurse";
+    if (normalized === "doctor") return "Doctor";
+    if (normalized === "ot staff" || normalized === "ot") return "OT Staff";
+    if (normalized === "rmo") return "RMO";
+    if (normalized === "ot superwiser") return "OT Superwiser";
     // fallback (Title Case)
     return designation
-      ? designation.replace(/\b\w/g, c => c.toUpperCase())
-      : 'N/A';
+      ? designation.replace(/\b\w/g, (c) => c.toUpperCase())
+      : "N/A";
   };
 
   // Get badge color class
   const getDesignationBadgeClass = (designation) => {
     const normalized = normalizeDesignation(designation);
 
-    if (normalized === 'doctor') return 'bg-blue-100 text-blue-800';
-    if (normalized === 'nurse' || normalized === 'staff nurse')
-      return 'bg-purple-100 text-purple-800';
+    if (normalized === "doctor") return "bg-blue-100 text-blue-800";
+    if (normalized === "nurse" || normalized === "staff nurse")
+      return "bg-purple-100 text-purple-800";
 
-    return 'bg-gray-100 text-gray-800';
+    return "bg-gray-100 text-gray-800";
   };
 
   // Filter staff based on search
-  const filteredStaff = staff.filter(staffMember =>
-    Object.values(staffMember).some(value =>
-      value?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  const filteredStaff = staff.filter((staffMember) =>
+    Object.values(staffMember).some((value) =>
+      value?.toString().toLowerCase().includes(searchTerm.toLowerCase()),
+    ),
   );
 
-  const filteredStaffWithDisplayId = filteredStaff.map((staffMember, index) => ({
-    ...staffMember,
-    displayId: filteredStaff.length - index
-  }));
+  const filteredStaffWithDisplayId = filteredStaff.map(
+    (staffMember, index) => ({
+      ...staffMember,
+      displayId: filteredStaff.length - index,
+    }),
+  );
 
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   // Reset form
   const resetForm = () => {
     setFormData({
-      name: '',
-      phone_number: '',
-      email: '',
-      designation: '',
-      department: ''
+      name: "",
+      phone_number: "",
+      email: "",
+      designation: "",
+      department: "",
     });
-    setNewDesignation('');
-    setNewDepartment('');
+    setNewDesignation("");
+    setNewDepartment("");
     setShowCustomDesignation(false);
     setShowCustomDepartment(false);
     setEditingStaff(null);
@@ -146,11 +186,11 @@ const AllStaff = () => {
     if (staffMember) {
       setEditingStaff(staffMember);
       setFormData({
-        name: staffMember.name || '',
-        phone_number: staffMember.phone_number || '',
-        email: staffMember.email || '',
-        designation: staffMember.designation || '',
-        department: staffMember.department || ''
+        name: staffMember.name || "",
+        phone_number: staffMember.phone_number || "",
+        email: staffMember.email || "",
+        designation: staffMember.designation || "",
+        department: staffMember.department || "",
       });
     } else {
       resetForm();
@@ -166,11 +206,14 @@ const AllStaff = () => {
 
   // Add new designation
   const addNewDesignation = () => {
-    if (newDesignation.trim() && !designations.includes(newDesignation.trim())) {
+    if (
+      newDesignation.trim() &&
+      !designations.includes(newDesignation.trim())
+    ) {
       const updatedDesignations = [...designations, newDesignation.trim()];
       setDesignations(updatedDesignations);
-      setFormData(prev => ({ ...prev, designation: newDesignation.trim() }));
-      setNewDesignation('');
+      setFormData((prev) => ({ ...prev, designation: newDesignation.trim() }));
+      setNewDesignation("");
       setShowCustomDesignation(false);
     }
   };
@@ -180,30 +223,74 @@ const AllStaff = () => {
     if (newDepartment.trim() && !departments.includes(newDepartment.trim())) {
       const updatedDepartments = [...departments, newDepartment.trim()];
       setDepartments(updatedDepartments);
-      setFormData(prev => ({ ...prev, department: newDepartment.trim() }));
-      setNewDepartment('');
+      setFormData((prev) => ({ ...prev, department: newDepartment.trim() }));
+      setNewDepartment("");
       setShowCustomDepartment(false);
+    }
+  };
+
+  // Save staff member (add or update)
+  const saveStaff = async () => {
+    if (!formData.name.trim()) {
+      showNotification("Name is required", "error");
+      return;
+    }
+
+    try {
+      if (editingStaff) {
+        // Update existing staff
+        const { error } = await supabase
+          .from("all_staff")
+          .update({
+            name: formData.name.trim(),
+            phone_number: formData.phone_number.trim(),
+            email: formData.email.trim(),
+            designation: formData.designation.trim(),
+            department: formData.department.trim(),
+            timestamp: new Date().toISOString(),
+          })
+          .eq("id", editingStaff.id);
+
+        if (error) throw error;
+        showNotification("Staff member updated successfully!", "success");
+      } else {
+        // Add new staff
+        const { error } = await supabase.from("all_staff").insert({
+          name: formData.name.trim(),
+          phone_number: formData.phone_number.trim(),
+          email: formData.email.trim(),
+          designation: formData.designation.trim(),
+          department: formData.department.trim(),
+          timestamp: new Date().toISOString(),
+        });
+
+        if (error) throw error;
+        showNotification("Staff member added successfully!", "success");
+      }
+
+      fetchStaff();
+      closeModal();
+    } catch (error) {
+      console.error("Error saving staff:", error);
+      showNotification("Error saving staff member", "error");
     }
   };
 
   // Delete staff member
   const deleteStaff = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this staff member?')) {
+    if (!window.confirm("Are you sure you want to delete this staff member?")) {
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('all_staff')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from("all_staff").delete().eq("id", id);
 
       if (error) throw error;
-      showNotification('Staff member deleted successfully!', 'success');
+      showNotification("Staff member deleted successfully!", "success");
       fetchStaff();
     } catch (error) {
-      console.error('Error deleting staff:', error);
-      showNotification('Error deleting staff member', 'error');
+      console.error("Error deleting staff:", error);
+      showNotification("Error deleting staff member", "error");
     }
   };
 
@@ -220,14 +307,21 @@ const AllStaff = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800">All Staff Management</h1>
-          <p className="hidden md:block text-gray-600 mt-1">Manage hospital staff members</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">
+            All Staff Management
+          </h1>
+          <p className="hidden md:block text-gray-600 mt-1">
+            Manage hospital staff members
+          </p>
         </div>
       </div>
 
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+        <Search
+          className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+          size={18}
+        />
         <input
           type="text"
           placeholder="Search staff..."
@@ -241,19 +335,28 @@ const AllStaff = () => {
       <div className="md:hidden space-y-3">
         {filteredStaffWithDisplayId.length === 0 ? (
           <div className="bg-white p-8 text-center text-gray-500 border border-gray-200 rounded-lg text-sm">
-            {searchTerm ? 'No staff members found matching your search' : 'No staff members found'}
+            {searchTerm
+              ? "No staff members found matching your search"
+              : "No staff members found"}
           </div>
         ) : (
           filteredStaffWithDisplayId.map((staffMember) => (
-            <div key={staffMember.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm p-3">
+            <div
+              key={staffMember.id}
+              className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm p-3"
+            >
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
                     <User size={16} className="text-gray-600" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 text-sm leading-tight">{staffMember.name || 'N/A'}</h3>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">ID: #{staffMember.displayId}</p>
+                    <h3 className="font-bold text-gray-900 text-sm leading-tight">
+                      {staffMember.name || "N/A"}
+                    </h3>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold mt-0.5">
+                      ID: #{staffMember.displayId}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -269,7 +372,9 @@ const AllStaff = () => {
 
               <div className="grid grid-cols-2 gap-3 py-2 border-t border-gray-50 mt-2">
                 <div>
-                  <p className="text-[10px] text-gray-500 uppercase font-bold italic">Designation</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-bold italic">
+                    Designation
+                  </p>
                   <span
                     className={`inline-flex px-1.5 py-0.5 mt-0.5 text-[10px] font-medium rounded-full ${getDesignationBadgeClass(staffMember.designation)}`}
                   >
@@ -277,18 +382,28 @@ const AllStaff = () => {
                   </span>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-gray-500 uppercase font-bold italic">Department</p>
-                  <p className="text-[11px] text-gray-800 font-medium truncate">{staffMember.department || 'N/A'}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-bold italic">
+                    Department
+                  </p>
+                  <p className="text-[11px] text-gray-800 font-medium truncate">
+                    {staffMember.department || "N/A"}
+                  </p>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-gray-50 space-y-1">
                 <div className="flex justify-between items-center text-[10px]">
-                  <span className="text-gray-500 font-bold uppercase italic">Contact Info</span>
+                  <span className="text-gray-500 font-bold uppercase italic">
+                    Contact Info
+                  </span>
                 </div>
                 <div className="text-[11px] text-gray-600 space-y-0.5">
-                  <p className="font-medium truncate">{staffMember.email || 'No email'}</p>
-                  <p className="font-medium">{staffMember.phone_number || 'No phone'}</p>
+                  <p className="font-medium truncate">
+                    {staffMember.email || "No email"}
+                  </p>
+                  <p className="font-medium">
+                    {staffMember.phone_number || "No phone"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -298,7 +413,7 @@ const AllStaff = () => {
 
       {/* Desktop View: Table */}
       <div className="hidden md:block bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto" style={{ maxHeight: '520px' }}>
+        <div className="overflow-x-auto" style={{ maxHeight: "520px" }}>
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
@@ -325,8 +440,13 @@ const AllStaff = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredStaffWithDisplayId.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
-                    {searchTerm ? 'No staff members found matching your search' : 'No staff members found'}
+                  <td
+                    colSpan="7"
+                    className="px-6 py-8 text-center text-gray-500"
+                  >
+                    {searchTerm
+                      ? "No staff members found matching your search"
+                      : "No staff members found"}
                   </td>
                 </tr>
               ) : (
@@ -341,15 +461,15 @@ const AllStaff = () => {
                           <User size={16} className="text-gray-600" />
                         </div>
                         <div className="text-sm font-medium text-gray-900">
-                          {staffMember.name || 'N/A'}
+                          {staffMember.name || "N/A"}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {staffMember.phone_number || 'N/A'}
+                      {staffMember.phone_number || "N/A"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {staffMember.email || 'N/A'}
+                      {staffMember.email || "N/A"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -359,7 +479,7 @@ const AllStaff = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {staffMember.department || 'N/A'}
+                      {staffMember.department || "N/A"}
                     </td>
                   </tr>
                 ))
@@ -375,7 +495,7 @@ const AllStaff = () => {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
               <h2 className="text-xl font-semibold text-gray-800">
-                {editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
+                {editingStaff ? "Edit Staff Member" : "Add New Staff Member"}
               </h2>
               <button
                 onClick={closeModal}
@@ -437,10 +557,16 @@ const AllStaff = () => {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setShowCustomDesignation(!showCustomDesignation)}
+                    onClick={() =>
+                      setShowCustomDesignation(!showCustomDesignation)
+                    }
                     className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1"
                   >
-                    {showCustomDesignation ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    {showCustomDesignation ? (
+                      <ChevronUp size={16} />
+                    ) : (
+                      <ChevronDown size={16} />
+                    )}
                     Add New
                   </button>
                 </div>
@@ -492,10 +618,16 @@ const AllStaff = () => {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setShowCustomDepartment(!showCustomDepartment)}
+                    onClick={() =>
+                      setShowCustomDepartment(!showCustomDepartment)
+                    }
                     className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1"
                   >
-                    {showCustomDepartment ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    {showCustomDepartment ? (
+                      <ChevronUp size={16} />
+                    ) : (
+                      <ChevronDown size={16} />
+                    )}
                     Add New
                   </button>
                 </div>
@@ -552,7 +684,7 @@ const AllStaff = () => {
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 inline-flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingStaff ? 'Update' : 'Save'}
+                {editingStaff ? "Update" : "Save"}
               </button>
             </div>
           </div>
