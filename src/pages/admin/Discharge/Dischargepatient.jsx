@@ -64,8 +64,6 @@ const DischargePatient = () => {
       const { data, error } = await supabase
         .from('ipd_admissions')
         .select('*')
-        .not('planned1', 'is', null)
-        .is('actual1', null)
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
