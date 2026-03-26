@@ -4,6 +4,16 @@ import supabase from "../../../SupabaseClient"; // Adjust the path to your supab
 import { useNotification } from "../../../contexts/NotificationContext";
 
 const StoreMedicinePage = () => {
+  const wardFilters = [
+    "ICU",
+    "Private Ward",
+    "PICU",
+    "NICU",
+    "Emergency",
+    "HDU",
+    "General Ward(5th floor)",
+  ];
+
   const [activeTab, setActiveTab] = useState("pending");
   const [viewModal, setViewModal] = useState(false);
   const [slipModal, setSlipModal] = useState(false);
@@ -13,10 +23,32 @@ const StoreMedicinePage = () => {
   const [loading, setLoading] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState("");
+  const [selectedWard, setSelectedWard] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [patientNames, setPatientNames] = useState([]);
+  const [wardLocations, setWardLocations] = useState([]);
   const { showNotification } = useNotification();
+
+  const normalizeWardFilter = (wardValue) => {
+    const normalizedWard = String(wardValue || "").trim().toLowerCase();
+
+    if (!normalizedWard) return "";
+    if (normalizedWard.includes("picu")) return "PICU";
+    if (normalizedWard.includes("nicu")) return "NICU";
+    if (normalizedWard.includes("icu")) return "ICU";
+    if (normalizedWard.includes("hdu")) return "HDU";
+    if (normalizedWard.includes("emergency")) return "Emergency";
+    if (normalizedWard.includes("private")) return "Private Ward";
+    if (
+      normalizedWard.includes("general ward(5th floor)") ||
+      normalizedWard.includes("5th floor")
+    ) {
+      return "General Ward(5th floor)";
+    }
+
+    return String(wardValue || "").trim();
+  };
 
   // Load data from Supabase
   const loadData = async (silent = false) => {
@@ -64,6 +96,20 @@ const StoreMedicinePage = () => {
           ),
         ];
         setPatientNames(uniqueNames.sort());
+
+        const uniqueWardLocations = [
+          ...new Set(
+            parsedData
+              .map((item) => normalizeWardFilter(item.ward_location))
+              .filter(Boolean),
+          ),
+        ];
+        setWardLocations(
+          [
+            ...wardFilters,
+            ...uniqueWardLocations.filter((ward) => !wardFilters.includes(ward)),
+          ].filter(Boolean),
+        );
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -127,6 +173,17 @@ const StoreMedicinePage = () => {
             prev.includes(row.patient_name)
               ? prev
               : [...prev, row.patient_name].sort(),
+          );
+        }
+
+        if (row.ward_location?.trim()) {
+          const wardLocation = normalizeWardFilter(row.ward_location);
+          setWardLocations((prev) =>
+            prev.includes(wardLocation)
+              ? prev
+              : [...prev, wardLocation].sort((a, b) =>
+                  a.localeCompare(b),
+                ),
           );
         }
       } catch (e) {
@@ -242,6 +299,7 @@ const StoreMedicinePage = () => {
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const indentNo = indent.indent_no || `IND-${indent.id}`;
+        const normalizedWard = normalizeWardFilter(indent.ward_location);
         const matchesSearch =
           indentNo.toLowerCase().includes(searchLower) ||
           (indent.admission_number &&
@@ -253,13 +311,22 @@ const StoreMedicinePage = () => {
           (indent.staff_name &&
             indent.staff_name.toLowerCase().includes(searchLower)) ||
           (indent.diagnosis &&
-            indent.diagnosis.toLowerCase().includes(searchLower));
+            indent.diagnosis.toLowerCase().includes(searchLower)) ||
+          (indent.ward_location &&
+            indent.ward_location.toLowerCase().includes(searchLower)) ||
+          normalizedWard.toLowerCase().includes(searchLower);
 
         if (!matchesSearch) return false;
       }
 
       // Filter by patient name
       if (selectedPatient && indent.patient_name !== selectedPatient) {
+        return false;
+      }
+
+      // Filter by ward
+      const normalizedWard = normalizeWardFilter(indent.ward_location);
+      if (selectedWard && normalizedWard !== selectedWard) {
         return false;
       }
 
@@ -364,6 +431,19 @@ const StoreMedicinePage = () => {
                 ))}
               </select>
 
+              <select
+                value={selectedWard}
+                onChange={(e) => setSelectedWard(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[180px]"
+              >
+                <option value="">All Wards</option>
+                {wardLocations.map((ward, index) => (
+                  <option key={index} value={ward}>
+                    {ward}
+                  </option>
+                ))}
+              </select>
+
               {/* Date Filter */}
               <input
                 type="date"
@@ -373,10 +453,11 @@ const StoreMedicinePage = () => {
               />
 
               {/* Clear Filters Button */}
-              {(selectedPatient || selectedDate || searchTerm) && (
+              {(selectedPatient || selectedWard || selectedDate || searchTerm) && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
+                    setSelectedWard("");
                     setSelectedDate("");
                     setSearchTerm("");
                   }}
@@ -456,6 +537,19 @@ const StoreMedicinePage = () => {
                 ))}
               </select>
 
+              <select
+                value={selectedWard}
+                onChange={(e) => setSelectedWard(e.target.value)}
+                className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
+              >
+                <option value="">All Wards</option>
+                {wardLocations.map((ward, index) => (
+                  <option key={index} value={ward}>
+                    {ward}
+                  </option>
+                ))}
+              </select>
+
               {/* Date Filter */}
               <input
                 type="date"
@@ -465,10 +559,11 @@ const StoreMedicinePage = () => {
               />
 
               {/* Clear Filters Button */}
-              {(selectedPatient || selectedDate || searchTerm) && (
+              {(selectedPatient || selectedWard || selectedDate || searchTerm) && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
+                    setSelectedWard("");
                     setSelectedDate("");
                     setSearchTerm("");
                   }}
