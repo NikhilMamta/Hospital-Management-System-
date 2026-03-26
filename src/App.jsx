@@ -46,6 +46,7 @@ import Tests from "./pages/admin/masters/Tests";
 import FloorBed from "./pages/admin/masters/FloorBed";
 import Doctors from "./pages/admin/masters/Doctors";
 import ManageUsers from "./pages/admin/masters/ManageUsers";
+import DeletePatient from "./pages/admin/masters/DeletePatient";
 
 // Nurse Station Components
 import AssignTask from "./pages/admin/nurseStation/AssignTask";
@@ -638,6 +639,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="masters-manage-users">
                 <ManageUsers />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="masters/delete-patient"
+            element={
+              <ProtectedRoute requiredPage="masters-delete-patient">
+                <DeletePatient />
               </ProtectedRoute>
             }
           />

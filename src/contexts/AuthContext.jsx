@@ -441,6 +441,15 @@ export const ALL_PAGES = [
     parent: "masters",
     description: "Manage user accounts and permissions",
   },
+  {
+    key: "masters-delete-patient",
+    label: "Delete Patient",
+    path: "/admin/masters/delete-patient",
+    icon: "Trash2",
+    type: "item",
+    parent: "masters",
+    description: "Permanently delete a patient and all related records (Admin only)",
+  },
 ];
 
 // Helper function to parse user pages

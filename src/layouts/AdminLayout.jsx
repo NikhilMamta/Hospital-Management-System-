@@ -28,6 +28,7 @@ import {
   Clock,
   Key,
   Calendar,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import Footer from "../components/Footer";
@@ -56,6 +57,7 @@ const iconComponents = {
   Bed,
   Key,
   Calendar,
+  Trash2,
 };
 
 const AdminLayout = () => {
