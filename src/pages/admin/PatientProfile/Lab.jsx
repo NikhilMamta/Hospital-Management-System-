@@ -37,6 +37,7 @@ export default function Lab() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [testSearchQuery, setTestSearchQuery] = useState("");
 
   // Report modal state
   const [showReportModal, setShowReportModal] = useState(false);
@@ -294,6 +295,10 @@ export default function Lab() {
       ...(name === "radiologyType" && { radiologyTests: [] }),
     }));
     setModalError("");
+    // Reset search when category or radiology type changes
+    if (name === "category" || name === "radiologyType") {
+      setTestSearchQuery("");
+    }
   };
 
   // Handle checkbox changes for tests (exactly like LabAdvice)
@@ -496,6 +501,7 @@ export default function Lab() {
     });
     setModalError("");
     setAvailableTests([]);
+    setTestSearchQuery("");
   };
 
   // Open Add Test modal
@@ -1151,27 +1157,57 @@ export default function Lab() {
                       Select Pathology Tests * ({formData.pathologyTests.length}{" "}
                       selected)
                     </label>
+                    {/* Search bar for pathology tests */}
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search pathology tests..."
+                        value={testSearchQuery}
+                        onChange={(e) => setTestSearchQuery(e.target.value)}
+                        className="pl-9 pr-3 py-2 w-full text-sm bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      {testSearchQuery && (
+                        <button
+                          onClick={() => setTestSearchQuery("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                     <div className="p-4 max-h-60 overflow-y-auto bg-gray-50 rounded-lg border border-gray-300">
                       {availableTests.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-                          {availableTests.map((test) => (
-                            <label
-                              key={test}
-                              className="flex items-start gap-2 cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={formData.pathologyTests.includes(test)}
-                                onChange={() => handleCheckboxChange(test)}
-                                disabled={isSubmitting}
-                                className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
-                              />
-                              <span className="text-sm text-gray-700">
-                                {test}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
+                        (() => {
+                          const filteredTests = availableTests.filter((test) =>
+                            test.toLowerCase().includes(testSearchQuery.toLowerCase())
+                          );
+                          return filteredTests.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                              {filteredTests.map((test) => (
+                                <label
+                                  key={test}
+                                  className="flex items-start gap-2 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={formData.pathologyTests.includes(test)}
+                                    onChange={() => handleCheckboxChange(test)}
+                                    disabled={isSubmitting}
+                                    className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
+                                  />
+                                  <span className="text-sm text-gray-700">
+                                    {test}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-500 py-4">
+                              <p className="text-sm">No tests matching "{testSearchQuery}"</p>
+                            </div>
+                          );
+                        })()
                       ) : (
                         <div className="text-center text-gray-500 py-8">
                           <p>Loading pathology tests...</p>
@@ -1208,29 +1244,59 @@ export default function Lab() {
                           Select {formData.radiologyType} Tests * (
                           {formData.radiologyTests.length} selected)
                         </label>
+                        {/* Search bar for radiology tests */}
+                        <div className="relative mb-2">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder={`Search ${formData.radiologyType} tests...`}
+                            value={testSearchQuery}
+                            onChange={(e) => setTestSearchQuery(e.target.value)}
+                            className="pl-9 pr-3 py-2 w-full text-sm bg-white rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          />
+                          {testSearchQuery && (
+                            <button
+                              onClick={() => setTestSearchQuery("")}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                         <div className="p-4 max-h-60 overflow-y-auto bg-gray-50 rounded-lg border border-gray-300">
                           {availableTests.length > 0 ? (
-                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                              {availableTests.map((test) => (
-                                <label
-                                  key={test}
-                                  className="flex items-start gap-2 cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.radiologyTests.includes(
-                                      test,
-                                    )}
-                                    onChange={() => handleCheckboxChange(test)}
-                                    disabled={isSubmitting}
-                                    className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
-                                  />
-                                  <span className="text-sm text-gray-700">
-                                    {test}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
+                            (() => {
+                              const filteredTests = availableTests.filter((test) =>
+                                test.toLowerCase().includes(testSearchQuery.toLowerCase())
+                              );
+                              return filteredTests.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                                  {filteredTests.map((test) => (
+                                    <label
+                                      key={test}
+                                      className="flex items-start gap-2 cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={formData.radiologyTests.includes(
+                                          test,
+                                        )}
+                                        onChange={() => handleCheckboxChange(test)}
+                                        disabled={isSubmitting}
+                                        className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500 disabled:opacity-50"
+                                      />
+                                      <span className="text-sm text-gray-700">
+                                        {test}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-center text-gray-500 py-4">
+                                  <p className="text-sm">No tests matching "{testSearchQuery}"</p>
+                                </div>
+                              );
+                            })()
                           ) : (
                             <div className="text-center text-gray-500 py-8">
                               <p>Loading {formData.radiologyType} tests...</p>
