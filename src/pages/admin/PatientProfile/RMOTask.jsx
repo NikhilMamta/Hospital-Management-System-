@@ -23,9 +23,9 @@ export default function RMOTask() {
   const { ipdNumber } = useOutletContext();
 
   // Fetch RMO tasks from Supabase
-  const fetchRMOTasks = async () => {
+  const fetchRMOTasks = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       console.log("Fetching RMO tasks for IPD:", ipdNumber);
 
@@ -125,7 +125,7 @@ export default function RMOTask() {
       console.error("Error in fetchRMOTasks:", err);
       loadFromLocalStorage();
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -167,8 +167,8 @@ export default function RMOTask() {
     }
   }, [ipdNumber]);
 
-  // Real-time: refetch whenever rmo_assign_task changes
-  useRealtimeTable("rmo_assign_task", fetchRMOTasks);
+  // Silent refresh: real-time updates skip the loading spinner to avoid scroll-reset flicker
+  useRealtimeTable("rmo_assign_task", () => fetchRMOTasks(true));
 
   const getFilteredTasks = () => {
     const tasks = activeTab === "pending" ? pendingList : historyList;

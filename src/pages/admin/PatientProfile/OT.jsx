@@ -61,9 +61,9 @@ export default function OT() {
   const { ipdNumber } = useOutletContext();
 
   // Fetch OT tasks from Supabase
-  const fetchOTTasks = async () => {
+  const fetchOTTasks = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       console.log("Fetching OT tasks for IPD:", ipdNumber);
 
@@ -170,7 +170,7 @@ export default function OT() {
       console.error("Error in fetchOTTasks:", err);
       loadFromLocalStorage();
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -216,8 +216,8 @@ export default function OT() {
     }
   }, [ipdNumber]);
 
-  // Real-time: refetch whenever nurse_assign_task changes (covers OT staff rows)
-  useRealtimeTable("nurse_assign_task", fetchOTTasks);
+  // Silent refresh: real-time updates skip the loading spinner to avoid scroll-reset flicker
+  useRealtimeTable("nurse_assign_task", () => fetchOTTasks(true));
 
   // Filter tasks based on search and filters
   const getFilteredTasks = () => {

@@ -36,7 +36,7 @@ export default function Nursing() {
   const [expandedCard, setExpandedCard] = useState(null);
 
   // Fetch nursing tasks from Supabase
-  const fetchNursingTasks = async () => {
+  const fetchNursingTasks = async (silent = false) => {
     if (!data) return;
 
     // ✅ Correctly read logged-in user
@@ -45,7 +45,7 @@ export default function Nursing() {
     const userRole = user?.role;
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const ipdNumber = data.personalInfo.ipd;
 
       if (!ipdNumber || ipdNumber === "N/A") {
@@ -124,7 +124,7 @@ export default function Nursing() {
     } catch (err) {
       console.error("Error in fetchNursingTasks:", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -155,7 +155,8 @@ export default function Nursing() {
   }, [data]);
 
   // Real-time: refetch whenever nurse_assign_task changes
-  useRealtimeTable("nurse_assign_task", fetchNursingTasks);
+  // Silent refresh: real-time updates skip the loading spinner to avoid scroll-reset flicker
+  useRealtimeTable("nurse_assign_task", () => fetchNursingTasks(true));
 
   const getFilteredTasks = () => {
     const tasks = activeTab === "pending" ? pendingList : historyList;
