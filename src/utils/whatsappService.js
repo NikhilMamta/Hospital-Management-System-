@@ -16,7 +16,6 @@ const APPROVAL_PHONE_NUMBERS = [
   "917000520856",
   "919340821622",
   "916267799443",
-  "917000041821",
 ];
 
 // ⬇️ Hardcoded recipient for dressing notifications
