@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle,
   User,
@@ -189,6 +189,21 @@ export default function GivenTask() {
 
   // Get IPD number from parent component context
   const { ipdNumber } = useOutletContext();
+  const normalizedIpdNumber = useMemo(
+    () => String(ipdNumber || "").trim(),
+    [ipdNumber],
+  );
+
+  const matchesRealtimeIpd = (payload, keys) => {
+    if (!normalizedIpdNumber || normalizedIpdNumber === "N/A") {
+      return true;
+    }
+
+    const rows = [payload?.new, payload?.old].filter(Boolean);
+    return rows.some((row) =>
+      keys.some((key) => String(row?.[key] || "").trim() === normalizedIpdNumber),
+    );
+  };
 
   // Get user role from localStorage on component mount
   useEffect(() => {
@@ -605,12 +620,27 @@ export default function GivenTask() {
   }, [userRole, userName, ipdNumber]);
 
   // Real-time: refetch when any task table changes
-  useRealtimeTable("nurse_assign_task", () => {
-    fetchNurseTasks();
-    fetchOtTasks();
-  });
-  useRealtimeTable("rmo_assign_task", fetchRmoTasks);
-  useRealtimeTable("dressing", fetchDressingTasks);
+  useRealtimeTable(
+    "nurse_assign_task",
+    () => {
+      fetchNurseTasks();
+      fetchOtTasks();
+    },
+    true,
+    (payload) => matchesRealtimeIpd(payload, ["Ipd_number"]),
+  );
+  useRealtimeTable(
+    "rmo_assign_task",
+    fetchRmoTasks,
+    true,
+    (payload) => matchesRealtimeIpd(payload, ["ipd_number"]),
+  );
+  useRealtimeTable(
+    "dressing",
+    fetchDressingTasks,
+    true,
+    (payload) => matchesRealtimeIpd(payload, ["ipd_number"]),
+  );
 
   // Handle completing a task
   const handleCompleteTask = async (taskId, tableName) => {
