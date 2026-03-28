@@ -557,6 +557,32 @@ const ScoreDashboard = () => {
                 </div>
               </div>
 
+              {/* Custom Range Inputs */}
+              {filterType === "custom" && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="relative">
+                    <span className="absolute -top-2 left-2 px-1 text-[10px] font-black text-gray-400 bg-white uppercase tracking-tighter z-10">Start Date</span>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      max={customEndDate || undefined}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-bold border border-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-gray-50/30 hover:bg-white"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="absolute -top-2 left-2 px-1 text-[10px] font-black text-gray-400 bg-white uppercase tracking-tighter z-10">End Date</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      min={customStartDate || undefined}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-bold border border-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-gray-50/30 hover:bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Custom Range Notification - Compact */}
               {filterType === "custom" && (customRangeIncomplete || invalidCustomRange) && (
                 <div className={`px-3 py-2 text-[11px] font-bold border rounded-lg ${
