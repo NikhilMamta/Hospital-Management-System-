@@ -307,6 +307,9 @@ const DischargeBill = () => {
                     Patient Name
                   </th>
                   <th className="px-4 py-3 text-xs font-medium text-left uppercase whitespace-nowrap">
+                    Category
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-left uppercase whitespace-nowrap">
                     Department
                   </th>
                   <th className="px-4 py-3 text-xs font-medium text-left uppercase whitespace-nowrap">
@@ -356,6 +359,9 @@ const DischargeBill = () => {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                         {record.patient_name}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        {record.category || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                         {record.department}
@@ -450,6 +456,9 @@ const DischargeBill = () => {
                       <div className="text-sm font-semibold">
                         {record.patient_name}
                       </div>
+                      <div className="text-[10px] text-gray-500">
+                        Category: {record.category || "N/A"}
+                      </div>
                     </div>
                     <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full">
                       Pending
@@ -539,6 +548,9 @@ const DischargeBill = () => {
                     Patient Name
                   </th>
                   <th className="px-4 py-3 text-xs font-medium text-left uppercase whitespace-nowrap">
+                    Category
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-left uppercase whitespace-nowrap">
                     Department
                   </th>
                   <th className="px-4 py-3 text-xs font-medium text-left uppercase whitespace-nowrap">
@@ -588,6 +600,9 @@ const DischargeBill = () => {
                       </td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
                         {record.patient_name}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        {record.category || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
                         {record.department}
@@ -701,6 +716,9 @@ const DischargeBill = () => {
                     <div className="text-sm font-semibold">
                       {record.patient_name}
                     </div>
+                    <div className="text-[10px] text-gray-500">
+                      Category: {record.category || "N/A"}
+                    </div>
                   </div>
                   <span
                     className={`px-1.5 py-0.5 text-[10px] rounded-full ${
@@ -803,6 +821,18 @@ const DischargeBill = () => {
                   <input
                     type="text"
                     value={selectedRecord.patient_name}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedRecord.category || "N/A"}
                     disabled
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                   />
