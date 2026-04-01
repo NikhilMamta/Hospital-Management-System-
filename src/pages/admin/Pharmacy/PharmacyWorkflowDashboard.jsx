@@ -19,6 +19,10 @@ import { useNavigate } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
 import { useNotification } from "../../../contexts/NotificationContext";
+import {
+  normalizeDepartmentalPharmacyIndent,
+  normalizePatientPharmacyIndent,
+} from "../../../utils/pharmacyIndentUtils";
 
 const STAGES = [
   {
@@ -256,15 +260,19 @@ const getRequestTypeLabels = (requestTypes) =>
 
 const buildStage = (definition, order) => {
   const status = normalizeStatus(order.status);
-  const slipUrl = order.slip_image || order.slip_image_url || null;
+  const slipUrl = order.slip_image || order.slip_image_url || order.slipImage || order.slipImageUrl || null;
 
   switch (definition.key) {
     case "request_received":
       return {
         ...definition,
+        route:
+          order.indentType === "departmental"
+            ? "/admin/pharmacy/departmental-indent"
+            : definition.route,
         plannedAt: order.planned1 || order.timestamp || null,
         actualAt: order.timestamp || order.planned1 || null,
-        owner: order.staff_name || "",
+        owner: order.staff_name || order.staffName || order.requestedBy || "",
         ownerRole: "Requested by",
         result:
           order.requestTypeLabels.length > 0
@@ -274,7 +282,9 @@ const buildStage = (definition, order) => {
         attachmentLabel: "",
         status: "completed",
         timing: { label: "Created", tone: "success", overdue: false },
-        note: order.indent_no ? `Indent No: ${order.indent_no}` : "Workflow initiated",
+        note: (order.indent_no || order.indentNumber)
+          ? `Indent No: ${order.indent_no || order.indentNumber}`
+          : "Workflow initiated",
       };
 
     case "medication_verification": {
@@ -283,7 +293,7 @@ const buildStage = (definition, order) => {
         ...definition,
         plannedAt: order.planned1 || null,
         actualAt: order.actual1 || null,
-        owner: order.approved_by || "",
+        owner: order.approved_by || order.approvedBy || "",
         ownerRole: "Verified by",
         result:
           status === "approved"
@@ -393,9 +403,13 @@ const getDashboardStatus = (order, currentStage) => {
 };
 
 const buildWorkflowOrder = (row) => {
-  const requestTypes = parseJsonField(row.request_types, {});
-  const medicines = parseJsonField(row.medicines, []);
-  const investigations = parseJsonField(row.investigations, []);
+  const requestTypes = row.requestTypes || parseJsonField(row.request_types, {});
+  const medicines = Array.isArray(row.medicines)
+    ? row.medicines
+    : parseJsonField(row.medicines, []);
+  const investigations = Array.isArray(row.investigations)
+    ? row.investigations
+    : parseJsonField(row.investigations, []);
   const requestTypeLabels = getRequestTypeLabels(requestTypes);
   const medicationCount = Array.isArray(medicines) ? medicines.length : 0;
   const investigationCount = Array.isArray(investigations) ? investigations.length : 0;
@@ -429,12 +443,20 @@ const buildWorkflowOrder = (row) => {
     progress,
     dashboardStatus,
     searchableText: [
+      row.displayTitle,
       row.patient_name,
+      row.patientName,
       row.indent_no,
+      row.indentNumber,
       row.admission_number,
+      row.admissionNumber,
       row.ipd_number,
+      row.ipdNumber,
       row.consultant_name,
+      row.consultantName,
       row.diagnosis,
+      row.remarks,
+      row.location,
       currentStage.label,
     ]
       .filter(Boolean)
@@ -648,28 +670,43 @@ const PharmacyOrderCard = ({
         className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-green-50/40 md:px-5"
       >
         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
-          {getInitials(workflow.patient_name)}
+          {getInitials(workflow.displayTitle || workflow.patient_name || workflow.patientName)}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-base font-semibold text-gray-900">
-              {workflow.patient_name || "Unknown Patient"}
+              {workflow.displayTitle || workflow.patient_name || workflow.patientName || "Unknown Indent"}
             </h3>
             <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-              Indent: {workflow.indent_no || "N/A"}
+              Indent: {workflow.indent_no || workflow.indentNumber || "N/A"}
             </span>
-            {workflow.ipd_number && (
+            {(workflow.ipd_number || workflow.ipdNumber) && (
               <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                IPD: {workflow.ipd_number}
+                IPD: {workflow.ipd_number || workflow.ipdNumber}
               </span>
             )}
+            <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+              workflow.indentType === "departmental"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-gray-50 text-gray-600"
+            }`}>
+              {workflow.indentType === "departmental" ? "Departmental" : "Patient"}
+            </span>
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-            <span>Admission {workflow.admission_number || "N/A"}</span>
-            <span>{workflow.ward_location || "Ward N/A"}</span>
-            <span>{workflow.consultant_name || "Consultant N/A"}</span>
+            <span>
+              {workflow.indentType === "departmental"
+                ? `Location ${workflow.location || "N/A"}`
+                : `Admission ${workflow.admission_number || workflow.admissionNumber || "N/A"}`}
+            </span>
+            <span>{workflow.ward_location || workflow.location || "Ward N/A"}</span>
+            <span>
+              {workflow.indentType === "departmental"
+                ? workflow.requestedBy || "Requester N/A"
+                : workflow.consultant_name || workflow.consultantName || "Consultant N/A"}
+            </span>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -848,13 +885,22 @@ const PharmacyWorkflowDashboard = () => {
     try {
       setLoading(true);
 
-      const [{ data: pharmacyData, error: pharmacyError }, { data: staffData, error: staffError }] =
+      const [
+        { data: pharmacyData, error: pharmacyError },
+        { data: departmentalData, error: departmentalError },
+        { data: staffData, error: staffError },
+      ] =
         await Promise.all([
           supabase.from("pharmacy").select("*").order("timestamp", { ascending: false }),
+          supabase
+            .from("departmental_pharmacy_indent")
+            .select("*")
+            .order("timestamp", { ascending: false }),
           supabase.from("all_staff").select("name, phone_number"),
         ]);
 
       if (pharmacyError) throw pharmacyError;
+      if (departmentalError) throw departmentalError;
       if (staffError) {
         console.error("Error loading pharmacy handler contacts:", staffError);
       }
@@ -864,7 +910,10 @@ const PharmacyWorkflowDashboard = () => {
         contacts[member.name] = member.phone_number || "";
       });
 
-      setRawOrders(pharmacyData || []);
+      setRawOrders([
+        ...(pharmacyData || []).map(normalizePatientPharmacyIndent),
+        ...(departmentalData || []).map(normalizeDepartmentalPharmacyIndent),
+      ]);
       setHandlerMap(contacts);
       setLastUpdated(new Date());
     } catch (error) {
@@ -877,6 +926,7 @@ const PharmacyWorkflowDashboard = () => {
   }, [showNotification]);
 
   useRealtimeTable("pharmacy", fetchDashboardData);
+  useRealtimeTable("departmental_pharmacy_indent", fetchDashboardData);
 
   useEffect(() => {
     fetchDashboardData();

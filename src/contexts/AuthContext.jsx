@@ -281,6 +281,14 @@ export const ALL_PAGES = [
     description: "Request medicines for patients",
   },
   {
+    key: "pharmacy-departmental-indent",
+    label: "Departmental Indent",
+    path: "/admin/pharmacy/departmental-indent",
+    type: "item",
+    parent: "pharmacy",
+    description: "Request medicines for wards and departments",
+  },
+  {
     key: "pharmacy-workflow-dashboard",
     label: "Workflow Dashboard",
     path: "/admin/pharmacy/workflow-dashboard",

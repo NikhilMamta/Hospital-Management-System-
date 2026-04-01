@@ -45,6 +45,14 @@ export const buildIndentApprovalMessage = (
   requestTypes,
   approvalUrl,
 ) => {
+  const isDepartmental =
+    indent?.indent_scope === "departmental" ||
+    indent?.request_source === "departmental" ||
+    (!!indent?.requested_by &&
+      !indent?.patient_name &&
+      !indent?.admission_number &&
+      !indent?.ipd_number);
+
   // Determine request type label
   const requestTypeLabels = [];
   if (requestTypes?.medicineSlip) requestTypeLabels.push("Medicine Slip");
@@ -203,6 +211,66 @@ export const sendIndentApprovalNotification = async (
     return successful.length === APPROVAL_PHONE_NUMBERS.length;
   } catch (error) {
     console.error("[WhatsApp] sendIndentApprovalNotification error:", error);
+    return false;
+  }
+};
+
+export const sendDepartmentalIndentApprovalNotification = async (
+  indent,
+  medicines,
+  requestTypes,
+) => {
+  try {
+    console.log(
+      "[WhatsApp] Sending departmental indent approval notification...",
+    );
+    const approvalUrl = `${window.location.origin}/admin/pharmacy/approval`;
+
+    const requestTypeLabels = [];
+    if (requestTypes?.medicineSlip) requestTypeLabels.push("Medicine Slip");
+    if (requestTypes?.investigation) requestTypeLabels.push("Investigation");
+    if (requestTypes?.package) requestTypeLabels.push("Package");
+    if (requestTypes?.nonPackage) requestTypeLabels.push("Non-Package");
+
+    const medicineName =
+      medicines?.length > 0
+        ? medicines
+            .map((item) => item.name)
+            .filter(Boolean)
+            .join(", ")
+        : "N/A";
+    const medicineQty =
+      medicines?.length > 0
+        ? medicines
+            .map((item) => item.quantity)
+            .filter(Boolean)
+            .join(", ")
+        : "N/A";
+
+    const message = `⚡ Approval Request – Departmental Medicine
+
+🆔 Indent No.: ${indent.indent_no || "N/A"}
+🏥 Ward/Location: ${indent.ward_location || indent.ward || "N/A"}
+👨‍💼 Requested By: ${indent.requested_by || indent.staff_name || "N/A"}
+📝 Remarks: ${indent.remarks || indent.purpose || "N/A"}
+
+📑 Request Type: ${requestTypeLabels.join(", ") || "N/A"}
+💊 Medicine: ${medicineName}
+🔢 Quantity: ${medicineQty}
+
+👉 Please review & approve:
+✅ ${approvalUrl}
+
+✍️ NIKHIL KUMAR URANW
+TEAM MAMTA HOSPITAL`;
+
+    const results = await sendWhatsAppMessages(APPROVAL_PHONE_NUMBERS, message);
+    return results.every((item) => item.success);
+  } catch (error) {
+    console.error(
+      "[WhatsApp] sendDepartmentalIndentApprovalNotification error:",
+      error,
+    );
     return false;
   }
 };

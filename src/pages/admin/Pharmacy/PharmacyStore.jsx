@@ -2,6 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Eye, FileText, X, Download, CheckCircle, Clock } from "lucide-react";
 import supabase from "../../../SupabaseClient"; // Adjust the path to your supabase client
 import { useNotification } from "../../../contexts/NotificationContext";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import {
+  normalizeDepartmentalPharmacyIndent,
+  normalizePatientPharmacyIndent,
+} from "../../../utils/pharmacyIndentUtils";
 
 const StoreMedicinePage = () => {
   const wardFilters = [
@@ -28,6 +33,7 @@ const StoreMedicinePage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [patientNames, setPatientNames] = useState([]);
   const [wardLocations, setWardLocations] = useState([]);
+  const [indentTypeFilter, setIndentTypeFilter] = useState("all");
   const { showNotification } = useNotification();
 
   const normalizeWardFilter = (wardValue) => {
@@ -54,63 +60,56 @@ const StoreMedicinePage = () => {
   const loadData = async (silent = false) => {
     if (!silent) setIsInitialLoading(true);
     try {
-      // Fetch data from pharmacy table where planned2 is not null
-      const { data: pharmacyData, error } = await supabase
-        .from("pharmacy")
-        .select("*")
-        .not("planned2", "is", null)
-        .neq("status", "rejected")
-        .order("timestamp", { ascending: false });
+      const [
+        { data: patientData, error: patientError },
+        { data: departmentalData, error: departmentalError },
+      ] = await Promise.all([
+        supabase
+          .from("pharmacy")
+          .select("*")
+          .not("planned2", "is", null)
+          .neq("status", "rejected")
+          .order("timestamp", { ascending: false }),
+        supabase
+          .from("departmental_pharmacy_indent")
+          .select("*")
+          .not("planned2", "is", null)
+          .neq("status", "rejected")
+          .order("timestamp", { ascending: false }),
+      ]);
 
-      if (error) throw error;
+      if (patientError) throw patientError;
+      if (departmentalError) throw departmentalError;
 
-      if (pharmacyData) {
-        // Parse JSON strings in the data
-        const parsedData = pharmacyData.map((item) => ({
-          ...item,
-          request_types: item.request_types
-            ? JSON.parse(item.request_types)
-            : null,
-          medicines: item.medicines ? JSON.parse(item.medicines) : [],
-          investigations: item.investigations
-            ? JSON.parse(item.investigations)
-            : [],
-        }));
+      const normalizedData = [
+        ...(patientData || []).map(normalizePatientPharmacyIndent),
+        ...(departmentalData || []).map(normalizeDepartmentalPharmacyIndent),
+      ];
 
-        // Separate into pending and history based on actual2
-        const pending = parsedData.filter(
-          (indent) => indent.planned2 && !indent.actual2,
-        );
+      const pending = normalizedData.filter((indent) => indent.planned2 && !indent.actual2);
+      const history = normalizedData.filter((indent) => indent.planned2 && indent.actual2);
 
-        const history = parsedData.filter(
-          (indent) => indent.planned2 && indent.actual2,
-        );
+      setPendingIndents(pending);
+      setHistoryIndents(history);
 
-        setPendingIndents(pending);
-        setHistoryIndents(history);
+      const uniqueNames = [
+        ...new Set(normalizedData.map((item) => item.displayTitle || item.patientName).filter(Boolean)),
+      ];
+      setPatientNames(uniqueNames.sort());
 
-        // Extract unique patient names for filter
-        const uniqueNames = [
-          ...new Set(
-            parsedData.map((item) => item.patient_name).filter(Boolean),
-          ),
-        ];
-        setPatientNames(uniqueNames.sort());
-
-        const uniqueWardLocations = [
-          ...new Set(
-            parsedData
-              .map((item) => normalizeWardFilter(item.ward_location))
-              .filter(Boolean),
-          ),
-        ];
-        setWardLocations(
-          [
-            ...wardFilters,
-            ...uniqueWardLocations.filter((ward) => !wardFilters.includes(ward)),
-          ].filter(Boolean),
-        );
-      }
+      const uniqueWardLocations = [
+        ...new Set(
+          normalizedData
+            .map((item) => normalizeWardFilter(item.location || item.wardLocation))
+            .filter(Boolean),
+        ),
+      ];
+      setWardLocations(
+        [
+          ...wardFilters,
+          ...uniqueWardLocations.filter((ward) => !wardFilters.includes(ward)),
+        ].filter(Boolean),
+      );
     } catch (error) {
       console.error("Error loading data:", error);
       showNotification("Error loading data from database", "error");
@@ -122,95 +121,10 @@ const StoreMedicinePage = () => {
 
   useEffect(() => {
     loadData();
-
-    // Parse and format a raw pharmacy record for the UI
-    const formatPharmacyRecord = (item) => ({
-      ...item,
-      request_types: item.request_types ? JSON.parse(item.request_types) : null,
-      medicines: item.medicines ? JSON.parse(item.medicines) : [],
-      investigations: item.investigations
-        ? JSON.parse(item.investigations)
-        : [],
-    });
-
-    // Incrementally update state from a single realtime event
-    const handleRealtimeChange = (payload) => {
-      const { eventType, new: newRow, old: oldRow } = payload;
-
-      if (eventType === "DELETE") {
-        const id = oldRow?.id;
-        if (!id) return;
-        setPendingIndents((prev) => prev.filter((r) => r.id !== id));
-        setHistoryIndents((prev) => prev.filter((r) => r.id !== id));
-        return;
-      }
-
-      const row = newRow;
-      if (!row) return;
-
-      // Remove from both arrays first
-      setPendingIndents((prev) => prev.filter((r) => r.id !== row.id));
-      setHistoryIndents((prev) => prev.filter((r) => r.id !== row.id));
-
-      // Only include rows where planned2 is set and status != rejected
-      if (!row.planned2 || row.status === "rejected") return;
-
-      try {
-        const formatted = formatPharmacyRecord(row);
-
-        // Pending: planned2 set, actual2 not set
-        if (row.planned2 && !row.actual2) {
-          setPendingIndents((prev) => [formatted, ...prev]);
-        }
-        // History: both planned2 and actual2 set
-        else if (row.planned2 && row.actual2) {
-          setHistoryIndents((prev) => [formatted, ...prev]);
-        }
-
-        // Add patient name if new
-        if (row.patient_name) {
-          setPatientNames((prev) =>
-            prev.includes(row.patient_name)
-              ? prev
-              : [...prev, row.patient_name].sort(),
-          );
-        }
-
-        if (row.ward_location?.trim()) {
-          const wardLocation = normalizeWardFilter(row.ward_location);
-          setWardLocations((prev) =>
-            prev.includes(wardLocation)
-              ? prev
-              : [...prev, wardLocation].sort((a, b) =>
-                  a.localeCompare(b),
-                ),
-          );
-        }
-      } catch (e) {
-        console.error("Error processing realtime pharmacy event:", e);
-      }
-    };
-
-    // Set up real-time subscription for updates
-    const channel = supabase
-      .channel("pharmacy-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pharmacy",
-        },
-        (payload) => {
-          handleRealtimeChange(payload);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
+
+  useRealtimeTable("pharmacy", loadData);
+  useRealtimeTable("departmental_pharmacy_indent", loadData);
 
   const handleView = (indent) => {
     setSelectedIndent(indent);
@@ -223,11 +137,11 @@ const StoreMedicinePage = () => {
   };
 
   const downloadSlip = (indent) => {
-    if (!indent.slip_image) return;
+    if (!indent.slipImage) return;
 
     const link = document.createElement("a");
-    link.download = `Medicine_Slip_${indent.indent_no || indent.id}.png`;
-    link.href = indent.slip_image;
+    link.download = `Medicine_Slip_${indent.indentNumber || indent.id}.png`;
+    link.href = indent.slipImage;
     link.click();
   };
 
@@ -241,7 +155,7 @@ const StoreMedicinePage = () => {
     try {
       // Update the pharmacy record with actual2 timestamp
       const { error } = await supabase
-        .from("pharmacy")
+        .from(indent.sourceTable)
         .update({
           actual2: new Date()
             .toLocaleString("en-CA", {
@@ -251,13 +165,13 @@ const StoreMedicinePage = () => {
             .replace(",", ""),
           // status: 'dispensed'
         })
-        .eq("id", indent.id);
+        .eq("id", indent.sourceId);
 
       if (error) throw error;
 
       // Show success message
       showNotification(
-        `Indent ${indent.indent_no || indent.id} confirmed successfully!`,
+        `Indent ${indent.indentNumber || indent.id} confirmed successfully!`,
         "success",
       );
       loadData();
@@ -298,35 +212,50 @@ const StoreMedicinePage = () => {
       // Search filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
-        const indentNo = indent.indent_no || `IND-${indent.id}`;
-        const normalizedWard = normalizeWardFilter(indent.ward_location);
+        const indentNo = indent.indentNumber || `IND-${indent.id}`;
+        const normalizedWard = normalizeWardFilter(indent.location || indent.wardLocation);
         const matchesSearch =
           indentNo.toLowerCase().includes(searchLower) ||
-          (indent.admission_number &&
-            indent.admission_number.toLowerCase().includes(searchLower)) ||
-          (indent.patient_name &&
-            indent.patient_name.toLowerCase().includes(searchLower)) ||
-          (indent.uhid_number &&
-            indent.uhid_number.toLowerCase().includes(searchLower)) ||
-          (indent.staff_name &&
-            indent.staff_name.toLowerCase().includes(searchLower)) ||
-          (indent.diagnosis &&
-            indent.diagnosis.toLowerCase().includes(searchLower)) ||
-          (indent.ward_location &&
-            indent.ward_location.toLowerCase().includes(searchLower)) ||
+          (indent.admissionNumber &&
+            indent.admissionNumber.toLowerCase().includes(searchLower)) ||
+          ((indent.displayTitle || indent.patientName) &&
+            (indent.displayTitle || indent.patientName)
+              .toLowerCase()
+              .includes(searchLower)) ||
+          (indent.uhidNumber &&
+            indent.uhidNumber.toLowerCase().includes(searchLower)) ||
+          ((indent.requestedBy || indent.staffName) &&
+            (indent.requestedBy || indent.staffName)
+              .toLowerCase()
+              .includes(searchLower)) ||
+          ((indent.remarks || indent.diagnosis) &&
+            (indent.remarks || indent.diagnosis)
+              .toLowerCase()
+              .includes(searchLower)) ||
+          ((indent.location || indent.wardLocation) &&
+            (indent.location || indent.wardLocation)
+              .toLowerCase()
+              .includes(searchLower)) ||
           normalizedWard.toLowerCase().includes(searchLower);
 
         if (!matchesSearch) return false;
       }
 
       // Filter by patient name
-      if (selectedPatient && indent.patient_name !== selectedPatient) {
+      if (
+        selectedPatient &&
+        (indent.displayTitle || indent.patientName) !== selectedPatient
+      ) {
         return false;
       }
 
       // Filter by ward
-      const normalizedWard = normalizeWardFilter(indent.ward_location);
+      const normalizedWard = normalizeWardFilter(indent.location || indent.wardLocation);
       if (selectedWard && normalizedWard !== selectedWard) {
+        return false;
+      }
+
+      if (indentTypeFilter !== "all" && indent.indentType !== indentTypeFilter) {
         return false;
       }
 
@@ -423,12 +352,22 @@ const StoreMedicinePage = () => {
                 onChange={(e) => setSelectedPatient(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[180px]"
               >
-                <option value="">All Patients</option>
+                <option value="">All Indents</option>
                 {patientNames.map((name, index) => (
                   <option key={index} value={name}>
                     {name}
                   </option>
                 ))}
+              </select>
+
+              <select
+                value={indentTypeFilter}
+                onChange={(e) => setIndentTypeFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[160px]"
+              >
+                <option value="all">All Types</option>
+                <option value="patient">Patient</option>
+                <option value="departmental">Departmental</option>
               </select>
 
               <select
@@ -453,13 +392,14 @@ const StoreMedicinePage = () => {
               />
 
               {/* Clear Filters Button */}
-              {(selectedPatient || selectedWard || selectedDate || searchTerm) && (
+              {(selectedPatient || selectedWard || selectedDate || searchTerm || indentTypeFilter !== "all") && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
                     setSelectedWard("");
                     setSelectedDate("");
                     setSearchTerm("");
+                    setIndentTypeFilter("all");
                   }}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
                 >
@@ -529,12 +469,22 @@ const StoreMedicinePage = () => {
                 onChange={(e) => setSelectedPatient(e.target.value)}
                 className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
               >
-                <option value="">All Patients</option>
+                <option value="">All Indents</option>
                 {patientNames.map((name, index) => (
                   <option key={index} value={name}>
                     {name}
                   </option>
                 ))}
+              </select>
+
+              <select
+                value={indentTypeFilter}
+                onChange={(e) => setIndentTypeFilter(e.target.value)}
+                className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
+              >
+                <option value="all">All Types</option>
+                <option value="patient">Patient</option>
+                <option value="departmental">Departmental</option>
               </select>
 
               <select
@@ -559,13 +509,14 @@ const StoreMedicinePage = () => {
               />
 
               {/* Clear Filters Button */}
-              {(selectedPatient || selectedWard || selectedDate || searchTerm) && (
+              {(selectedPatient || selectedWard || selectedDate || searchTerm || indentTypeFilter !== "all") && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
                     setSelectedWard("");
                     setSelectedDate("");
                     setSearchTerm("");
+                    setIndentTypeFilter("all");
                   }}
                   className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-xs sm:text-sm font-medium whitespace-nowrap"
                 >
@@ -631,22 +582,37 @@ const StoreMedicinePage = () => {
                           filteredPendingIndents.map((indent) => (
                             <tr key={indent.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3 text-sm font-medium text-green-700">
-                                {indent.indent_no || `IND-${indent.id}`}
+                                {indent.indentNumber || `IND-${indent.id}`}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.admission_number}
+                                {indent.indentType === "departmental"
+                                  ? indent.location || "-"
+                                  : indent.admissionNumber}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.patient_name}
+                                <div className="font-medium">{indent.displayTitle || indent.patientName}</div>
+                                <div className="mt-1">
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                    indent.indentType === "departmental"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-gray-100 text-gray-700"
+                                  }`}>
+                                    {indent.indentType === "departmental" ? "Departmental" : "Patient"}
+                                  </span>
+                                </div>
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.uhid_number}
+                                {indent.indentType === "departmental"
+                                  ? "-"
+                                  : indent.uhidNumber}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.staff_name}
+                                {indent.requestedBy || indent.staffName}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.diagnosis}
+                                {indent.indentType === "departmental"
+                                  ? indent.remarks || "-"
+                                  : indent.diagnosis}
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
@@ -675,7 +641,7 @@ const StoreMedicinePage = () => {
                                   >
                                     <Eye className="w-4 h-4" />
                                   </button>
-                                  {indent.slip_image && (
+                                  {indent.slipImage && (
                                     <button
                                       onClick={() => handleViewSlip(indent)}
                                       className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
@@ -727,10 +693,12 @@ const StoreMedicinePage = () => {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <p className="text-sm font-semibold text-green-700">
-                              {indent.indent_no || `IND-${indent.id}`}
+                              {indent.indentNumber || `IND-${indent.id}`}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {indent.admission_number}
+                              {indent.indentType === "departmental"
+                                ? indent.location || "Departmental"
+                                : indent.admissionNumber}
                             </p>
                           </div>
                           <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
@@ -742,25 +710,27 @@ const StoreMedicinePage = () => {
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Patient:</span>
                             <span className="font-medium">
-                              {indent.patient_name}
+                              {indent.displayTitle || indent.patientName}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">UHID:</span>
                             <span className="font-medium">
-                              {indent.uhid_number}
+                              {indent.indentType === "departmental" ? "-" : indent.uhidNumber}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Staff:</span>
                             <span className="font-medium">
-                              {indent.staff_name}
+                              {indent.requestedBy || indent.staffName}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Diagnosis:</span>
                             <span className="font-medium text-right">
-                              {indent.diagnosis}
+                              {indent.indentType === "departmental"
+                                ? indent.remarks || "-"
+                                : indent.diagnosis}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
@@ -789,7 +759,7 @@ const StoreMedicinePage = () => {
                             <Eye className="w-4 h-4" />
                             View
                           </button>
-                          {indent.slip_image && (
+                          {indent.slipImage && (
                             <button
                               onClick={() => handleViewSlip(indent)}
                               className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
@@ -868,22 +838,26 @@ const StoreMedicinePage = () => {
                           filteredHistoryIndents.map((indent) => (
                             <tr key={indent.id} className="hover:bg-gray-50">
                               <td className="px-4 py-3 text-sm font-medium text-green-700">
-                                {indent.indent_no || `IND-${indent.id}`}
+                                {indent.indentNumber || `IND-${indent.id}`}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.admission_number}
+                                {indent.indentType === "departmental"
+                                  ? indent.location || "-"
+                                  : indent.admissionNumber}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.patient_name}
+                                {indent.displayTitle || indent.patientName}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.uhid_number}
+                                {indent.indentType === "departmental" ? "-" : indent.uhidNumber}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.staff_name}
+                                {indent.requestedBy || indent.staffName}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                {indent.diagnosis}
+                                {indent.indentType === "departmental"
+                                  ? indent.remarks || "-"
+                                  : indent.diagnosis}
                               </td>
                               <td className="px-4 py-3 text-sm">
                                 <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
@@ -925,7 +899,7 @@ const StoreMedicinePage = () => {
                                   >
                                     <Eye className="w-4 h-4" />
                                   </button>
-                                  {indent.slip_image && (
+                                  {indent.slipImage && (
                                     <button
                                       onClick={() => handleViewSlip(indent)}
                                       className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
@@ -967,10 +941,12 @@ const StoreMedicinePage = () => {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <p className="text-sm font-semibold text-green-700">
-                              {indent.indent_no || `IND-${indent.id}`}
+                              {indent.indentNumber || `IND-${indent.id}`}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {indent.admission_number}
+                              {indent.indentType === "departmental"
+                                ? indent.location || "Departmental"
+                                : indent.admissionNumber}
                             </p>
                           </div>
                           <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
@@ -982,25 +958,27 @@ const StoreMedicinePage = () => {
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Patient:</span>
                             <span className="font-medium">
-                              {indent.patient_name}
+                              {indent.displayTitle || indent.patientName}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">UHID:</span>
                             <span className="font-medium">
-                              {indent.uhid_number}
+                              {indent.indentType === "departmental" ? "-" : indent.uhidNumber}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Staff:</span>
                             <span className="font-medium">
-                              {indent.staff_name}
+                              {indent.requestedBy || indent.staffName}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Diagnosis:</span>
                             <span className="font-medium text-right">
-                              {indent.diagnosis}
+                              {indent.indentType === "departmental"
+                                ? indent.remarks || "-"
+                                : indent.diagnosis}
                             </span>
                           </div>
                           <div className="flex justify-between text-sm">
@@ -1045,7 +1023,7 @@ const StoreMedicinePage = () => {
                             <Eye className="w-4 h-4" />
                             View
                           </button>
-                          {indent.slip_image && (
+                          {indent.slipImage && (
                             <button
                               onClick={() => handleViewSlip(indent)}
                               className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
@@ -1081,7 +1059,7 @@ const StoreMedicinePage = () => {
             <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
               <h2 className="text-xl font-bold">
                 Medicine Details -{" "}
-                {selectedIndent.indent_no || `IND-${selectedIndent.id}`}
+                {selectedIndent.indentNumber || `IND-${selectedIndent.id}`}
               </h2>
               <button
                 onClick={() => {
@@ -1104,22 +1082,42 @@ const StoreMedicinePage = () => {
                   <div>
                     <p className="text-sm text-gray-500">Indent Number</p>
                     <p className="font-medium">
-                      {selectedIndent.indent_no || `IND-${selectedIndent.id}`}
+                      {selectedIndent.indentNumber || `IND-${selectedIndent.id}`}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Admission Number</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Location"
+                        : "Admission Number"}
+                    </p>
                     <p className="font-medium">
-                      {selectedIndent.admission_number}
+                      {selectedIndent.indentType === "departmental"
+                        ? selectedIndent.location
+                        : selectedIndent.admissionNumber}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Patient Name</p>
-                    <p className="font-medium">{selectedIndent.patient_name}</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Indent Title"
+                        : "Patient Name"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.displayTitle || selectedIndent.patientName}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">UHID Number</p>
-                    <p className="font-medium">{selectedIndent.uhid_number}</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Requested By"
+                        : "UHID Number"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.indentType === "departmental"
+                        ? selectedIndent.requestedBy
+                        : selectedIndent.uhidNumber}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Age</p>
@@ -1140,22 +1138,36 @@ const StoreMedicinePage = () => {
                   <div>
                     <p className="text-sm text-gray-500">Ward Location</p>
                     <p className="font-medium">
-                      {selectedIndent.ward_location}
+                      {selectedIndent.location || selectedIndent.wardLocation}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Staff Name</p>
-                    <p className="font-medium">{selectedIndent.staff_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Consultant Name</p>
                     <p className="font-medium">
-                      {selectedIndent.consultant_name}
+                      {selectedIndent.requestedBy || selectedIndent.staffName}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Diagnosis</p>
-                    <p className="font-medium">{selectedIndent.diagnosis}</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Indent Type"
+                        : "Consultant Name"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Departmental"
+                        : selectedIndent.consultantName}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental" ? "Remarks" : "Diagnosis"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.indentType === "departmental"
+                        ? selectedIndent.remarks || "-"
+                        : selectedIndent.diagnosis}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1298,13 +1310,13 @@ const StoreMedicinePage = () => {
       )}
 
       {/* Slip View Modal */}
-      {slipModal && selectedIndent && selectedIndent.slip_image && (
+      {slipModal && selectedIndent && selectedIndent.slipImage && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-purple-600 text-white px-6 py-4 flex justify-between items-center">
               <h2 className="text-xl font-bold">
                 Medicine Slip -{" "}
-                {selectedIndent.indent_no || `IND-${selectedIndent.id}`}
+                {selectedIndent.indentNumber || `IND-${selectedIndent.id}`}
               </h2>
               <button
                 onClick={() => {
@@ -1320,7 +1332,7 @@ const StoreMedicinePage = () => {
             <div className="p-6">
               <div className="bg-gray-100 p-4 rounded-lg mb-4">
                 <img
-                  src={selectedIndent.slip_image}
+                  src={selectedIndent.slipImage}
                   alt="Medicine Slip"
                   className="w-full rounded border border-gray-300"
                 />

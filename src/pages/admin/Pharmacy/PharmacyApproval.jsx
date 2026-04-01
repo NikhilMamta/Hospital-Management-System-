@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import supabase from "../../../SupabaseClient"; // Adjust the path as needed
 import { useNotification } from "../../../contexts/NotificationContext";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import {
+  normalizeDepartmentalPharmacyIndent,
+  normalizePatientPharmacyIndent,
+  parseJsonField,
+} from "../../../utils/pharmacyIndentUtils";
 
 const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
   if (!text) return;
@@ -40,7 +46,13 @@ const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
 };
 
 // Custom Medicine Dropdown Component
-const MedicineDropdown = ({ medicine, onUpdate, index, loading, medicines }) => {
+const MedicineDropdown = ({
+  medicine,
+  onUpdate,
+  index,
+  loading,
+  medicines,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef(null);
@@ -162,16 +174,7 @@ const PharmacyApproval = () => {
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [patientNames, setPatientNames] = useState([]);
-
-  // Parse JSON fields from Supabase
-  const parseJsonField = (field) => {
-    try {
-      return field ? JSON.parse(field) : {};
-    } catch (error) {
-      console.error("Error parsing JSON field:", error);
-      return {};
-    }
-  };
+  const [indentTypeFilter, setIndentTypeFilter] = useState("all");
 
   // Show popup function (legacy - use showNotification)
   const showPopup = (message, type = "success") => {
@@ -271,90 +274,62 @@ const PharmacyApproval = () => {
     try {
       if (!silent) setLoading(true);
 
-      // Load pending indents (status = 'pending')
-      const { data: pendingData, error: pendingError } = await supabase
-        .from("pharmacy")
-        .select("*")
-        .not("planned1", "is", null)
-        .is("actual1", null)
-        .eq("status", "pending")
-        .order("timestamp", { ascending: false });
+      const [
+        { data: patientPending, error: patientPendingError },
+        { data: patientHistory, error: patientHistoryError },
+        { data: departmentPending, error: departmentPendingError },
+        { data: departmentHistory, error: departmentHistoryError },
+      ] = await Promise.all([
+        supabase
+          .from("pharmacy")
+          .select("*")
+          .not("planned1", "is", null)
+          .is("actual1", null)
+          .eq("status", "pending")
+          .order("timestamp", { ascending: false }),
+        supabase
+          .from("pharmacy")
+          .select("*")
+          .not("actual1", "is", null)
+          .not("planned1", "is", null)
+          .in("status", ["approved", "rejected"])
+          .order("actual1", { ascending: false }),
+        supabase
+          .from("departmental_pharmacy_indent")
+          .select("*")
+          .not("planned1", "is", null)
+          .is("actual1", null)
+          .eq("status", "pending")
+          .order("timestamp", { ascending: false }),
+        supabase
+          .from("departmental_pharmacy_indent")
+          .select("*")
+          .not("actual1", "is", null)
+          .not("planned1", "is", null)
+          .in("status", ["approved", "rejected"])
+          .order("actual1", { ascending: false }),
+      ]);
 
-      if (pendingError) throw pendingError;
+      if (patientPendingError) throw patientPendingError;
+      if (patientHistoryError) throw patientHistoryError;
+      if (departmentPendingError) throw departmentPendingError;
+      if (departmentHistoryError) throw departmentHistoryError;
 
-      const formattedPending = (pendingData || []).map((indent) => ({
-        id: indent.id,
-        indentNumber: indent.indent_no,
-        admissionNumber: indent.admission_number,
-        ipdNumber: indent.ipd_number,
-        staffName: indent.staff_name,
-        consultantName: indent.consultant_name,
-        patientName: indent.patient_name,
-        uhidNumber: indent.uhid_number,
-        age: indent.age,
-        gender: indent.gender,
-        wardLocation: indent.ward_location,
-        category: indent.category,
-        room: indent.room,
-        diagnosis: indent.diagnosis,
-        requestTypes: parseJsonField(indent.request_types),
-        medicines: parseJsonField(indent.medicines) || [],
-        investigations: parseJsonField(indent.investigations) || [],
-        investigationAdvice: parseJsonField(indent.investigation_advice),
-        timestamp: indent.timestamp,
-        status: indent.status,
-        planned1: indent.planned1, // Add planned1
-      }));
+      const formattedPending = [
+        ...(patientPending || []).map(normalizePatientPharmacyIndent),
+        ...(departmentPending || []).map(normalizeDepartmentalPharmacyIndent),
+      ].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+      const formattedHistory = [
+        ...(patientHistory || []).map(normalizePatientPharmacyIndent),
+        ...(departmentHistory || []).map(normalizeDepartmentalPharmacyIndent),
+      ].sort((a, b) => new Date(b.actual1 || 0) - new Date(a.actual1 || 0));
 
       setPendingIndents(formattedPending);
-
-      // Load history indents (status = 'approved' or 'rejected')
-      const { data: historyData, error: historyError } = await supabase
-        .from("pharmacy")
-        .select("*")
-        .not("actual1", "is", null)
-        .not("planned1", "is", null)
-        .in("status", ["approved", "rejected"])
-        .order("actual1", { ascending: false });
-
-      if (historyError) throw historyError;
-
-      const formattedHistory = (historyData || []).map((indent) => ({
-        id: indent.id,
-        indentNumber: indent.indent_no,
-        admissionNumber: indent.admission_number,
-        ipdNumber: indent.ipd_number,
-        staffName: indent.staff_name,
-        consultantName: indent.consultant_name,
-        patientName: indent.patient_name,
-        uhidNumber: indent.uhid_number,
-        age: indent.age,
-        gender: indent.gender,
-        wardLocation: indent.ward_location,
-        category: indent.category,
-        room: indent.room,
-        diagnosis: indent.diagnosis,
-        requestTypes: parseJsonField(indent.request_types),
-        medicines: parseJsonField(indent.medicines) || [],
-        investigations: parseJsonField(indent.investigations) || [],
-        investigationAdvice: parseJsonField(indent.investigation_advice),
-        timestamp: indent.timestamp,
-        status: indent.status,
-        slipImage: indent.slip_image,
-        slipImageUrl: indent.slip_image_url,
-        approvedAt: indent.approved_at,
-        rejectedAt: indent.rejected_at,
-        approvedBy: indent.approved_by,
-        updatedAt: indent.updated_at,
-        planned1: indent.planned1, // Add planned1
-        actual1: indent.actual1, // Add actual1
-      }));
-
       setHistoryIndents(formattedHistory);
 
-      // Extract unique patient names
       const allPatients = [...formattedPending, ...formattedHistory]
-        .map((r) => r.patientName)
+        .map((r) => r.displayTitle || r.patientName)
         .filter(Boolean);
       setPatientNames([...new Set(allPatients)].sort());
     } catch (error) {
@@ -370,121 +345,11 @@ const PharmacyApproval = () => {
     loadData();
     fetchInvestigationTests();
     fetchMedicines();
-
-    // Incrementally update state from a single realtime event
-    const handleRealtimeChange = (payload) => {
-      const { eventType, new: newRow, old: oldRow } = payload;
-
-      if (eventType === "DELETE") {
-        const id = oldRow?.id;
-        if (id) {
-          setPendingIndents((prev) => prev.filter((r) => r.id !== id));
-          setHistoryIndents((prev) => prev.filter((r) => r.id !== id));
-        }
-        return;
-      }
-
-      const row = newRow;
-      if (!row) return;
-
-      // Remove from both arrays first
-      setPendingIndents((prev) =>
-        prev.filter((r) => r.id !== parseInt(row.id)),
-      );
-      setHistoryIndents((prev) =>
-        prev.filter((r) => r.id !== parseInt(row.id)),
-      );
-
-      try {
-        const formatted = {
-          id: row.id,
-          indentNumber: row.indent_no,
-          admissionNumber: row.admission_number,
-          ipdNumber: row.ipd_number,
-          staffName: row.staff_name,
-          consultantName: row.consultant_name,
-          patientName: row.patient_name,
-          uhidNumber: row.uhid_number,
-          age: row.age,
-          gender: row.gender,
-          wardLocation: row.ward_location,
-          category: row.category,
-          room: row.room,
-          diagnosis: row.diagnosis,
-          requestTypes: parseJsonField(row.request_types),
-          medicines: parseJsonField(row.medicines) || [],
-          investigations: parseJsonField(row.investigations) || [],
-          investigationAdvice: parseJsonField(row.investigation_advice),
-          timestamp: row.timestamp,
-          status: row.status,
-          slipImage: row.slip_image,
-          slipImageUrl: row.slip_image_url,
-          approvedAt: row.approved_at,
-          rejectedAt: row.rejected_at,
-          approvedBy: row.approved_by,
-          updatedAt: row.updated_at,
-          planned1: row.planned1,
-          actual1: row.actual1,
-        };
-
-        // Pending: planned1 set, actual1 not set, status = pending
-        if (row.planned1 && !row.actual1 && row.status === "pending") {
-          setPendingIndents((prev) => [formatted, ...prev]);
-        }
-        // History: actual1 set, status is approved or rejected
-        else if (
-          row.actual1 &&
-          row.planned1 &&
-          (row.status === "approved" || row.status === "rejected")
-        ) {
-          setHistoryIndents((prev) => [formatted, ...prev]);
-        }
-
-        // Add patient name if new
-        if (formatted.patientName) {
-          setPatientNames((prev) =>
-            prev.includes(formatted.patientName)
-              ? prev
-              : [...prev, formatted.patientName].sort(),
-          );
-        }
-      } catch (e) {
-        console.error("Error processing realtime pharmacy approval event:", e);
-      }
-    };
-
-    const channel = supabase
-      .channel("pharmacy_approval_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pharmacy",
-        },
-        (payload) => {
-          handleRealtimeChange(payload);
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "medicine",
-        },
-        () => {
-          fetchMedicines();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
   }, []);
+
+  useRealtimeTable("pharmacy", loadData);
+  useRealtimeTable("departmental_pharmacy_indent", loadData);
+  useRealtimeTable("medicine", fetchMedicines);
 
   // Handle status dropdown change
   const handleStatusChange = (indentId, indentNumber, status) => {
@@ -543,7 +408,13 @@ const PharmacyApproval = () => {
       for (const [id, { status, indentNumber }] of Object.entries(
         statusChanges,
       )) {
-        const indent = pendingIndents.find((p) => p.id === parseInt(id));
+        const indent = pendingIndents.find((p) => String(p.id) === String(id));
+
+        if (!indent) {
+          console.warn(`Indent with ID ${id} not found in pending list.`);
+          continue;
+        }
+
         const updateData = {
           status: status.toLowerCase(),
           actual1: new Date()
@@ -567,26 +438,28 @@ const PharmacyApproval = () => {
           // Generate slip image
           const slipImageBase64 = generateSlipImage(indent);
 
-          // Then upload to storage and update with URL
-          try {
-            const slipImageUrl = await uploadSlipToStorage(
-              slipImageBase64,
-              indentNumber,
-            );
-            if (slipImageUrl) {
-              updateData.slip_image = slipImageUrl;
+          if (slipImageBase64) {
+            // Then upload to storage and update with URL
+            try {
+              const slipImageUrl = await uploadSlipToStorage(
+                slipImageBase64,
+                indentNumber,
+              );
+              if (slipImageUrl) {
+                updateData.slip_image = slipImageUrl;
+              }
+            } catch (uploadError) {
+              console.error("Failed to upload slip to storage:", uploadError);
+              // Continue even if storage upload fails
             }
-          } catch (uploadError) {
-            console.error("Failed to upload slip to storage:", uploadError);
-            // Continue even if storage upload fails
           }
         }
 
         // Update the database
         const { error } = await supabase
-          .from("pharmacy")
+          .from(indent.sourceTable)
           .update(updateData)
-          .eq("id", id);
+          .eq("id", indent.sourceId);
 
         if (error) {
           console.error(`Error updating indent ${id}:`, error);
@@ -667,45 +540,84 @@ const PharmacyApproval = () => {
     ctx.fillText("Request Type:", 520, y + 17);
     ctx.fillStyle = "#FF0000";
     ctx.font = "12px Arial";
-    let requestTypes = [];
-    if (indent.requestTypes.medicineSlip) requestTypes.push("Medicine Slip");
-    if (indent.requestTypes.investigation) requestTypes.push("Investigation");
-    if (indent.requestTypes.package) requestTypes.push("Package");
-    if (indent.requestTypes.nonPackage) requestTypes.push("Non-Package");
-    ctx.fillText(requestTypes.join(", "), 620, y + 17);
+    let requestTypesList = [];
+    if (indent.requestTypes?.medicineSlip) requestTypesList.push("Medicine Slip");
+    if (indent.requestTypes?.investigation) requestTypesList.push("Investigation");
+    ctx.fillText(requestTypesList.join(", "), 620, y + 17);
 
-    // Row 2: Patient Name, Age, Gender
+    const title =
+      indent.indentType === "departmental"
+        ? indent.displayTitle || indent.wardLocation || "Departmental Indent"
+        : indent.patientName;
+    const secondaryLabel =
+      indent.indentType === "departmental" ? "Requested By:" : "Age:";
+    const secondaryValue =
+      indent.indentType === "departmental"
+        ? indent.requestedBy || "-"
+        : indent.age?.toString() || "-";
+    const tertiaryLabel =
+      indent.indentType === "departmental" ? "" : "Gender:";
+    const tertiaryValue =
+      indent.indentType === "departmental"
+        ? ""
+        : indent.gender || "-";
+
+    // Row 2: Patient Name/Ward, Age-or-requester, Gender-or-room
     y += 25;
     ctx.strokeRect(10, y, 830, 25);
     ctx.fillStyle = "#000000";
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Patient Name:", 20, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental" ? "Ward Name:" : "Patient Name:",
+      20,
+      y + 17,
+    );
     ctx.font = "12px Arial";
-    ctx.fillText(indent.patientName.toUpperCase(), 110, y + 17);
+    ctx.fillText(String(title || "-").toUpperCase(), 110, y + 17);
 
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Age:", 480, y + 17);
+    ctx.fillText(secondaryLabel, 480, y + 17);
     ctx.font = "12px Arial";
-    ctx.fillText(indent.age.toString(), 510, y + 17);
+    ctx.fillText(secondaryValue, 575, y + 17);
 
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Gender:", 620, y + 17);
+    ctx.fillText(tertiaryLabel, 620, y + 17);
     ctx.font = "12px Arial";
-    ctx.fillText(indent.gender, 675, y + 17);
+    ctx.fillText(tertiaryValue, 675, y + 17);
 
-    // Row 3: UHID, Diagnosis, Ward Type
+    // Row 3: UHID/Category, Diagnosis/Remarks, Ward Type
     y += 25;
     ctx.strokeRect(10, y, 830, 25);
     ctx.font = "bold 12px Arial";
-    ctx.fillText("UHID No:", 20, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental" ? "" : "UHID No:",
+      20,
+      y + 17,
+    );
     ctx.font = "12px Arial";
-    ctx.fillText(indent.uhidNumber, 75, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental"
+        ? ""
+        : indent.uhidNumber || "-",
+      95,
+      y + 17,
+    );
 
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Diagnosis:", 250, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental" ? "Remarks:" : "Diagnosis:",
+      250,
+      y + 17,
+    );
     ctx.fillStyle = "#FF0000";
     ctx.font = "12px Arial";
-    ctx.fillText(indent.diagnosis, 325, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental"
+        ? indent.remarks || "-"
+        : indent.diagnosis || "-",
+      325,
+      y + 17,
+    );
 
     ctx.fillStyle = "#000000";
     ctx.font = "bold 12px Arial";
@@ -713,23 +625,35 @@ const PharmacyApproval = () => {
     ctx.font = "12px Arial";
     drawWrappedText(ctx, indent.wardLocation || "-", 670, y + 15, 160, 12);
 
-    // Row 4: Consultant, Nursing Staff, Category
+    // Row 4: Consultant/Floor, Nursing Staff, Category
     y += 25;
     ctx.strokeRect(10, y, 830, 25);
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Consultant Name:", 20, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental" ? "" : "Consultant Name:",
+      20,
+      y + 17,
+    );
     ctx.font = "12px Arial";
-    ctx.fillText(indent.consultantName, 135, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental"
+        ? ""
+        : indent.consultantName || "-",
+      135,
+      y + 17,
+    );
 
     ctx.font = "bold 12px Arial";
-    ctx.fillText("Nursing Staff:", 380, y + 17);
+    ctx.fillText(indent.indentType === "departmental" ? "Staff:" : "Nursing Staff:", 380, y + 17);
     ctx.font = "12px Arial";
-    ctx.fillText(indent.staffName, 470, y + 17);
+    ctx.fillText(indent.staffName || "-", 470, y + 17);
 
-    ctx.font = "bold 12px Arial";
-    ctx.fillText("Category:", 600, y + 17);
-    ctx.font = "12px Arial";
-    drawWrappedText(ctx, indent.category || "-", 670, y + 15, 160, 12);
+    if (indent.indentType !== "departmental") {
+      ctx.font = "bold 12px Arial";
+      ctx.fillText("Category:", 600, y + 17);
+      ctx.font = "12px Arial";
+      drawWrappedText(ctx, indent.category || "-", 670, y + 15, 160, 12);
+    }
 
     y += 25;
 
@@ -1042,7 +966,7 @@ const PharmacyApproval = () => {
   };
 
   const handleSaveEdit = async () => {
-    if (!editFormData.diagnosis) {
+    if (editFormData.indentType !== "departmental" && !editFormData.diagnosis) {
       showPopup("Please enter Diagnosis", "warning");
       return;
     }
@@ -1067,16 +991,20 @@ const PharmacyApproval = () => {
       setLoading(true);
 
       const updateData = {
-        diagnosis: editFormData.diagnosis,
         medicines: JSON.stringify(editFormData.medicines),
         investigation_advice: JSON.stringify(editFormData.investigationAdvice),
-        // updated_at: new Date().toISOString()
       };
 
+      if (editFormData.indentType === "departmental") {
+        updateData.remarks = editFormData.remarks || "";
+      } else {
+        updateData.diagnosis = editFormData.diagnosis;
+      }
+
       const { error } = await supabase
-        .from("pharmacy")
+        .from(editFormData.sourceTable)
         .update(updateData)
-        .eq("id", editFormData.id);
+        .eq("id", editFormData.sourceId);
 
       if (error) throw error;
 
@@ -1126,15 +1054,17 @@ const PharmacyApproval = () => {
   const applyFilters = (records) => {
     return records.filter((record) => {
       const matchesPatient = selectedPatient
-        ? record.patientName === selectedPatient
+        ? (record.displayTitle || record.patientName) === selectedPatient
         : true;
+      const matchesIndentType =
+        indentTypeFilter === "all" || record.indentType === indentTypeFilter;
       let matchesDate = true;
       if (selectedDate && record.planned1) {
         const recordDate = new Date(record.planned1).toLocaleDateString();
         const filterDate = new Date(selectedDate).toLocaleDateString();
         matchesDate = recordDate === filterDate;
       }
-      return matchesPatient && matchesDate;
+      return matchesPatient && matchesDate && matchesIndentType;
     });
   };
 
@@ -1211,12 +1141,22 @@ const PharmacyApproval = () => {
                 onChange={(e) => setSelectedPatient(e.target.value)}
                 className="flex-1 lg:flex-none px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
               >
-                <option value="">All Patients</option>
+                <option value="">All Indents</option>
                 {patientNames.map((name, index) => (
                   <option key={index} value={name}>
                     {name}
                   </option>
                 ))}
+              </select>
+
+              <select
+                value={indentTypeFilter}
+                onChange={(e) => setIndentTypeFilter(e.target.value)}
+                className="flex-1 lg:flex-none px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              >
+                <option value="all">All Types</option>
+                <option value="patient">Patient</option>
+                <option value="departmental">Departmental</option>
               </select>
 
               <input
@@ -1226,11 +1166,14 @@ const PharmacyApproval = () => {
                 className="flex-1 lg:flex-none px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
               />
 
-              {(selectedPatient || selectedDate) && (
+              {(selectedPatient ||
+                selectedDate ||
+                indentTypeFilter !== "all") && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
                     setSelectedDate("");
+                    setIndentTypeFilter("all");
                   }}
                   className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors"
                 >
@@ -1271,10 +1214,10 @@ const PharmacyApproval = () => {
                         Indent No
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
-                        Admission No
+                        Target / Admission
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
-                        Patient Name
+                        Indent Title
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         UHID
@@ -1343,10 +1286,27 @@ const PharmacyApproval = () => {
                             {indent.indentNumber}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {indent.admissionNumber}
+                            {indent.indentType === "departmental"
+                              ? indent.location || "-"
+                              : indent.admissionNumber}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {indent.patientName}
+                            <div className="font-medium">
+                              {indent.displayTitle || indent.patientName}
+                            </div>
+                            <div className="mt-1">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                  indent.indentType === "departmental"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}
+                              >
+                                {indent.indentType === "departmental"
+                                  ? "Departmental"
+                                  : "Patient"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-sm">
                             {indent.uhidNumber}
@@ -1355,7 +1315,9 @@ const PharmacyApproval = () => {
                             {indent.staffName}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {indent.diagnosis}
+                            {indent.indentType === "departmental"
+                              ? indent.remarks || "-"
+                              : indent.diagnosis}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <div className="flex flex-wrap gap-1">
@@ -1467,7 +1429,9 @@ const PharmacyApproval = () => {
                               {indent.indentNumber}
                             </span>
                             <p className="text-xs text-gray-500 mt-0.5">
-                              {indent.admissionNumber}
+                              {indent.indentType === "departmental"
+                                ? indent.location || "Departmental"
+                                : indent.admissionNumber}
                             </p>
                           </div>
                         </div>
@@ -1491,15 +1455,17 @@ const PharmacyApproval = () => {
 
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Patient:</span>
+                          <span className="text-gray-600">Title:</span>
                           <span className="font-medium text-gray-900">
-                            {indent.patientName}
+                            {indent.displayTitle || indent.patientName}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Diagnosis:</span>
                           <span className="font-medium text-gray-900 text-right truncate max-w-[150px]">
-                            {indent.diagnosis}
+                            {indent.indentType === "departmental"
+                              ? indent.remarks || "-"
+                              : indent.diagnosis}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -1585,10 +1551,10 @@ const PharmacyApproval = () => {
                         Indent No
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
-                        Admission No
+                        Target / Admission
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
-                        Patient Name
+                        Indent Title
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         UHID
@@ -1624,10 +1590,27 @@ const PharmacyApproval = () => {
                             {indent.indentNumber}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {indent.admissionNumber}
+                            {indent.indentType === "departmental"
+                              ? indent.location || "-"
+                              : indent.admissionNumber}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {indent.patientName}
+                            <div className="font-medium">
+                              {indent.displayTitle || indent.patientName}
+                            </div>
+                            <div className="mt-1">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                  indent.indentType === "departmental"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}
+                              >
+                                {indent.indentType === "departmental"
+                                  ? "Departmental"
+                                  : "Patient"}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-sm">
                             {indent.uhidNumber}
@@ -1636,7 +1619,9 @@ const PharmacyApproval = () => {
                             {indent.staffName}
                           </td>
                           <td className="px-6 py-4 text-sm">
-                            {indent.diagnosis}
+                            {indent.indentType === "departmental"
+                              ? indent.remarks || "-"
+                              : indent.diagnosis}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <div className="flex flex-wrap gap-1">
@@ -1894,30 +1879,67 @@ const PharmacyApproval = () => {
                 </h3>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                   <div>
-                    <p className="text-sm text-gray-500">Admission Number</p>
+                    <p className="text-sm text-gray-500">
+                      {editFormData.indentType === "departmental"
+                        ? "Location"
+                        : "Admission Number"}
+                    </p>
                     <p className="font-medium">
-                      {editFormData.admissionNumber}
+                      {editFormData.indentType === "departmental"
+                        ? editFormData.location
+                        : editFormData.admissionNumber}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Patient Name</p>
-                    <p className="font-medium">{editFormData.patientName}</p>
+                    <p className="text-sm text-gray-500">
+                      {editFormData.indentType === "departmental"
+                        ? "Indent Title"
+                        : "Patient Name"}
+                    </p>
+                    <p className="font-medium">
+                      {editFormData.displayTitle || editFormData.patientName}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">UHID Number</p>
-                    <p className="font-medium">{editFormData.uhidNumber}</p>
+                    <p className="text-sm text-gray-500">
+                      {editFormData.indentType === "departmental"
+                        ? "Requested By"
+                        : "UHID Number"}
+                    </p>
+                    <p className="font-medium">
+                      {editFormData.indentType === "departmental"
+                        ? editFormData.requestedBy
+                        : editFormData.uhidNumber}
+                    </p>
                   </div>
                   <div>
                     <label className="block mb-1 text-sm font-medium text-gray-700">
-                      Diagnosis <span className="text-red-500">*</span>
+                      {editFormData.indentType === "departmental"
+                        ? "Remarks"
+                        : "Diagnosis"}
+                      {editFormData.indentType !== "departmental" && (
+                        <span className="text-red-500"> *</span>
+                      )}
                     </label>
                     <input
                       type="text"
-                      name="diagnosis"
-                      value={editFormData.diagnosis}
+                      name={
+                        editFormData.indentType === "departmental"
+                          ? "remarks"
+                          : "diagnosis"
+                      }
+                      value={
+                        editFormData.indentType === "departmental"
+                          ? editFormData.remarks || ""
+                          : editFormData.diagnosis
+                      }
                       onChange={handleEditInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter diagnosis"
+                      placeholder={
+                        editFormData.indentType === "departmental"
+                          ? "Enter remarks"
+                          : "Enter diagnosis"
+                      }
                       disabled={loading}
                     />
                   </div>
@@ -2256,18 +2278,39 @@ const PharmacyApproval = () => {
                 </h3>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                   <div>
-                    <p className="text-sm text-gray-500">Admission Number</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Location"
+                        : "Admission Number"}
+                    </p>
                     <p className="font-medium">
-                      {selectedIndent.admissionNumber}
+                      {selectedIndent.indentType === "departmental"
+                        ? selectedIndent.location
+                        : selectedIndent.admissionNumber}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Patient Name</p>
-                    <p className="font-medium">{selectedIndent.patientName}</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Indent Title"
+                        : "Patient Name"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.displayTitle ||
+                        selectedIndent.patientName}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">UHID Number</p>
-                    <p className="font-medium">{selectedIndent.uhidNumber}</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Requested By"
+                        : "UHID Number"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.indentType === "departmental"
+                        ? selectedIndent.requestedBy
+                        : selectedIndent.uhidNumber}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Age</p>
@@ -2300,8 +2343,16 @@ const PharmacyApproval = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Diagnosis</p>
-                    <p className="font-medium">{selectedIndent.diagnosis}</p>
+                    <p className="text-sm text-gray-500">
+                      {selectedIndent.indentType === "departmental"
+                        ? "Remarks"
+                        : "Diagnosis"}
+                    </p>
+                    <p className="font-medium">
+                      {selectedIndent.indentType === "departmental"
+                        ? selectedIndent.remarks || "-"
+                        : selectedIndent.diagnosis}
+                    </p>
                   </div>
                 </div>
               </div>

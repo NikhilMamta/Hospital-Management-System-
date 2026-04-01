@@ -19,6 +19,7 @@ import AdminLayout from "./layouts/AdminLayout";
 import NotFound from "./pages/NotFound";
 import Pathology from "./pages/admin/Lab/Pathology";
 import PharmacyIndent from "./pages/admin/Pharmacy/PharmacyIndent";
+import DepartmentalIndent from "./pages/admin/Pharmacy/DepartmentalIndent";
 import PharmacyApproval from "./pages/admin/Pharmacy/PharmacyApproval";
 import PharmacyStore from "./pages/admin/Pharmacy/PharmacyStore";
 import PharmacyWorkflowDashboard from "./pages/admin/Pharmacy/PharmacyWorkflowDashboard";
@@ -484,6 +485,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="pharmacy-indent">
                 <PharmacyIndent />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="pharmacy/departmental-indent"
+            element={
+              <ProtectedRoute requiredPage="pharmacy-departmental-indent">
+                <DepartmentalIndent />
               </ProtectedRoute>
             }
           />
