@@ -35,7 +35,7 @@ const RMOCompleteDetail = ({ nurseName, onClose }) => {
 
             const { data: tasksData, error } = await supabase
                 .from('rmo_assign_task')
-                .select('*')
+                .select('id, task_no, planned1, actual1, patient_name, patient_location, bed_no, shift, task, start_date, reminder, ward_type, room, Ipd_number')
                 .eq('assign_rmo', nurseName)
                 .order('timestamp', { ascending: false });
 

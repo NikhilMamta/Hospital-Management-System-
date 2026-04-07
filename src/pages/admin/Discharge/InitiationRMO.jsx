@@ -68,7 +68,7 @@ const InitiationByRMO = () => {
       // Fetch patients where planned1 is not null AND actual1 is null
       const { data, error } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned1, actual1, remark, discharge_number, rmo_status, rmo_name, summary_report_image, summary_report_image_name')
         .not('planned1', 'is', null)
         .is('actual1', null)
         .order('planned1', { ascending: true });
@@ -113,7 +113,7 @@ const InitiationByRMO = () => {
       // AND also has RMO initiation data (rmo_name is not null)
       const { data, error } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned1, actual1, delay1, remark, discharge_number, rmo_status, rmo_name, summary_report_image, summary_report_image_name, rmo_initiation_date')
         .not('planned1', 'is', null)
         .not('actual1', 'is', null)
         .not('rmo_name', 'is', null) // Only show patients with RMO initiation

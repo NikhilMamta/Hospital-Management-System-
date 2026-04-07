@@ -27,7 +27,7 @@ const OtStaffAssign = () => {
   const fetchPendingData = async () => {
     const { data, error } = await supabase
       .from('ot_information')
-      .select('*')
+      .select('id, ot_number, ipd_number, patient_name, patient_location, ward_type, room, bed_no, ot_date, ot_time, doctor, rmo, ot_description, ot_staff, planned2')
       .not('planned2', 'is', null)
       .is('actual3', null)
       .order('planned2', { ascending: true });
@@ -43,7 +43,7 @@ const OtStaffAssign = () => {
   const fetchHistoryData = async () => {
     const { data, error } = await supabase
       .from('nurse_assign_task')
-      .select('*')
+      .select('id, ot_number, Ipd_number, patient_name, patient_location, ward_type, room, bed_no, shift, assign_nurse, reminder, start_date, task, planned1, actual1, timestamp, staff')
       .eq('staff', 'OT Staff')
       .order('timestamp', { ascending: false });
 

@@ -403,8 +403,9 @@ const PatientCareDashboard = () => {
 
       const { data, error } = await supabase
         .from("nurse_assign_task")
-        .select("*")
-        .order("timestamp", { ascending: false });
+        .select("id, Ipd_number, patient_name, bed_no, ward_type, room, patient_location, task, assign_nurse, planned1, actual1, timestamp")
+        .order("timestamp", { ascending: false })
+        .limit(1000);
 
       if (error) throw error;
       setRawTasks(data || []);

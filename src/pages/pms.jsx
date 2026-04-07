@@ -118,7 +118,7 @@ const PMS = () => {
 
             const { data, error: fetchError } = await supabase
                 .from('ipd_admissions')
-                .select('*')
+                .select('id, patient_name, ipd_number, age, gender, admission_no, department, bed_no, ward_type, bed_location, planned1, timestamp')
                 .is('actual1', null)
                 .not('planned1', 'is', null)
                 .order('timestamp', { ascending: false });
@@ -294,7 +294,7 @@ const PMS = () => {
 
             const { data: rmoTasksData, error: rmoError } = await supabase
                 .from('pre_defined_task')
-                .select('*')
+                .select('id, task, staff, ot_task')
                 .eq('staff', 'rmo')
                 .eq('ot_task', 'normal');
 
@@ -320,7 +320,7 @@ const PMS = () => {
             console.log('Fetching regular nurse tasks...');
             const { data: normalNurseTasksData, error: normalNurseError } = await supabase
                 .from('pre_defined_task')
-                .select('*')
+                .select('id, task, staff, ot_task')
                 .eq('staff', 'nurse')
                 .eq('ot_task', 'normal');
 
@@ -335,7 +335,7 @@ const PMS = () => {
                 console.log('Fetching pre-OT nurse tasks...');
                 const { data: preOTNurseTasksData, error: preOTError } = await supabase
                     .from('pre_defined_task')
-                    .select('*')
+                    .select('id, task, staff, ot_task')
                     .eq('staff', 'nurse')
                     .eq('ot_task', 'pre OT');
 
@@ -350,7 +350,7 @@ const PMS = () => {
                 console.log('Fetching post-OT nurse tasks...');
                 const { data: postOTNurseTasksData, error: postOTError } = await supabase
                     .from('pre_defined_task')
-                    .select('*')
+                    .select('id, task, staff, ot_task')
                     .eq('staff', 'nurse')
                     .eq('ot_task', 'post OT');
 
@@ -366,7 +366,7 @@ const PMS = () => {
                 console.log('Fetching discharge nurse tasks...');
                 const { data: dischargeNurseTasksData, error: dischargeError } = await supabase
                     .from('pre_defined_task')
-                    .select('*')
+                    .select('id, task, staff, ot_task')
                     .eq('staff', 'nurse')
                     .eq('ot_task', 'discharge');
 

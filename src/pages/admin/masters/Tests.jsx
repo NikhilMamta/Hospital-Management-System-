@@ -34,7 +34,7 @@ const Tests = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('investigation')
-        .select('*')
+        .select('id, type, name, price')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;

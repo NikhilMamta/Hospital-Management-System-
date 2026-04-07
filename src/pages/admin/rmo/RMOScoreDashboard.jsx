@@ -67,7 +67,7 @@ const RMOScoreDashboard = () => {
 
                 supabase
                     .from('rmo_assign_task')
-                    .select('*')
+                    .select('id, assign_rmo, shift, planned1, actual1')
                     .not('assign_rmo', 'is', null)
                     .neq('assign_rmo', '')
             ]);

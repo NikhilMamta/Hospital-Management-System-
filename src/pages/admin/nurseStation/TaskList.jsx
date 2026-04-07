@@ -689,11 +689,6 @@ const TaskList = () => {
     loadPredefinedTasks();
     loadAvailableNurses();
 
-    // Refresh every 2 minutes without showing loading spinner
-    refreshIntervalRef.current = setInterval(() => {
-      loadTasks(false);
-    }, 120000);
-
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);

@@ -48,7 +48,7 @@ const ConcernDepartment = () => {
       // - actual3 is null (concern department not completed yet)
       const { data, error } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_name, staff_name, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, work_file, planned2, planned3, actual3, delay3, remark')
         .not('planned3', 'is', null)
         .is('actual3', null)
         .order('planned3', { ascending: true });
@@ -108,7 +108,7 @@ const ConcernDepartment = () => {
       // - planned3 is not null AND actual3 is not null (concern department completed)
       const { data, error } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_name, staff_name, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, work_file, planned2, concern_dept, actual3, planned3, delay3')
         .not('planned3', 'is', null)
         .not('actual3', 'is', null)
         .order('actual3', { ascending: false });

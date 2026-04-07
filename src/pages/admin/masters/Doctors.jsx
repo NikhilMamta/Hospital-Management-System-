@@ -27,7 +27,7 @@ const Doctors = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('doctors')
-        .select('*')
+        .select('id, name, phone_number, email, designation, department')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;

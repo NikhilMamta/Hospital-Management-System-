@@ -731,7 +731,8 @@ const RMOTaskList = () => {
 
             let query = supabase
                 .from('rmo_assign_task')
-                .select('*');
+                .select('id, task_no, ipd_number, patient_name, patient_location, ward_type, room, bed_no, shift, assign_rmo, reminder, start_date, task, planned1, actual1, ot_information, status, submitted_by, timestamp')
+                .limit(1000);
 
             // Apply role-based filtering
             if (userRole && userRole.toLowerCase().includes('rmo') && userName) {
@@ -1036,11 +1037,6 @@ const RMOTaskList = () => {
         loadTasks();
         loadPredefinedTasks();
         loadAvailableRmos();
-
-        // Refresh every 2 minutes instead of 30 seconds
-        refreshIntervalRef.current = setInterval(() => {
-            loadTasks();
-        }, 120000);
 
         return () => {
             if (refreshIntervalRef.current) {

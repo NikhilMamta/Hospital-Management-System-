@@ -285,7 +285,7 @@ export default function PatientProfileDetails() {
       // If no state, fetch from Supabase
       const { data: supabaseData, error: supabaseError } = await supabase
         .from('ipd_admissions')
-        .select('*')
+        .select('id, patient_name, ipd_number, age, gender, mobile_number, house_street, area_colony, city, state, pincode, consultant_dr, primary_doctor, refer_by_dr, allergies, kin_name, kin_mobile, kin_relation, admission_date, timestamp, admission_type, patient_case, admission_mode, medical_surgical, reason_for_admission, admission_purpose, status, department, ward, bed_location, location_status, bed_number, bed_no, room, ward_type, bed_status, specialty, total_billed_amount, advance_amount, outstanding_amount, payment_mode, pat_category, insurance_company')
         .eq('id', id)
         .single();
 

@@ -47,7 +47,7 @@ const DischargePatient = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, discharge_number, admission_no, patient_name, department, consultant_name, staff_name, timestamp, remark')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
@@ -63,7 +63,7 @@ const DischargePatient = () => {
     try {
       const { data, error } = await supabase
         .from('ipd_admissions')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_dr, ipd_number')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;

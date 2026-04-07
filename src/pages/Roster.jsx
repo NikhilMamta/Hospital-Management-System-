@@ -144,7 +144,7 @@ const Roster = () => {
       // Fetch leave records (unconditional as requested)
       const { data: leaveData, error: leaveError } = await supabase
         .from("leave")
-        .select("*")
+        .select("id, staff_name, staff_type, created_at, leave_date")
         .order("created_at", { ascending: false });
 
       if (leaveError) throw leaveError;
@@ -456,7 +456,7 @@ const Roster = () => {
       // Fetching 30 rows (approx 10 sets of 3 shifts) should be sufficient
       const { data: rosterData, error: rosterError } = await supabase
         .from("roster")
-        .select("*")
+        .select("id, shift, male_general_ward, female_general_ward, icu, hdu, private_ward, nicu, picu, start_date, timestamp, general_ward_5th_floor")
         .order("timestamp", { ascending: false })
         .limit(30);
 
@@ -602,7 +602,7 @@ const Roster = () => {
       setDateRosterLoading(true);
       const { data, error } = await supabase
         .from("roster")
-        .select("*")
+        .select("id, shift, male_general_ward, female_general_ward, icu, hdu, private_ward, nicu, picu, start_date, timestamp, general_ward_5th_floor")
         .eq("start_date", dateStr)
         .order("timestamp", { ascending: false });
 
@@ -699,7 +699,7 @@ const Roster = () => {
       // Fetch all staff at once with their designations
       const { data: allStaff, error: fetchError } = await supabase
         .from("all_staff")
-        .select("*")
+        .select("id, name, designation")
         .order("name");
 
       if (fetchError) throw fetchError;

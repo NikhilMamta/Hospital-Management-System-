@@ -23,7 +23,7 @@ const ConcernAuthority = () => {
       // Fetch pending records (planned4 is not null and actual4 is null)
       const { data: pendingData, error: pendingError } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned4, actual4, rmo_name, summary_report_image, concern_dept, work_file, rmo_status, concern_authority_work_file, delay4')
         .not('planned4', 'is', null)
         .is('actual4', null)
         .order('planned4', { ascending: true });
@@ -43,7 +43,7 @@ const ConcernAuthority = () => {
       // Fetch history records (both planned4 and actual4 are not null)
       const { data: historyData, error: historyError } = await supabase
         .from('discharge')
-        .select('*')
+        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned4, actual4, rmo_name, summary_report_image, concern_dept, work_file, rmo_status, concern_authority_work_file, delay4')
         .not('planned4', 'is', null)
         .not('actual4', 'is', null)
         .order('actual4', { ascending: false });
