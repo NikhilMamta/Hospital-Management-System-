@@ -408,7 +408,7 @@ const InitiationByRMO = () => {
 
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [filteredPending.length, filteredHistory.length]);
+  }, [filteredPending.length, filteredHistory.length, activeTab]);
 
   useEffect(() => {
     setVisibleCount(10);
@@ -494,9 +494,9 @@ const InitiationByRMO = () => {
 
       {/* Pending Section */}
       {activeTab === 'pending' && (
-        <div>
+        <div id="scroll-container" className="overflow-y-auto max-h-[calc(100vh-250px)]">
           {/* Desktop Table */}
-          <div className="hidden overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
+          <div className="hidden bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-green-600 text-white">
                 <tr>
@@ -556,7 +556,7 @@ const InitiationByRMO = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div id="scroll-container" className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
             <div className="text-center text-[10px] text-gray-300 mb-2 md:hidden">
               ↓ Pull to refresh
             </div>
@@ -627,9 +627,9 @@ const InitiationByRMO = () => {
 
       {/* History Section */}
       {activeTab === 'history' && (
-        <div>
+        <div id="scroll-container" className="overflow-y-auto max-h-[calc(100vh-250px)]">
           {/* Desktop Table */}
-          <div className="hidden overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
+          <div className="hidden bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-green-600 text-white">
                 <tr>
@@ -708,7 +708,7 @@ const InitiationByRMO = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div id="scroll-container-history" className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+          <div id="scroll-container-history" className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
             <div className="text-center text-[10px] text-gray-300 mb-2 md:hidden">
               ↓ Pull to refresh
             </div>
