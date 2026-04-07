@@ -13,6 +13,8 @@ import {
   Bed,
   Layers,
   ShieldCheck,
+  Square,
+  CheckSquare,
 } from "lucide-react";
 import supabase from "../../SupabaseClient";
 import { useNotification } from "../../contexts/NotificationContext";
@@ -46,7 +48,7 @@ const ShiftHandover = () => {
   const [processing, setProcessing] = useState(false);
 
   // Patient selection
-  const [selectedPatientId, setSelectedPatientId] = useState(""); // This will be Ipd_number
+  const [selectedPatientIds, setSelectedPatientIds] = useState([]); // Array of Ipd_numbers
 
   // Load nurses from all_staff
   useEffect(() => {
@@ -129,6 +131,7 @@ const ShiftHandover = () => {
 
   useEffect(() => {
     fetchShiftData();
+    setSelectedPatientIds([]); // Reset selection when shift data is refreshed
   }, [fetchShiftData]);
 
   // Derived patient data
@@ -159,13 +162,31 @@ const ShiftHandover = () => {
     );
   }, [rawRecords]);
 
-  const selectedPatient = useMemo(() => {
-    return patientMap.find(p => p.ipdNumber === selectedPatientId);
-  }, [patientMap, selectedPatientId]);
+  const selectedPatients = useMemo(() => {
+    return patientMap.filter(p => selectedPatientIds.includes(p.ipdNumber));
+  }, [patientMap, selectedPatientIds]);
+
+  const togglePatient = (ipdNumber) => {
+    setSelectedPatientIds(prev => 
+      prev.includes(ipdNumber) 
+        ? prev.filter(id => id !== ipdNumber) 
+        : [...prev, ipdNumber]
+    );
+  };
+
+  const isAllSelected = patientMap.length > 0 && selectedPatientIds.length === patientMap.length;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedPatientIds([]);
+    } else {
+      setSelectedPatientIds(patientMap.map(p => p.ipdNumber));
+    }
+  };
 
   // Handle Handover
   const handleHandover = async () => {
-    if (!fromNurse || !selectedShift || !selectedPatientId || !toNurse) {
+    if (!fromNurse || !selectedShift || selectedPatientIds.length === 0 || !toNurse) {
       showNotification("Please complete all selections", "error");
       return;
     }
@@ -180,32 +201,26 @@ const ShiftHandover = () => {
 
       const normalizedFromNurse = fromNurse.trim();
       const normalizedToNurse = toNurse.trim();
-      const pendingTasks = selectedPatient.tasks.filter(t => !t.actual1);
+      
+      const allPendingTaskIds = [];
+      const newMonitoringRecords = [];
+      const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
+      const startDate = new Date().toISOString().split("T")[0];
 
-      // Workflow 1: If pending tasks exist, reassign them
-      if (pendingTasks.length > 0) {
-        const taskIds = pendingTasks.map(t => t.id);
-        const { error } = await supabase
-          .from("nurse_assign_task")
-          .update({
-            assign_nurse: normalizedToNurse,
-            delegated_from: normalizedFromNurse,
-          })
-          .in("id", taskIds);
-
-        if (error) throw error;
-      }
-
-      // Workflow 2: If no pending tasks exist, OR we want to ensure profile access
-      // we create a specialized "Monitoring" task record for the new nurse
-      if (pendingTasks.length === 0) {
-        // Find latest record to copy details
-        const latest = selectedPatient.tasks[0];
-        const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
-
-        const { error: insertError } = await supabase
-          .from("nurse_assign_task")
-          .insert([{
+      selectedPatients.forEach(patient => {
+        const pendingTasks = patient.tasks.filter(t => !t.actual1);
+        
+        // Workflow 1: If pending tasks exist, collect them for reassignment
+        if (pendingTasks.length > 0) {
+          allPendingTaskIds.push(...pendingTasks.map(t => t.id));
+        } 
+        
+        // Workflow 2: If no pending tasks exist, OR even if they do, we create a monitoring record
+        // Current logic says IF pendingTasks.length === 0, create monitoring. 
+        // Let's stick to existing logic but applied to all.
+        if (pendingTasks.length === 0) {
+          const latest = patient.tasks[0];
+          newMonitoringRecords.push({
             timestamp: now,
             planned1: now,
             actual1: null, // Pending status
@@ -220,18 +235,45 @@ const ShiftHandover = () => {
             delegated_from: normalizedFromNurse,
             task: "Shift Handover - Monitoring & Observation",
             reminder: "No",
-            start_date: new Date().toISOString().split("T")[0],
-          }]);
+            start_date: startDate,
+          });
+        }
+      });
 
-        if (insertError) throw insertError;
+      const promises = [];
+
+      if (allPendingTaskIds.length > 0) {
+        promises.push(
+          supabase
+            .from("nurse_assign_task")
+            .update({
+              assign_nurse: normalizedToNurse,
+              delegated_from: normalizedFromNurse,
+            })
+            .in("id", allPendingTaskIds)
+        );
       }
 
-      showNotification(`Handover of ${selectedPatient.patientName} to ${toNurse} successful`, "success");
+      if (newMonitoringRecords.length > 0) {
+        promises.push(
+          supabase
+            .from("nurse_assign_task")
+            .insert(newMonitoringRecords)
+        );
+      }
+
+      if (promises.length > 0) {
+        const results = await Promise.all(promises);
+        const errored = results.find(r => r.error);
+        if (errored) throw errored.error;
+      }
+
+      showNotification(`Handover of ${selectedPatientIds.length} patients to ${toNurse} successful`, "success");
       setHandoverSuccess(true);
       
       // Clear data and refresh
       setTimeout(() => {
-        setSelectedPatientId("");
+        setSelectedPatientIds([]);
         setToNurse("");
         setToNurseSearch("");
         fetchShiftData();
@@ -299,7 +341,7 @@ const ShiftHandover = () => {
                       onChange={(e) => {
                         setFromNurseSearch(e.target.value);
                         setFromNurse("");
-                        setSelectedPatientId("");
+                        setSelectedPatientIds([]);
                       }}
                       onFocus={() => setShowFromDropdown(true)}
                       placeholder="Search nurse..."
@@ -345,7 +387,7 @@ const ShiftHandover = () => {
                         type="button"
                         onClick={() => {
                           setSelectedShift(shift.id);
-                          setSelectedPatientId("");
+                          setSelectedPatientIds([]);
                         }}
                         className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
                           selectedShift === shift.id
@@ -366,7 +408,7 @@ const ShiftHandover = () => {
             </div>
 
             {/* Step 3: Replacement Nurse */}
-            {selectedPatientId && (
+            {selectedPatientIds.length > 0 && (
               <div className="p-6 bg-white border border-gray-200 shadow-sm rounded-2xl animate-fade-in">
                 <h2 className="flex items-center gap-2 mb-6 text-lg font-bold text-gray-800 border-b pb-4">
                   <User className="w-5 h-5 text-blue-600" />
@@ -419,9 +461,12 @@ const ShiftHandover = () => {
                   </div>
 
                   {toNurse && (
-                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                      <p className="text-xs text-blue-700 font-medium text-center">
-                        Handing over {selectedPatient?.patientName} to <strong>{toNurse}</strong>
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-center">
+                      <p className="text-sm font-bold text-blue-800 mb-1">
+                        Review Handover
+                      </p>
+                      <p className="text-xs text-blue-600 font-medium">
+                        Assigning <strong>{selectedPatientIds.length}</strong> {selectedPatientIds.length === 1 ? 'patient' : 'patients'} to <strong>{toNurse}</strong>
                       </p>
                     </div>
                   )}
@@ -436,7 +481,7 @@ const ShiftHandover = () => {
                     ) : (
                       <>
                         <CheckCircle className="w-5 h-5" />
-                        Complete Handover
+                        Complete Handover {selectedPatientIds.length > 0 ? `(${selectedPatientIds.length})` : ''}
                       </>
                     )}
                   </button>
@@ -453,8 +498,26 @@ const ShiftHandover = () => {
                     <h2 className="text-xl font-bold text-gray-800">Patients List</h2>
                     <p className="text-sm text-gray-500">All patients assigned for {fromNurse || '...'} / {selectedShift || '...'}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mr-2">Total: {patientMap.length}</span>
+                  <div className="flex items-center gap-4">
+                    {patientMap.length > 0 && (
+                      <button
+                        onClick={toggleSelectAll}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-all text-xs font-bold"
+                      >
+                        {isAllSelected ? (
+                          <>
+                            <CheckSquare className="w-4 h-4 text-green-600" />
+                            <span className="text-green-700">Deselect All</span>
+                          </>
+                        ) : (
+                          <>
+                            <Square className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-600">Select All</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <div className="h-8 w-px bg-gray-200 mx-1" />
                     <button 
                       onClick={fetchShiftData}
                       className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-green-600 transition-all"
@@ -485,58 +548,63 @@ const ShiftHandover = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {patientMap.map((patient) => (
-                        <div
-                          key={patient.ipdNumber}
-                          onClick={() => setSelectedPatientId(patient.ipdNumber)}
-                          className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer group ${
-                            selectedPatientId === patient.ipdNumber
-                              ? "border-green-500 bg-green-50 ring-4 ring-green-100 shadow-md"
-                              : "border-gray-100 bg-white hover:border-green-200 hover:bg-green-50/10"
-                          }`}
-                        >
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${selectedPatientId === patient.ipdNumber ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-green-100 group-hover:text-green-600'} transition-all`}>
-                                <Bed className="w-5 h-5" />
+                      {patientMap.map((patient) => {
+                        const isSelected = selectedPatientIds.includes(patient.ipdNumber);
+                        return (
+                          <div
+                            key={patient.ipdNumber}
+                            onClick={() => togglePatient(patient.ipdNumber)}
+                            className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer group ${
+                              isSelected
+                                ? "border-green-500 bg-green-50 ring-4 ring-green-100 shadow-md"
+                                : "border-gray-100 bg-white hover:border-green-200 hover:bg-green-50/10"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-lg ${isSelected ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-green-100 group-hover:text-green-600'} transition-all`}>
+                                   {isSelected ? <CheckSquare className="w-5 h-5" /> : <Bed className="w-5 h-5" />}
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-gray-900 group-hover:text-green-700 transition-colors">
+                                    {patient.patientName}
+                                  </h3>
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">IPD: {patient.ipdNumber}</p>
+                                </div>
                               </div>
-                              <div>
-                                <h3 className="font-bold text-gray-900 group-hover:text-green-700 transition-colors">
-                                  {patient.patientName}
-                                </h3>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">IPD: {patient.ipdNumber}</p>
+                              
+                              <div className="flex flex-col items-end gap-2">
+                                {patient.pendingCount > 0 ? (
+                                  <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-1 rounded-full border border-orange-200 animate-pulse">
+                                    {patient.pendingCount} Pending
+                                  </span>
+                                ) : (
+                                  <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full border border-green-200">
+                                    Completed
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            
-                            {patient.pendingCount > 0 ? (
-                              <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-1 rounded-full border border-orange-200 animate-pulse">
-                                {patient.pendingCount} Pending
-                              </span>
-                            ) : (
-                              <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full border border-green-200">
-                                Completed
-                              </span>
+
+                            <div className="flex gap-4 text-xs font-semibold text-gray-500">
+                               <div className="flex items-center gap-1">
+                                  <span className="opacity-60">Bed:</span>
+                                  <span>{patient.bedNo}</span>
+                               </div>
+                               <div className="flex items-center gap-1">
+                                  <span className="opacity-60">Ward:</span>
+                                  <span>{patient.ward}</span>
+                               </div>
+                            </div>
+
+                            {isSelected && (
+                              <div className="absolute -right-2 -top-2 bg-green-500 text-white p-1 rounded-full shadow-lg border-2 border-white">
+                                <CheckCircle className="w-4 h-4" />
+                              </div>
                             )}
                           </div>
-
-                          <div className="flex gap-4 text-xs font-semibold text-gray-500">
-                             <div className="flex items-center gap-1">
-                                <span className="opacity-60">Bed:</span>
-                                <span>{patient.bedNo}</span>
-                             </div>
-                             <div className="flex items-center gap-1">
-                                <span className="opacity-60">Ward:</span>
-                                <span>{patient.ward}</span>
-                             </div>
-                          </div>
-
-                          {selectedPatientId === patient.ipdNumber && (
-                            <div className="absolute -right-2 -top-2 bg-green-500 text-white p-1 rounded-full shadow-lg border-2 border-white">
-                              <CheckCircle className="w-4 h-4" />
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                </div>
