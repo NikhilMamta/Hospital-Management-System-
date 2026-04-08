@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   X,
   Plus,
@@ -15,35 +15,29 @@ import {
   Bell,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import { 
+  getIpdAdmissions, 
+  getEligibleIpdPatients, 
+  getIpdMasters, 
+  saveIpdAdmission 
+} from "../../../api/ipdAdmission";
 
 const PatientAdmissionSystem = () => {
   const [showModal, setShowModal] = useState(false);
-  const [patients, setPatients] = useState([]);
-  const [ipdPatients, setIpdPatients] = useState([]);
   const [editingPatient, setEditingPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [admissionSearchTerm, setAdmissionSearchTerm] = useState("");
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+
+  const queryClient = useQueryClient();
 
   // New state for notification popup
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [notificationType, setNotificationType] = useState("success"); // 'success' or 'error'
-
-  // State for dynamic dropdowns
-  const [departmentOptions, setDepartmentOptions] = useState([]);
-  const [doctorOptions, setDoctorOptions] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([]);
-  const [filteredDoctorOptions, setFilteredDoctorOptions] = useState([]);
-  const [filteredDepartmentOptions, setFilteredDepartmentOptions] = useState(
-    [],
-  );
-
-  // Bed data states
-  const [allBedData, setAllBedData] = useState([]); // All beds from DB
 
   // Dropdown visibility states
   const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
@@ -52,6 +46,28 @@ const PatientAdmissionSystem = () => {
   // Search terms for dropdowns
   const [departmentSearch, setDepartmentSearch] = useState("");
   const [doctorSearch, setDoctorSearch] = useState("");
+
+  // React Query Fetching
+  const { data: admissionsData = [], isLoading: isLoadingAdmissions } = useQuery({
+    queryKey: ["ipd_admissions_all"],
+    queryFn: getIpdAdmissions,
+  });
+
+  const { data: eligiblePatients = [], isLoading: isLoadingEligible } = useQuery({
+    queryKey: ["eligible_ipd_patients"],
+    queryFn: getEligibleIpdPatients,
+  });
+
+  const { data: mastersData = { departments: [], doctors: [], categories: [], beds: [] }, isLoading: isLoadingMasters } = useQuery({
+    queryKey: ["ipd_masters"],
+    queryFn: getIpdMasters,
+  });
+
+  // Real-time synchronization
+  useRealtimeQuery(["public", "ipd_admissions"], ["ipd_admissions_all"]);
+  useRealtimeQuery(["public", "ipd_admissions"], ["eligible_ipd_patients"]);
+  useRealtimeQuery(["public", "patient_admission"], ["eligible_ipd_patients"]);
+  useRealtimeQuery(["public", "all_floor_bed"], ["ipd_masters"]);
 
   const [formData, setFormData] = useState({
     registrationNumber: "",
@@ -101,6 +117,11 @@ const PatientAdmissionSystem = () => {
     attempt: "",
     remarks: "",
   });
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const [dropdownData] = useState({
     locationStatus: ["General Ward", "ICU", "Emergency", "Private Room"],
@@ -167,359 +188,25 @@ const PatientAdmissionSystem = () => {
     };
   }, []);
 
-  // Load departments from master table
-  const loadDepartments = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("master")
-        .select("department")
-        .not("department", "is", null)
-        .order("department");
+  // Filtered Options using useMemo
+  const filteredDepartments = useMemo(() => {
+    const search = departmentSearch.toLowerCase();
+    return mastersData.departments.filter(dept => dept.toLowerCase().includes(search));
+  }, [mastersData.departments, departmentSearch]);
 
-      if (error) {
-        console.error("Error loading departments:", error);
-        showNotificationPopup("Failed to load departments", "error");
-        return [];
-      }
+  const filteredDoctors = useMemo(() => {
+    const search = doctorSearch.toLowerCase();
+    return mastersData.doctors.filter(doc => doc.toLowerCase().includes(search));
+  }, [mastersData.doctors, doctorSearch]);
 
-      // Transform data and remove duplicates
-      const options = data
-        .map((item) => item.department)
-        .filter(
-          (value, index, self) =>
-            value && value.trim() !== "" && self.indexOf(value) === index,
-        );
-
-      setDepartmentOptions(options);
-      setFilteredDepartmentOptions(options);
-      return options;
-    } catch (error) {
-      console.error("Error loading departments:", error);
-      showNotificationPopup("Failed to load departments", "error");
-      return [];
-    }
-  };
-
-  // Load patient categories from category table
-  const loadCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("category")
-        .select("name")
-        .not("name", "is", null)
-        .order("name");
-
-      if (error) {
-        console.error("Error loading categories:", error);
-        showNotificationPopup("Failed to load categories", "error");
-        return [];
-      }
-
-      const options = data
-        .map((item) => item.name)
-        .filter(
-          (value, index, self) =>
-            value && value.trim() !== "" && self.indexOf(value) === index,
-        );
-
-      setCategoryOptions(options);
-      return options;
-    } catch (error) {
-      console.error("Error loading categories:", error);
-      showNotificationPopup("Failed to load categories", "error");
-      return [];
-    }
-  };
-
-  // Load doctors from doctors table
-  const loadDoctors = async (searchQuery = "") => {
-    try {
-      let query = supabase
-        .from("doctors")
-        .select("id, name")
-        .not("name", "is", null)
-        .order("name");
-
-      if (searchQuery) {
-        query = query.ilike("name", `%${searchQuery}%`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error("Error loading doctors:", error);
-        showNotificationPopup("Failed to load doctors", "error");
-        return [];
-      }
-
-      // Transform data and remove duplicates
-      const options = data
-        .map((doctor) => doctor.name)
-        .filter(
-          (value, index, self) =>
-            value && value.trim() !== "" && self.indexOf(value) === index,
-        );
-
-      setDoctorOptions(options);
-      setFilteredDoctorOptions(options);
-      return options;
-    } catch (error) {
-      console.error("Error loading doctors:", error);
-      showNotificationPopup("Failed to load doctors", "error");
-      return [];
-    }
-  };
-
-  // Load all bed data from all_floor_bed table
-  const loadBedData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("all_floor_bed")
-        .select("*")
-        .order("floor", { ascending: true })
-        .order("ward", { ascending: true })
-        .order("room", { ascending: true })
-        .order("bed", { ascending: true });
-
-      if (error) {
-        console.error("Error loading bed data:", error);
-        showNotificationPopup("Failed to load bed data", "error");
-        return;
-      }
-
-      if (data) {
-        // Store all bed data
-        setAllBedData(data);
-      }
-    } catch (error) {
-      console.error("Failed to load bed data:", error);
-      showNotificationPopup("Failed to load bed data", "error");
-    }
-  };
-
-  // Handle form input changes
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Filter doctors based on search
-  const filterDoctors = (searchTerm) => {
-    setDoctorSearch(searchTerm);
-    if (!searchTerm) {
-      setFilteredDoctorOptions(doctorOptions);
-    } else {
-      const filtered = doctorOptions.filter((doctor) =>
-        doctor.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-      setFilteredDoctorOptions(filtered);
-    }
-  };
-
-  // Filter departments based on search
-  const filterDepartments = (searchTerm) => {
-    setDepartmentSearch(searchTerm);
-    if (!searchTerm) {
-      setFilteredDepartmentOptions(departmentOptions);
-    } else {
-      const filtered = departmentOptions.filter((dept) =>
-        dept.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-      setFilteredDepartmentOptions(filtered);
-    }
-  };
-
-  // Handle department selection
-  const handleDepartmentSelect = (department) => {
-    setFormData((prev) => ({ ...prev, department }));
-    setDepartmentSearch("");
-    setShowDepartmentDropdown(false);
-  };
-
-  // Handle doctor selection
-  const handleDoctorSelect = (doctor) => {
-    setFormData((prev) => ({ ...prev, consultantDr: doctor }));
-    setDoctorSearch("");
-    setShowDoctorDropdown(false);
-  };
-
-  // Clear department field
-  const clearDepartment = () => {
-    setFormData((prev) => ({ ...prev, department: "" }));
-    setDepartmentSearch("");
-    setShowDepartmentDropdown(true);
-    setTimeout(() => {
-      departmentInputRef.current?.focus();
-    }, 0);
-  };
-
-  // Clear doctor field
-  const clearDoctor = () => {
-    setFormData((prev) => ({ ...prev, consultantDr: "" }));
-    setDoctorSearch("");
-    setShowDoctorDropdown(true);
-    setTimeout(() => {
-      doctorInputRef.current?.focus();
-    }, 0);
-  };
-
-  // Toggle department dropdown
-  const toggleDepartmentDropdown = () => {
-    if (formData.department) {
-      clearDepartment();
-    } else {
-      setShowDepartmentDropdown(!showDepartmentDropdown);
-      if (!showDepartmentDropdown) {
-        setTimeout(() => {
-          departmentInputRef.current?.focus();
-        }, 0);
-      }
-    }
-  };
-
-  // Toggle doctor dropdown
-  const toggleDoctorDropdown = () => {
-    if (formData.consultantDr) {
-      clearDoctor();
-    } else {
-      setShowDoctorDropdown(!showDoctorDropdown);
-      if (!showDoctorDropdown) {
-        setTimeout(() => {
-          doctorInputRef.current?.focus();
-        }, 0);
-      }
-    }
-  };
-
-  // Load IPD patients and data from Supabase
-  useEffect(() => {
-    loadData();
-    loadBedData();
-
-    const setupRealtimeSubscription = () => {
-      const channel = supabase
-        .channel("ipd_admission_changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "ipd_admissions",
-          },
-          () => {
-            silentLoadData();
-          },
-        )
-        .subscribe();
-
-      // Listen to bed status changes so availability updates in real-time
-      const bedChannel = supabase
-        .channel("bed_status_changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "all_floor_bed",
-          },
-          () => {
-            loadBedData();
-          },
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-        supabase.removeChannel(bedChannel);
-      };
-    };
-
-    const cleanup = setupRealtimeSubscription();
-
-    return () => {
-      cleanup();
-    };
-  }, []);
-
-  // Load dropdown data when modal opens
-  useEffect(() => {
-    if (showModal) {
-      loadDepartments();
-      loadDoctors();
-      loadCategories();
-    }
-  }, [showModal]);
-
-  // Core data-fetching logic (shared by initial + silent loads)
-  const fetchAllData = async () => {
-    // Load IPD admission records
-    const { data: ipdRecords, error: ipdError } = await supabase
-      .from("ipd_admissions")
-      .select("*")
-      .order("timestamp", { ascending: false });
-
-    if (ipdError) {
-      console.error("Error loading IPD records:", ipdError);
-      showNotificationPopup("Failed to load IPD records", "error");
-    } else {
-      setPatients(ipdRecords || []);
-    }
-
-    // Load patients eligible for IPD admission (department='IPD' and status='assigned')
-    const { data: patientAdmissionData, error: patientError } = await supabase
-      .from("patient_admission")
-      .select("*")
-      .eq("department", "IPD")
-      .eq("status", "assigned")
-      .is("actual2", null)
-      .not("planned2", "is", null)
-      .order("timestamp", { ascending: false });
-
-    if (patientError) {
-      console.error("Error loading patient admission data:", patientError);
-      showNotificationPopup("Failed to load patient data", "error");
-    } else {
-      if (ipdRecords && patientAdmissionData) {
-        const admittedAdmissionNumbers = ipdRecords.map((p) => p.admission_no);
-        const eligiblePatients = patientAdmissionData.filter(
-          (p) => !admittedAdmissionNumbers.includes(p.admission_no),
-        );
-        setIpdPatients(eligiblePatients);
-      } else if (patientAdmissionData) {
-        setIpdPatients(patientAdmissionData);
-      }
-    }
-  };
-
-  // Initial load — shows full-screen loader
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      await fetchAllData();
-    } catch (error) {
-      console.error("Failed to load data:", error);
-      showNotificationPopup("Failed to load data", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Silent load — updates data without showing loader (used by realtime)
-  const silentLoadData = async () => {
-    try {
-      await fetchAllData();
-    } catch (error) {
-      console.error("Failed to silently refresh data:", error);
-    }
-  };
-
+  // Handle registration change
   const handleRegistrationChange = (admissionNo) => {
     setFormData((prev) => ({ ...prev, registrationNumber: admissionNo }));
     setAdmissionSearchTerm(admissionNo);
     setShowAdmissionDropdown(false);
 
     if (admissionNo) {
-      const selectedPatient = ipdPatients.find(
+      const selectedPatient = eligiblePatients.find(
         (p) => p.admission_no === admissionNo,
       );
       if (selectedPatient) {
@@ -538,141 +225,24 @@ const PatientAdmissionSystem = () => {
     }
   };
 
-  // Handle form submission to Supabase
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    try {
-      setIsSaving(true);
-
-      // For edits, carry the existing IPD number forward.
-      // For new inserts, omit ipd_number — the DB column DEFAULT
-      // (get_next_ipd_number()) fires automatically and guarantees uniqueness.
-      const patientData = {
-        ...(editingPatient ? { ipd_number: editingPatient.ipd_number } : {}),
-        admission_no: formData.registrationNumber,
-        patient_name: formData.patientName.trim(),
-        father_husband_name: formData.fatherHusband.trim(),
-        age: formData.age,
-        gender: formData.gender,
-        date_of_birth: formData.dob,
-        phone_no: formData.phoneNumber.trim(),
-        whatsapp_no: formData.mobileNumber.trim(),
-        email_id: formData.emailId.trim(),
-        house_no_street: formData.houseStreet.trim(),
-        area_colony: formData.areaColony.trim(),
-        landmark: formData.landmark.trim(),
-        state: formData.state.trim(),
-        city: formData.city.trim(),
-        pincode: formData.pincode,
-        country: formData.country,
-        department: formData.department,
-        refer_by_dr: formData.referByDr.trim(),
-        consultant_dr: formData.consultantDr,
-        pat_category: formData.patCategory,
-        patient_case: formData.patientCase,
-        medical_surgical: formData.medicalSurgical,
-        health_card_no: formData.healthCardNo.trim(),
-        adm_purpose: formData.admissionPurpose.trim(),
-        location_status: formData.locationStatus,
-        floor: formData.floor,
-        // ward: formData.ward,  // This should match ward_type
-        room: formData.room,
-        bed_no: formData.bedNo,
-        bed_location: formData.bedLocation,
-        ward_type: formData.wardType, // This is the ward_type field
-        bed_tariff: formData.bedTariff,
-        kin_name: formData.kinName.trim(),
-        kin_relation: formData.kinRelation.trim(),
-        kin_mobile_no: formData.kinMobile.trim(),
-        advance_amount: formData.advanceAmount,
-        dr_visit_tariff: formData.drVisitTariff,
-        package_name: formData.packageName.trim(),
-        pkg_amount: formData.pkgAmount,
-        exp_tariff: formData.expTariff.trim(),
-        other_services: formData.otherServices,
-        vip_details: formData.vipDetails.trim(),
-        religion: formData.religion,
-        marital_status: formData.maritalStatus,
-        attempt: formData.attempt,
-        remarks: formData.remarks.trim(),
-        timestamp: new Date()
-          .toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false,
-          })
-          .replace(",", ""),
-        planned1: new Date()
-          .toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false,
-          })
-          .replace(",", ""),
-        status: "active",
-      };
-
-      let result;
-
-      // FIRST: Save to ipd_admissions
-      if (editingPatient) {
-        const { data, error } = await supabase
-          .from("ipd_admissions")
-          .update(patientData)
-          .eq("id", editingPatient.id)
-          .select();
-
-        if (error) throw error;
-        result = data;
-      } else {
-        const { data, error } = await supabase
-          .from("ipd_admissions")
-          .insert(patientData)
-          .select();
-
-        if (error) throw error;
-        result = data;
-      }
-
-      if (result && result.length > 0) {
-        // Mark the current bed as Occupied
-        await supabase
-          .from("all_floor_bed")
-          .update({ status: "Occupied" })
-          .eq("floor", patientData.floor)
-          .eq("ward", patientData.ward_type)
-          .eq("room", patientData.room)
-          .eq("bed", patientData.bed_no);
-
-        // Update patient_admission table for new admissions
-        if (!editingPatient && result && result.length > 0) {
-          await supabase
-            .from("patient_admission")
-            .update({
-              actual2: new Date()
-                .toLocaleString("en-CA", {
-                  timeZone: "Asia/Kolkata",
-                  hour12: false,
-                })
-                .replace(",", ""),
-            })
-            .eq("admission_no", formData.registrationNumber);
-        }
-
-        // Show success notification
-        showNotificationPopup(
-          `Patient ${editingPatient ? "updated" : "admitted"} successfully! IPD Number: ${result[0].ipd_number}`,
-          "success",
-        );
-
-        await loadData();
-        handleReset();
-        setShowModal(false);
-        setEditingPatient(null);
-        setSelectedBedId(null);
-      }
-    } catch (error) {
+  // Mutation for saving admission
+  const saveMutation = useMutation({
+    mutationFn: saveIpdAdmission,
+    onSuccess: (data) => {
+      showNotificationPopup(
+        `Patient ${editingPatient ? "updated" : "admitted"} successfully! IPD Number: ${data.ipd_number}`,
+        "success"
+      );
+      queryClient.invalidateQueries({ queryKey: ["ipd_admissions_all"] });
+      queryClient.invalidateQueries({ queryKey: ["eligible_ipd_patients"] });
+      queryClient.invalidateQueries({ queryKey: ["ipd_masters"] });
+      handleReset();
+      setShowModal(false);
+      setEditingPatient(null);
+      setSelectedBedId(null);
+    },
+    onError: (error) => {
       console.error("Error saving patient:", error);
-      // Detect duplicate admission_no (unique constraint violation)
       const errMsg = (error.message || "") + (error.details || "");
       const isDuplicate =
         error.code === "23505" ||
@@ -681,16 +251,112 @@ const PatientAdmissionSystem = () => {
         errMsg.includes("unique constraint");
       showNotificationPopup(
         isDuplicate
-          ? "This patient has already been admitted by another user. Please refresh the page."
+          ? "This patient has already been admitted by another user. Please refresh."
           : `Failed to ${editingPatient ? "update" : "admit"} patient: ${error.message}`,
-        "error",
+        "error"
       );
-      if (isDuplicate) {
-        await loadData(); // Refresh list so user sees the existing entry
-      }
-    } finally {
-      setIsSaving(false);
     }
+  });
+
+
+  // Dropdown helper functions
+  const toggleDepartmentDropdown = () => {
+    if (formData.department) {
+      setFormData((prev) => ({ ...prev, department: "" }));
+      setDepartmentSearch("");
+    } else {
+      setShowDepartmentDropdown(!showDepartmentDropdown);
+    }
+  };
+
+  const handleDepartmentSelect = (dept) => {
+    setFormData((prev) => ({ ...prev, department: dept }));
+    setDepartmentSearch(dept);
+    setShowDepartmentDropdown(false);
+  };
+
+  const toggleDoctorDropdown = () => {
+    if (formData.consultantDr) {
+      setFormData((prev) => ({ ...prev, consultantDr: "" }));
+      setDoctorSearch("");
+    } else {
+      setShowDoctorDropdown(!showDoctorDropdown);
+    }
+  };
+
+  const handleDoctorSelect = (doctor) => {
+    setFormData((prev) => ({ ...prev, consultantDr: doctor }));
+    setDoctorSearch(doctor);
+    setShowDoctorDropdown(false);
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validate mandatory fields
+    if (!formData.bedNo) {
+      showNotificationPopup("Please select a bed before admitting the patient.", "error");
+      return;
+    }
+
+    const patientData = {
+      ...(editingPatient ? { ipd_number: editingPatient.ipd_number } : {}),
+      admission_no: formData.registrationNumber,
+      patient_name: formData.patientName.trim(),
+      father_husband_name: formData.fatherHusband.trim(),
+      age: formData.age,
+      gender: formData.gender,
+      date_of_birth: formData.dob,
+      phone_no: formData.phoneNumber.trim(),
+      whatsapp_no: formData.mobileNumber.trim(),
+      email_id: formData.emailId.trim(),
+      house_no_street: formData.houseStreet.trim(),
+      area_colony: formData.areaColony.trim(),
+      landmark: formData.landmark.trim(),
+      state: formData.state.trim(),
+      city: formData.city.trim(),
+      pincode: formData.pincode,
+      country: formData.country,
+      department: formData.department,
+      refer_by_dr: formData.referByDr.trim(),
+      consultant_dr: formData.consultantDr,
+      pat_category: formData.patCategory,
+      patient_case: formData.patientCase,
+      medical_surgical: formData.medicalSurgical,
+      health_card_no: formData.healthCardNo.trim(),
+      adm_purpose: formData.admissionPurpose.trim(),
+      location_status: formData.locationStatus,
+      floor: formData.floor,
+      room: formData.room,
+      bed_no: formData.bedNo,
+      bed_location: formData.bedLocation,
+      ward_type: formData.wardType,
+      bed_tariff: formData.bedTariff,
+      kin_name: formData.kinName.trim(),
+      kin_relation: formData.kinRelation.trim(),
+      kin_mobile_no: formData.kinMobile.trim(),
+      advance_amount: formData.advanceAmount,
+      dr_visit_tariff: formData.drVisitTariff,
+      package_name: formData.packageName.trim(),
+      pkg_amount: formData.pkgAmount,
+      exp_tariff: formData.expTariff.trim(),
+      other_services: formData.otherServices,
+      vip_details: formData.vipDetails.trim(),
+      religion: formData.religion,
+      marital_status: formData.maritalStatus,
+      attempt: formData.attempt,
+      remarks: formData.remarks.trim(),
+      timestamp: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+      planned1: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+      status: "active",
+    };
+
+    saveMutation.mutate({
+      patientData,
+      isEditing: !!editingPatient,
+      id: editingPatient?.id
+    });
   };
 
   const handleReset = () => {
@@ -824,18 +490,27 @@ const PatientAdmissionSystem = () => {
   };
 
   // Filter patients for table display
-  const filteredPatients = patients.filter(
-    (patient) =>
-      patient.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.admission_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.ipd_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.phone_no?.includes(searchTerm) ||
-      patient.whatsapp_no?.includes(searchTerm),
-  );
+  const filteredPatients = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    const date = dateFilter;
+    
+    return admissionsData.filter((patient) => {
+      const matchesSearch = 
+        patient.patient_name?.toLowerCase().includes(search) ||
+        patient.admission_no?.toLowerCase().includes(search) ||
+        patient.ipd_number?.toLowerCase().includes(search) ||
+        patient.phone_no?.includes(search) ||
+        patient.whatsapp_no?.includes(search);
+      
+      const matchesDate = !date || (patient.planned1 && patient.planned1.includes(date));
+      
+      return matchesSearch && matchesDate;
+    });
+  }, [admissionsData, searchTerm, dateFilter]);
 
   const NoDataComponent = () => (
     <div className="px-4 py-8 text-center text-gray-500">
-      {isLoading
+      {isLoadingAdmissions
         ? "Loading IPD patient records..."
         : 'No IPD patient records found. Click "Patient Admission" to create one.'}
     </div>
@@ -845,7 +520,7 @@ const PatientAdmissionSystem = () => {
     <>
       <div className="min-h-screen bg-gray-50 p-2 md:p-6">
         {/* Loading Overlay */}
-        {isLoading && patients.length === 0 && (
+        {isLoadingAdmissions && admissionsData.length === 0 && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="bg-white p-6 rounded-lg shadow-xl">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
@@ -925,7 +600,7 @@ const PatientAdmissionSystem = () => {
                   handleReset();
                   setShowModal(true);
                 }}
-                disabled={isLoading}
+                disabled={isLoadingAdmissions}
                 className="flex items-center justify-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-all shadow-md hover:shadow-lg whitespace-nowrap w-full md:w-auto disabled:bg-gray-400"
               >
                 <Plus className="w-5 h-5" />
@@ -943,7 +618,7 @@ const PatientAdmissionSystem = () => {
                     placeholder="Search by name, phone, admission no..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoadingAdmissions}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                   />
                 </div>
@@ -953,7 +628,7 @@ const PatientAdmissionSystem = () => {
                     type="date"
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoadingAdmissions}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                   />
                 </div>
@@ -1011,7 +686,7 @@ const PatientAdmissionSystem = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {isLoading ? (
+                    {isLoadingAdmissions ? (
                       <tr>
                         <td colSpan="12" className="px-6 py-8 text-center">
                           <div className="flex flex-col items-center">
@@ -1035,7 +710,7 @@ const PatientAdmissionSystem = () => {
                           <td className="px-4 py-3 text-right">
                             <button
                               onClick={() => handleEdit(patient)}
-                              disabled={isLoading}
+                              disabled={isLoadingAdmissions}
                               className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400"
                             >
                               <Edit className="w-4 h-4" />
@@ -1098,7 +773,7 @@ const PatientAdmissionSystem = () => {
 
             {/* Mobile Card View */}
             <div className="md:hidden p-4 space-y-4 bg-green-50">
-              {isLoading ? (
+              {isLoadingAdmissions ? (
                 <div className="p-8 text-center">
                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-4"></div>
                   <p className="text-gray-700">Loading patients...</p>
@@ -1130,7 +805,7 @@ const PatientAdmissionSystem = () => {
                         </div>
                         <button
                           onClick={() => handleEdit(patient)}
-                          disabled={isLoading}
+                          disabled={isLoadingAdmissions}
                           className="flex-shrink-0 flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-green-700 transition-colors disabled:bg-gray-400"
                         >
                           <Edit className="w-3.5 h-3.5" />
@@ -1239,7 +914,7 @@ const PatientAdmissionSystem = () => {
                         setEditingPatient(null);
                         handleReset();
                       }}
-                      disabled={isSaving}
+                      disabled={saveMutation.isPending}
                       className="text-white hover:text-gray-300 transition-colors disabled:opacity-50"
                     >
                       <X className="w-6 h-6" />
@@ -1279,16 +954,16 @@ const PatientAdmissionSystem = () => {
                               !editingPatient && setShowAdmissionDropdown(true)
                             }
                             placeholder="Search admission number or patient name..."
-                            disabled={editingPatient !== null || isSaving}
+                            disabled={editingPatient !== null || saveMutation.isPending}
                             className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           />
                           <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                         </div>
                         {showAdmissionDropdown &&
                           !editingPatient &&
-                          ipdPatients.length > 0 && (
+                          eligiblePatients.length > 0 && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                              {ipdPatients
+                              {eligiblePatients
                                 .filter((patient) => {
                                   const searchLower =
                                     admissionSearchTerm.toLowerCase();
@@ -1324,7 +999,7 @@ const PatientAdmissionSystem = () => {
                         <p className="text-xs text-gray-500 mt-1">
                           {editingPatient
                             ? "Admission number cannot be changed for existing IPD records"
-                            : ipdPatients.length === 0
+                            : eligiblePatients.length === 0
                               ? "No available IPD patients. All patients have been admitted."
                               : "Type to search and select from available IPD patients"}
                         </p>
@@ -1353,7 +1028,7 @@ const PatientAdmissionSystem = () => {
                           name="patientName"
                           value={formData.patientName}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1367,7 +1042,7 @@ const PatientAdmissionSystem = () => {
                           name="fatherHusband"
                           value={formData.fatherHusband}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1383,7 +1058,7 @@ const PatientAdmissionSystem = () => {
                           onChange={handleInputChange}
                           min="0"
                           max="150"
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1396,7 +1071,7 @@ const PatientAdmissionSystem = () => {
                           name="gender"
                           value={formData.gender}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Gender</option>
@@ -1415,7 +1090,7 @@ const PatientAdmissionSystem = () => {
                           name="dob"
                           value={formData.dob}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1437,7 +1112,7 @@ const PatientAdmissionSystem = () => {
                           name="phoneNumber"
                           value={formData.phoneNumber}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1451,7 +1126,7 @@ const PatientAdmissionSystem = () => {
                           name="mobileNumber"
                           value={formData.mobileNumber}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1465,7 +1140,7 @@ const PatientAdmissionSystem = () => {
                           name="emailId"
                           value={formData.emailId}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1487,7 +1162,7 @@ const PatientAdmissionSystem = () => {
                           name="houseStreet"
                           value={formData.houseStreet}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1501,7 +1176,7 @@ const PatientAdmissionSystem = () => {
                           name="areaColony"
                           value={formData.areaColony}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1515,7 +1190,7 @@ const PatientAdmissionSystem = () => {
                           name="landmark"
                           value={formData.landmark}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1530,7 +1205,7 @@ const PatientAdmissionSystem = () => {
                           value={formData.state}
                           onChange={handleInputChange}
                           placeholder="Enter state"
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1545,7 +1220,7 @@ const PatientAdmissionSystem = () => {
                           value={formData.city}
                           onChange={handleInputChange}
                           placeholder="Enter city"
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1559,7 +1234,7 @@ const PatientAdmissionSystem = () => {
                           name="pincode"
                           value={formData.pincode}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1573,7 +1248,7 @@ const PatientAdmissionSystem = () => {
                           name="country"
                           value={formData.country}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1600,7 +1275,6 @@ const PatientAdmissionSystem = () => {
                               onChange={(e) => {
                                 const value = e.target.value;
                                 setDepartmentSearch(value);
-                                filterDepartments(value);
                                 if (!showDepartmentDropdown) {
                                   setShowDepartmentDropdown(true);
                                 }
@@ -1611,13 +1285,13 @@ const PatientAdmissionSystem = () => {
                                 }
                               }}
                               placeholder="Search or select department..."
-                              disabled={isSaving}
+                              disabled={saveMutation.isPending}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                             />
                             <button
                               type="button"
                               onClick={toggleDepartmentDropdown}
-                              disabled={isSaving}
+                              disabled={saveMutation.isPending}
                               className="absolute right-2 p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                             >
                               {formData.department ? (
@@ -1632,12 +1306,12 @@ const PatientAdmissionSystem = () => {
 
                           {showDepartmentDropdown && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                              {filteredDepartmentOptions.length === 0 ? (
+                              {filteredDepartments.length === 0 ? (
                                 <div className="px-3 py-2 text-gray-500 text-sm">
                                   No departments found
                                 </div>
                               ) : (
-                                filteredDepartmentOptions.map((dept, index) => (
+                                filteredDepartments.map((dept, index) => (
                                   <div
                                     key={index}
                                     onClick={() => handleDepartmentSelect(dept)}
@@ -1664,7 +1338,7 @@ const PatientAdmissionSystem = () => {
                           value={formData.referByDr}
                           onChange={handleInputChange}
                           placeholder="Enter referring doctor name"
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1683,7 +1357,6 @@ const PatientAdmissionSystem = () => {
                               onChange={(e) => {
                                 const value = e.target.value;
                                 setDoctorSearch(value);
-                                filterDoctors(value);
                                 if (!showDoctorDropdown) {
                                   setShowDoctorDropdown(true);
                                 }
@@ -1694,13 +1367,13 @@ const PatientAdmissionSystem = () => {
                                 }
                               }}
                               placeholder="Search or select doctor..."
-                              disabled={isSaving}
+                              disabled={saveMutation.isPending}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                             />
                             <button
                               type="button"
                               onClick={toggleDoctorDropdown}
-                              disabled={isSaving}
+                              disabled={saveMutation.isPending}
                               className="absolute right-2 p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                             >
                               {formData.consultantDr ? (
@@ -1715,14 +1388,14 @@ const PatientAdmissionSystem = () => {
 
                           {showDoctorDropdown && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                              {filteredDoctorOptions.length === 0 ? (
+                              {filteredDoctors.length === 0 ? (
                                 <div className="px-3 py-2 text-gray-500 text-sm">
                                   {doctorSearch
                                     ? "No doctors found"
                                     : "Type to search doctors"}
                                 </div>
                               ) : (
-                                filteredDoctorOptions.map((doctor, index) => (
+                                filteredDoctors.map((doctor, index) => (
                                   <div
                                     key={index}
                                     onClick={() => handleDoctorSelect(doctor)}
@@ -1747,11 +1420,11 @@ const PatientAdmissionSystem = () => {
                           name="patCategory"
                           value={formData.patCategory}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Category</option>
-                          {categoryOptions.map((cat) => (
+                          {mastersData.categories.map((cat) => (
                             <option key={cat} value={cat}>
                               {cat}
                             </option>
@@ -1767,7 +1440,7 @@ const PatientAdmissionSystem = () => {
                           name="patientCase"
                           value={formData.patientCase}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Case</option>
@@ -1787,7 +1460,7 @@ const PatientAdmissionSystem = () => {
                           name="medicalSurgical"
                           value={formData.medicalSurgical}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Type</option>
@@ -1806,7 +1479,7 @@ const PatientAdmissionSystem = () => {
                           name="healthCardNo"
                           value={formData.healthCardNo}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1820,7 +1493,7 @@ const PatientAdmissionSystem = () => {
                           name="admissionPurpose"
                           value={formData.admissionPurpose}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1842,7 +1515,7 @@ const PatientAdmissionSystem = () => {
                           name="floor"
                           value={formData.floor}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           readOnly
                         />
@@ -1857,7 +1530,7 @@ const PatientAdmissionSystem = () => {
                           name="ward"
                           value={formData.ward}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           readOnly
                         />
@@ -1872,7 +1545,7 @@ const PatientAdmissionSystem = () => {
                           name="room"
                           value={formData.room}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           readOnly
                         />
@@ -1880,7 +1553,7 @@ const PatientAdmissionSystem = () => {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Bed No.
+                          Bed No. <span className="text-red-500">*</span>
                         </label>
                         <div className="flex gap-2">
                           <input
@@ -1888,7 +1561,7 @@ const PatientAdmissionSystem = () => {
                             name="bedNo"
                             value={formData.bedNo}
                             onChange={handleInputChange}
-                            disabled={isSaving}
+                            disabled={saveMutation.isPending}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                             readOnly
                             placeholder="Select bed from bed selector"
@@ -1896,7 +1569,7 @@ const PatientAdmissionSystem = () => {
                           <button
                             type="button"
                             onClick={() => setShowBedModal(true)}
-                            disabled={isSaving}
+                            disabled={saveMutation.isPending}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:bg-gray-400"
                           >
                             Select Bed
@@ -1918,7 +1591,7 @@ const PatientAdmissionSystem = () => {
                           name="bedLocation"
                           value={formData.bedLocation}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           readOnly
                         />
@@ -1933,7 +1606,7 @@ const PatientAdmissionSystem = () => {
                           name="wardType"
                           value={formData.wardType}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                           readOnly
                         />
@@ -1947,7 +1620,7 @@ const PatientAdmissionSystem = () => {
                           name="bedTariff"
                           value={formData.bedTariff}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Tariff</option>
@@ -1974,7 +1647,7 @@ const PatientAdmissionSystem = () => {
                           name="kinName"
                           value={formData.kinName}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -1988,7 +1661,7 @@ const PatientAdmissionSystem = () => {
                           name="kinRelation"
                           value={formData.kinRelation}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2002,7 +1675,7 @@ const PatientAdmissionSystem = () => {
                           name="kinMobile"
                           value={formData.kinMobile}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2025,7 +1698,7 @@ const PatientAdmissionSystem = () => {
                           value={formData.advanceAmount}
                           onChange={handleInputChange}
                           step="0.01"
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2038,7 +1711,7 @@ const PatientAdmissionSystem = () => {
                           name="drVisitTariff"
                           value={formData.drVisitTariff}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Tariff</option>
@@ -2059,7 +1732,7 @@ const PatientAdmissionSystem = () => {
                           name="packageName"
                           value={formData.packageName}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2074,7 +1747,7 @@ const PatientAdmissionSystem = () => {
                           value={formData.pkgAmount}
                           onChange={handleInputChange}
                           step="0.01"
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2088,7 +1761,7 @@ const PatientAdmissionSystem = () => {
                           name="expTariff"
                           value={formData.expTariff}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2109,7 +1782,7 @@ const PatientAdmissionSystem = () => {
                           name="otherServices"
                           value={formData.otherServices}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Service</option>
@@ -2130,7 +1803,7 @@ const PatientAdmissionSystem = () => {
                           name="vipDetails"
                           value={formData.vipDetails}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2144,7 +1817,7 @@ const PatientAdmissionSystem = () => {
                           name="religion"
                           value={formData.religion}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2157,7 +1830,7 @@ const PatientAdmissionSystem = () => {
                           name="maritalStatus"
                           value={formData.maritalStatus}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         >
                           <option value="">Select Status</option>
@@ -2177,7 +1850,7 @@ const PatientAdmissionSystem = () => {
                           name="attempt"
                           value={formData.attempt}
                           onChange={handleInputChange}
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
                         />
                       </div>
@@ -2192,7 +1865,7 @@ const PatientAdmissionSystem = () => {
                           onChange={handleInputChange}
                           rows="3"
                           placeholder="Enter any additional remarks..."
-                          disabled={isSaving}
+                          disabled={saveMutation.isPending}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none disabled:bg-gray-100"
                         />
                       </div>
@@ -2203,10 +1876,10 @@ const PatientAdmissionSystem = () => {
                   <div className="flex flex-col md:flex-row flex-wrap gap-3 justify-center pt-6 border-t border-gray-200">
                     <button
                       type="submit"
-                      disabled={isSaving}
+                      disabled={saveMutation.isPending}
                       className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-medium shadow-sm hover:shadow-md w-full md:w-auto flex items-center justify-center gap-2 disabled:bg-gray-400"
                     >
-                      {isSaving ? (
+                      {saveMutation.isPending ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                           {editingPatient ? "Updating..." : "Saving..."}
@@ -2220,7 +1893,7 @@ const PatientAdmissionSystem = () => {
                     <button
                       type="reset"
                       onClick={handleReset}
-                      disabled={isSaving}
+                      disabled={saveMutation.isPending}
                       className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all font-medium shadow-sm hover:shadow-md w-full md:w-auto disabled:bg-gray-400"
                     >
                       Reset
@@ -2250,7 +1923,7 @@ const PatientAdmissionSystem = () => {
                     </div>
                     <button
                       onClick={() => setShowBedModal(false)}
-                      disabled={isSaving}
+                      disabled={saveMutation.isPending}
                       className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
                     >
                       <X className="w-6 h-6" />
@@ -2290,7 +1963,7 @@ const PatientAdmissionSystem = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Available Beds: {allBedData.filter(bed => bed.status === null).length} / {allBedData.length}
+                          Available Beds: {mastersData.beds.filter(bed => bed.status === null).length} / {mastersData.beds.length}
                         </label>
                         <p className="text-sm text-gray-600">
                           Select an available bed (green) to assign to this patient
@@ -2335,7 +2008,7 @@ const PatientAdmissionSystem = () => {
                   </div> */}
 
                   {/* Beds Grid - Show ALL beds */}
-                  {allBedData.length === 0 ? (
+                  {mastersData.beds.length === 0 ? (
                     <div className="text-center py-12">
                       <p className="text-gray-500 mb-4">
                         No beds found in the database
@@ -2350,7 +2023,7 @@ const PatientAdmissionSystem = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {allBedData
+                      {mastersData.beds
                         .filter(
                           (bed) =>
                             bedFilterTab === "All" || bed.ward === bedFilterTab,
@@ -2367,7 +2040,7 @@ const PatientAdmissionSystem = () => {
                                   ? "border-green-600 bg-green-50 shadow-lg transform scale-105"
                                   : "border-green-500 bg-green-50 hover:shadow-lg hover:-translate-y-1 cursor-pointer"
                                 : "border-red-500 bg-red-50 opacity-70 cursor-not-allowed"
-                            } ${isSaving ? "opacity-50 cursor-not-allowed" : ""}`}
+                            } ${saveMutation.isPending ? "opacity-50 cursor-not-allowed" : ""}`}
                           >
                             <div className="font-semibold text-gray-900 mb-1 flex items-center justify-between">
                               <span>{bed.bed}</span>

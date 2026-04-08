@@ -1,23 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, X, Clock, CheckCircle, Upload, Image as ImageIcon, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import supabase from '../../../SupabaseClient';
-import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import { getPendingPatients, getHistoryPatients, updateRMOInitiation } from '../../../api/discharge';
+import useRealtimeQuery from '../../../hooks/useRealtimeQuery';
 
 const InitiationByRMO = () => {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('pending');
   const [searchTerm, setSearchTerm] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
-  const [pendingPatients, setPendingPatients] = useState([]);
-  const [historyPatients, setHistoryPatients] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [modalError, setModalError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  
   const [formData, setFormData] = useState(() => {
-    // Initialize formData with user name from localStorage
     const storedUser = localStorage.getItem('mis_user');
     let initialName = '';
-
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
@@ -26,7 +25,6 @@ const InitiationByRMO = () => {
         console.error('Error parsing mis_user from localStorage:', error);
       }
     }
-
     return {
       status: '',
       rmoName: initialName,
@@ -36,138 +34,46 @@ const InitiationByRMO = () => {
   });
 
   const statusOptions = [
-
     'Completed',
     'Pending Documentation'
   ];
 
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      if (activeTab === 'pending') {
-        await loadPendingPatients();
-      } else {
-        await loadHistoryPatients();
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setIsLoading(false);
+  // Queries
+  const { data: pendingPatients = [], isLoading: isLoadingPending } = useQuery({
+    queryKey: ['discharge', 'pending'],
+    queryFn: getPendingPatients,
+    enabled: activeTab === 'pending'
+  });
+
+  const { data: historyPatients = [], isLoading: isLoadingHistory } = useQuery({
+    queryKey: ['discharge', 'history'],
+    queryFn: getHistoryPatients,
+    enabled: activeTab === 'history'
+  });
+
+  const isLoading = activeTab === 'pending' ? isLoadingPending : isLoadingHistory;
+
+  // Real-time synchronization
+  useRealtimeQuery('discharge', ['discharge']);
+
+  // Mutation
+  const mutation = useMutation({
+    mutationFn: updateRMOInitiation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['discharge'] });
+      setShowModal(false);
+      setSelectedPatient(null);
+      resetForm();
+    },
+    onError: (error) => {
+      setModalError(error.message || 'Failed to save. Please try again.');
     }
-  };
-
-  // Real-time sync: refresh when discharge table changes
-  useRealtimeTable('discharge', loadData);
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadPendingPatients = async () => {
-    try {
-      // Fetch patients where planned1 is not null AND actual1 is null
-      const { data, error } = await supabase
-        .from('discharge')
-        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned1, actual1, remark, discharge_number, rmo_status, rmo_name, summary_report_image, summary_report_image_name')
-        .not('planned1', 'is', null)
-        .is('actual1', null)
-        .order('planned1', { ascending: true });
-
-      if (error) throw error;
-
-      // Format the data for display
-      const formattedPatients = data.map(patient => ({
-        id: patient.id,
-        admissionNo: patient.admission_no,
-        patientName: patient.patient_name,
-        department: patient.department,
-        consultantName: patient.consultant_name,
-        staffName: patient.staff_name,
-        dischargeDate: patient.planned1 ? new Date(patient.planned1).toLocaleDateString('en-GB') : 'N/A',
-        dischargeTime: patient.planned1 ? new Date(patient.planned1).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : 'N/A',
-        planned1: patient.planned1,
-        actual1: patient.actual1,
-        remark: patient.remark,
-        dischargeNumber: patient.discharge_number,
-        // RMO fields (will be null for pending patients)
-        rmo_status: patient.rmo_status,
-        rmo_name: patient.rmo_name,
-        summary_report_image: patient.summary_report_image,
-        summary_report_image_name: patient.summary_report_image_name
-      }));
-
-      setPendingPatients(formattedPatients);
-    } catch (error) {
-      console.error('Error loading pending patients:', error);
-      setPendingPatients([]);
-    }
-  };
-
-  const loadHistoryPatients = async () => {
-    try {
-      // Fetch patients where planned1 AND actual1 are not null
-      // AND also has RMO initiation data (rmo_name is not null)
-      const { data, error } = await supabase
-        .from('discharge')
-        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned1, actual1, delay1, remark, discharge_number, rmo_status, rmo_name, summary_report_image, summary_report_image_name, rmo_initiation_date')
-        .not('planned1', 'is', null)
-        .not('actual1', 'is', null)
-        .not('rmo_name', 'is', null) // Only show patients with RMO initiation
-        .order('actual1', { ascending: false });
-
-      if (error) throw error;
-
-      // Format the data for display
-      const formattedPatients = data.map(patient => ({
-        id: patient.id,
-        admissionNo: patient.admission_no,
-        patientName: patient.patient_name,
-        department: patient.department,
-        consultantName: patient.consultant_name,
-        staffName: patient.staff_name,
-        dischargeDate: patient.planned1 ? new Date(patient.planned1).toLocaleDateString('en-GB') : 'N/A',
-        dischargeTime: patient.planned1 ? new Date(patient.planned1).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : 'N/A',
-        actualDate: patient.actual1 ? new Date(patient.actual1).toLocaleDateString('en-GB') : 'N/A',
-        actualTime: patient.actual1 ? new Date(patient.actual1).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : 'N/A',
-        planned1: patient.planned1,
-        actual1: patient.actual1,
-        delay1: patient.delay1,
-        remark: patient.remark,
-        dischargeNumber: patient.discharge_number,
-        // RMO fields
-        rmo_status: patient.rmo_status,
-        rmo_name: patient.rmo_name,
-        summary_report_image: patient.summary_report_image,
-        summary_report_image_name: patient.summary_report_image_name,
-        initiation_date: patient.rmo_initiation_date
-      }));
-
-      setHistoryPatients(formattedPatients);
-    } catch (error) {
-      console.error('Error loading history patients:', error);
-      setHistoryPatients([]);
-    }
-  };
+  });
 
   const handleInitiation = (patient) => {
     setSelectedPatient(patient);
-
-    // Get current user name from localStorage
     const storedUser = localStorage.getItem('mis_user');
     let currentUserName = '';
-
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
@@ -177,7 +83,6 @@ const InitiationByRMO = () => {
       }
     }
 
-    // Pre-fill with existing data or current user's name
     setFormData({
       status: patient.rmo_status || '',
       rmoName: patient.rmo_name || currentUserName,
@@ -238,14 +143,11 @@ const InitiationByRMO = () => {
     try {
       let imageUrl = null;
 
-      // If there's an image/PDF to upload
       if (formData.summaryReportImage && typeof formData.summaryReportImage === 'string' &&
         (formData.summaryReportImage.startsWith('data:image') || formData.summaryReportImage.startsWith('data:application/pdf'))) {
 
-        // Extract raw base64 data and mime type
         const [meta, base64Data] = formData.summaryReportImage.split(',');
         const mimeType = meta.split(':')[1].split(';')[0];
-
         const binaryData = atob(base64Data);
         const arrayBuffer = new ArrayBuffer(binaryData.length);
         const uint8Array = new Uint8Array(arrayBuffer);
@@ -255,13 +157,10 @@ const InitiationByRMO = () => {
         }
 
         const blob = new Blob([uint8Array], { type: mimeType });
-
-        // Determine extension based on mime type
         const fileExt = mimeType === 'application/pdf' ? 'pdf' : 'jpg';
         const fileName = `summary_report_${selectedPatient.admissionNo}_${Date.now()}.${fileExt}`;
         const filePath = `summary-reports/${fileName}`;
 
-        // Upload to Supabase Storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('summary_report_image')
           .upload(filePath, blob, {
@@ -269,32 +168,24 @@ const InitiationByRMO = () => {
             upsert: true
           });
 
-        if (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          throw new Error('Failed to upload summary report');
-        }
+        if (uploadError) throw uploadError;
 
-        // Get public URL
         const { data: urlData } = supabase.storage
           .from('summary_report_image')
           .getPublicUrl(filePath);
 
         imageUrl = urlData.publicUrl;
       } else if (typeof formData.summaryReportImage === 'string') {
-        // If it's already a URL (from history), use it directly
         imageUrl = formData.summaryReportImage;
       }
 
-      // Prepare update data object
       const updateData = {
-        // RMO initiation fields (always updated)
         rmo_status: formData.status,
         rmo_name: formData.rmoName,
         summary_report_image: imageUrl,
         summary_report_image_name: formData.summaryReportImageName,
       };
 
-      // Only set actual1 and planned2 if status is NOT "Pending Documentation"
       if (formData.status !== 'Pending Documentation') {
         const currentTime = new Date().toLocaleString("en-CA", {
           timeZone: "Asia/Kolkata",
@@ -304,25 +195,11 @@ const InitiationByRMO = () => {
         updateData.actual1 = currentTime;
         updateData.planned2 = currentTime;
       } else {
-        // For Pending Documentation, ensure these fields remain null
         updateData.actual1 = null;
         updateData.planned2 = null;
       }
 
-      // Update the discharge record in Supabase with RMO initiation data
-      const { error: updateError } = await supabase
-        .from('discharge')
-        .update(updateData)
-        .eq('id', selectedPatient.id);
-
-      if (updateError) throw updateError;
-
-      setShowModal(false);
-      setSelectedPatient(null);
-      resetForm();
-
-      // Reload data
-      await loadData();
+      mutation.mutate({ id: selectedPatient.id, updateData });
 
     } catch (error) {
       console.error('Error saving initiation:', error);
@@ -332,9 +209,8 @@ const InitiationByRMO = () => {
 
   const calculateDelay = (plannedDate, actualDate) => {
     if (!plannedDate) return 'No planned date';
-
     const planned = new Date(plannedDate);
-    const actual = actualDate || new Date();
+    const actual = actualDate ? new Date(actualDate) : new Date();
     const diffMs = actual - planned;
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -349,10 +225,8 @@ const InitiationByRMO = () => {
   };
 
   const resetForm = () => {
-    // Get current user name from localStorage
     const storedUser = localStorage.getItem('mis_user');
     let userName = '';
-
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
@@ -361,7 +235,6 @@ const InitiationByRMO = () => {
         console.error('Error parsing user data in resetForm:', error);
       }
     }
-
     setFormData({
       status: '',
       rmoName: userName,

@@ -51,7 +51,7 @@ import DeletePatient from "./pages/admin/masters/DeletePatient";
 
 // Nurse Station Components
 import AssignTask from "./pages/admin/nurseStation/AssignTask";
-import TaskList from "./pages/admin/nurseStation/TaskList";
+
 import ScoreDashboard from "./pages/admin/nurseStation/ScoreDashboard";
 import PatientCareDashboard from "./pages/admin/nurseStation/PatientCareDashboard";
 import TaskDelegation from "./pages/admin/nurseStation/TaskDelegation";
@@ -330,15 +330,6 @@ function App() {
             element={
               <ProtectedRoute requiredPage="nurse-station-assign-task">
                 <AssignTask />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="nurse-station/task-list"
-            element={
-              <ProtectedRoute requiredPage="nurse-station-task-list">
-                <TaskList />
               </ProtectedRoute>
             }
           />

@@ -118,15 +118,6 @@ export const ALL_PAGES = [
     description: "Assign nursing tasks to staff",
   },
   {
-    key: "nurse-station-task-list",
-    label: "Nursing Task List",
-    path: "/admin/nurse-station/task-list",
-    icon: "CheckSquare",
-    type: "item",
-    parent: "nurse-station",
-    description: "View and execute nursing tasks",
-  },
-  {
     key: "nurse-station-score-dashboard",
     label: "Nursing Score Dashboard",
     path: "/admin/nurse-station/score-dashboard",

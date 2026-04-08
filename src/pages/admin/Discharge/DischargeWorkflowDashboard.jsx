@@ -1138,7 +1138,7 @@ const DischargeWorkflowDashboard = () => {
         </div>
       )}
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
           from {
             opacity: 0;

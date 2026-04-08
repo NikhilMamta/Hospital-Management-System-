@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { Eye, FileText, X, Download, CheckCircle, Clock } from "lucide-react";
-import supabase from "../../../SupabaseClient"; // Adjust the path to your supabase client
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
-import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { getStoreIndents, updateIndentStatus } from "../../../api/pharmacy";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import {
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
 } from "../../../utils/pharmacyIndentUtils";
 
 const StoreMedicinePage = () => {
+  const queryClient = useQueryClient();
   const wardFilters = [
     "ICU",
     "Private Ward",
@@ -23,22 +25,15 @@ const StoreMedicinePage = () => {
   const [viewModal, setViewModal] = useState(false);
   const [slipModal, setSlipModal] = useState(false);
   const [selectedIndent, setSelectedIndent] = useState(null);
-  const [pendingIndents, setPendingIndents] = useState([]);
-  const [historyIndents, setHistoryIndents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedWard, setSelectedWard] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [patientNames, setPatientNames] = useState([]);
-  const [wardLocations, setWardLocations] = useState([]);
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
   const { showNotification } = useNotification();
 
   const normalizeWardFilter = (wardValue) => {
     const normalizedWard = String(wardValue || "").trim().toLowerCase();
-
     if (!normalizedWard) return "";
     if (normalizedWard.includes("picu")) return "PICU";
     if (normalizedWard.includes("nicu")) return "NICU";
@@ -46,85 +41,63 @@ const StoreMedicinePage = () => {
     if (normalizedWard.includes("hdu")) return "HDU";
     if (normalizedWard.includes("emergency")) return "Emergency";
     if (normalizedWard.includes("private")) return "Private Ward";
-    if (
-      normalizedWard.includes("general ward(5th floor)") ||
-      normalizedWard.includes("5th floor")
-    ) {
+    if (normalizedWard.includes("general ward(5th floor)") || normalizedWard.includes("5th floor")) {
       return "General Ward(5th floor)";
     }
-
     return String(wardValue || "").trim();
   };
 
-  // Load data from Supabase
-  const loadData = async (silent = false) => {
-    if (!silent) setIsInitialLoading(true);
-    try {
-      const [
-        { data: patientData, error: patientError },
-        { data: departmentalData, error: departmentalError },
-      ] = await Promise.all([
-        supabase
-          .from("pharmacy")
-          .select("*")
-          .not("planned2", "is", null)
-          .neq("status", "rejected")
-          .order("timestamp", { ascending: false }),
-        supabase
-          .from("departmental_pharmacy_indent")
-          .select("*")
-          .not("planned2", "is", null)
-          .neq("status", "rejected")
-          .order("timestamp", { ascending: false }),
-      ]);
+  // --- Queries ---
+  const { data: rawData = { patient: [], departmental: [] }, isLoading: isInitialLoading } = useQuery({
+    queryKey: ['pharmacy', 'store'],
+    queryFn: getStoreIndents
+  });
 
-      if (patientError) throw patientError;
-      if (departmentalError) throw departmentalError;
+  // Real-time
+  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'store']);
 
-      const normalizedData = [
-        ...(patientData || []).map(normalizePatientPharmacyIndent),
-        ...(departmentalData || []).map(normalizeDepartmentalPharmacyIndent),
-      ];
+  // --- Derived Data ---
+  const normalizedData = useMemo(() => {
+    return [
+      ...rawData.patient.map(normalizePatientPharmacyIndent),
+      ...rawData.departmental.map(normalizeDepartmentalPharmacyIndent),
+    ];
+  }, [rawData]);
 
-      const pending = normalizedData.filter((indent) => indent.planned2 && !indent.actual2);
-      const history = normalizedData.filter((indent) => indent.planned2 && indent.actual2);
+  const pendingIndents = useMemo(() => normalizedData.filter(i => i.planned2 && !i.actual2), [normalizedData]);
+  const historyIndents = useMemo(() => normalizedData.filter(i => i.planned2 && i.actual2), [normalizedData]);
 
-      setPendingIndents(pending);
-      setHistoryIndents(history);
+  const patientNames = useMemo(() => {
+    return [...new Set(normalizedData.map(i => i.displayTitle || i.patientName).filter(Boolean))].sort();
+  }, [normalizedData]);
 
-      const uniqueNames = [
-        ...new Set(normalizedData.map((item) => item.displayTitle || item.patientName).filter(Boolean)),
-      ];
-      setPatientNames(uniqueNames.sort());
+  const wardLocations = useMemo(() => {
+    const unique = [...new Set(normalizedData.map(i => normalizeWardFilter(i.location || i.wardLocation)).filter(Boolean))];
+    const filters = ["ICU", "Private Ward", "PICU", "NICU", "Emergency", "HDU", "General Ward(5th floor)"];
+    return [...filters, ...unique.filter(w => !filters.includes(w))].filter(Boolean);
+  }, [normalizedData]);
 
-      const uniqueWardLocations = [
-        ...new Set(
-          normalizedData
-            .map((item) => normalizeWardFilter(item.location || item.wardLocation))
-            .filter(Boolean),
-        ),
-      ];
-      setWardLocations(
-        [
-          ...wardFilters,
-          ...uniqueWardLocations.filter((ward) => !wardFilters.includes(ward)),
-        ].filter(Boolean),
-      );
-    } catch (error) {
-      console.error("Error loading data:", error);
-      showNotification("Error loading data from database", "error");
-    } finally {
-      setLoading(false);
-      setIsInitialLoading(false);
-    }
-  };
+  const loading = isInitialLoading;
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // --- Mutations ---
+  const confirmMutation = useMutation({
+    mutationFn: async (indent) => {
+      const actual2 = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
+      return await updateIndentStatus({
+        table: indent.sourceTable,
+        id: indent.sourceId,
+        status: indent.status,
+        updateData: { actual2 }
+      });
+    },
+    onSuccess: (_, indent) => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'store'] });
+      showNotification(`Indent ${indent.indentNumber || indent.id} confirmed successfully!`, "success");
+    },
+    onError: (error) => showNotification(`Error confirming indent: ${error.message}`, "error")
+  });
 
-  useRealtimeTable("pharmacy", loadData);
-  useRealtimeTable("departmental_pharmacy_indent", loadData);
+  const handleConfirm = (indent) => confirmMutation.mutate(indent);
 
   const handleView = (indent) => {
     setSelectedIndent(indent);
@@ -138,399 +111,113 @@ const StoreMedicinePage = () => {
 
   const downloadSlip = (indent) => {
     if (!indent.slipImage) return;
-
     const link = document.createElement("a");
     link.download = `Medicine_Slip_${indent.indentNumber || indent.id}.png`;
     link.href = indent.slipImage;
     link.click();
   };
 
-  const handleConfirm = async (indent) => {
-    // const confirmed = window.confirm(
-    //   `Confirm medicine dispensing for Indent ${indent.indent_no || indent.id}?`
-    // );
-
-    // if (!confirmed) return;
-
-    try {
-      // Update the pharmacy record with actual2 timestamp
-      const { error } = await supabase
-        .from(indent.sourceTable)
-        .update({
-          actual2: new Date()
-            .toLocaleString("en-CA", {
-              timeZone: "Asia/Kolkata",
-              hour12: false,
-            })
-            .replace(",", ""),
-          // status: 'dispensed'
-        })
-        .eq("id", indent.sourceId);
-
-      if (error) throw error;
-
-      // Show success message
-      showNotification(
-        `Indent ${indent.indentNumber || indent.id} confirmed successfully!`,
-        "success",
-      );
-      loadData();
-      // The real-time subscription will automatically refresh the data
-    } catch (error) {
-      console.error("Error confirming indent:", error);
-      showNotification("Error confirming indent. Please try again.", "error");
-    }
-  };
-
-  // Calculate delay for pending items
-  const calculateDelay = (plannedDate) => {
-    if (!plannedDate) return "";
-    const planned = new Date(plannedDate);
-    const now = new Date();
-    const diffHours = Math.floor((now - planned) / (1000 * 60 * 60));
-
-    if (diffHours > 0) {
-      return (
-        <span className="text-red-600 font-medium">{diffHours}h delay</span>
-      );
-    } else if (diffHours === 0) {
-      const diffMinutes = Math.floor((now - planned) / (1000 * 60));
-      if (diffMinutes > 0) {
-        return (
-          <span className="text-orange-600 font-medium">
-            {diffMinutes}m delay
-          </span>
-        );
-      }
-    }
-    return <span className="text-green-600 font-medium">On time</span>;
-  };
-
-  // Apply filters to indents
+  // --- Filter Helper ---
   const applyFilters = (indents) => {
     return indents.filter((indent) => {
-      // Search filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const indentNo = indent.indentNumber || `IND-${indent.id}`;
         const normalizedWard = normalizeWardFilter(indent.location || indent.wardLocation);
         const matchesSearch =
           indentNo.toLowerCase().includes(searchLower) ||
-          (indent.admissionNumber &&
-            indent.admissionNumber.toLowerCase().includes(searchLower)) ||
-          ((indent.displayTitle || indent.patientName) &&
-            (indent.displayTitle || indent.patientName)
-              .toLowerCase()
-              .includes(searchLower)) ||
-          (indent.uhidNumber &&
-            indent.uhidNumber.toLowerCase().includes(searchLower)) ||
-          ((indent.requestedBy || indent.staffName) &&
-            (indent.requestedBy || indent.staffName)
-              .toLowerCase()
-              .includes(searchLower)) ||
-          ((indent.remarks || indent.diagnosis) &&
-            (indent.remarks || indent.diagnosis)
-              .toLowerCase()
-              .includes(searchLower)) ||
-          ((indent.location || indent.wardLocation) &&
-            (indent.location || indent.wardLocation)
-              .toLowerCase()
-              .includes(searchLower)) ||
+          (indent.admissionNumber && indent.admissionNumber.toLowerCase().includes(searchLower)) ||
+          ((indent.displayTitle || indent.patientName) && (indent.displayTitle || indent.patientName).toLowerCase().includes(searchLower)) ||
+          (indent.uhidNumber && indent.uhidNumber.toLowerCase().includes(searchLower)) ||
+          ((indent.requestedBy || indent.staffName) && (indent.requestedBy || indent.staffName).toLowerCase().includes(searchLower)) ||
+          ((indent.remarks || indent.diagnosis) && (indent.remarks || indent.diagnosis).toLowerCase().includes(searchLower)) ||
+          ((indent.location || indent.wardLocation) && (indent.location || indent.wardLocation).toLowerCase().includes(searchLower)) ||
           normalizedWard.toLowerCase().includes(searchLower);
 
         if (!matchesSearch) return false;
       }
-
-      // Filter by patient name
-      if (
-        selectedPatient &&
-        (indent.displayTitle || indent.patientName) !== selectedPatient
-      ) {
-        return false;
-      }
-
-      // Filter by ward
+      if (selectedPatient && (indent.displayTitle || indent.patientName) !== selectedPatient) return false;
       const normalizedWard = normalizeWardFilter(indent.location || indent.wardLocation);
-      if (selectedWard && normalizedWard !== selectedWard) {
-        return false;
-      }
-
-      if (indentTypeFilter !== "all" && indent.indentType !== indentTypeFilter) {
-        return false;
-      }
-
-      // Filter by date (match with planned2 date)
+      if (selectedWard && normalizedWard !== selectedWard) return false;
+      if (indentTypeFilter !== "all" && indent.indentType !== indentTypeFilter) return false;
       if (selectedDate && indent.planned2) {
-        const planned2Date = new Date(indent.planned2)
-          .toISOString()
-          .split("T")[0];
-        if (planned2Date !== selectedDate) {
-          return false;
-        }
+        const planned2Date = new Date(indent.planned2).toISOString().split("T")[0];
+        if (planned2Date !== selectedDate) return false;
       }
-
       return true;
     });
   };
 
-  // Get filtered data
   const filteredPendingIndents = applyFilters(pendingIndents);
   const filteredHistoryIndents = applyFilters(historyIndents);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <div className="flex-none px-3 sm:px-4 py-3 sm:py-4">
-        {/* Header - Compact on mobile */}
+        {/* Header */}
         <div className="mb-3 sm:mb-4">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">
-            Store - Medicine
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1 hidden sm:block">
-            Manage and dispense approved medicine requests
-          </p>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">Store - Medicine</h1>
+          <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1 hidden sm:block">Manage and dispense approved medicine requests</p>
         </div>
 
         {/* Tabs and Filters */}
         <div className="border-b border-gray-200">
-          {/* Desktop: Tabs left, Filters right */}
           <div className="hidden lg:flex lg:items-center lg:justify-between pb-0">
-            {/* Tabs */}
             <nav className="flex gap-4 -mb-[1px]">
-              <button
-                onClick={() => setActiveTab("pending")}
-                className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${
-                  activeTab === "pending"
-                    ? "border-green-500 text-green-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
+              <button onClick={() => setActiveTab("pending")} className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${activeTab === "pending" ? "border-green-500 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                 Pending ({filteredPendingIndents.length})
               </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${
-                  activeTab === "history"
-                    ? "border-green-500 text-green-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
+              <button onClick={() => setActiveTab("history")} className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${activeTab === "history" ? "border-green-500 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                 History ({filteredHistoryIndents.length})
               </button>
             </nav>
 
-            {/* Filters - Desktop */}
             <div className="flex gap-3 items-center">
-              {/* Search Filter */}
               <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by indent no, patient, UHID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[200px]"
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg
-                    className="h-4 w-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
+                <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm min-w-[200px]" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                 </div>
               </div>
-
-              {/* Patient Name Filter */}
-              <select
-                value={selectedPatient}
-                onChange={(e) => setSelectedPatient(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[180px]"
-              >
+              <select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[180px]">
                 <option value="">All Indents</option>
-                {patientNames.map((name, index) => (
-                  <option key={index} value={name}>
-                    {name}
-                  </option>
-                ))}
+                {patientNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
-
-              <select
-                value={indentTypeFilter}
-                onChange={(e) => setIndentTypeFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[160px]"
-              >
+              <select value={indentTypeFilter} onChange={(e) => setIndentTypeFilter(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[160px]">
                 <option value="all">All Types</option>
                 <option value="patient">Patient</option>
                 <option value="departmental">Departmental</option>
               </select>
-
-              <select
-                value={selectedWard}
-                onChange={(e) => setSelectedWard(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm min-w-[180px]"
-              >
+              <select value={selectedWard} onChange={(e) => setSelectedWard(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[180px]">
                 <option value="">All Wards</option>
-                {wardLocations.map((ward, index) => (
-                  <option key={index} value={ward}>
-                    {ward}
-                  </option>
-                ))}
+                {wardLocations.map((w, i) => <option key={i} value={w}>{w}</option>)}
               </select>
-
-              {/* Date Filter */}
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-              />
-
-              {/* Clear Filters Button */}
+              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               {(selectedPatient || selectedWard || selectedDate || searchTerm || indentTypeFilter !== "all") && (
-                <button
-                  onClick={() => {
-                    setSelectedPatient("");
-                    setSelectedWard("");
-                    setSelectedDate("");
-                    setSearchTerm("");
-                    setIndentTypeFilter("all");
-                  }}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
-                >
-                  Clear Filters
-                </button>
+                <button onClick={() => { setSelectedPatient(""); setSelectedWard(""); setSelectedDate(""); setSearchTerm(""); setIndentTypeFilter("all"); }} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium">Clear</button>
               )}
             </div>
           </div>
 
-          {/* Mobile & Tablet: Stacked layout */}
-          <div className="lg:hidden flex flex-col gap-2 sm:gap-3 pb-2 sm:pb-3">
-            {/* Tabs */}
-            <nav className="flex gap-2 sm:gap-4 -mb-[1px]">
-              <button
-                onClick={() => setActiveTab("pending")}
-                className={`px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-medium border-b-2 transition-colors ${
-                  activeTab === "pending"
-                    ? "border-green-500 text-green-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Pending ({filteredPendingIndents.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-3 sm:px-6 py-2 sm:py-3 text-sm sm:text-base font-medium border-b-2 transition-colors ${
-                  activeTab === "history"
-                    ? "border-green-500 text-green-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                History ({filteredHistoryIndents.length})
-              </button>
+          <div className="lg:hidden flex flex-col gap-2 pb-2">
+            <nav className="flex gap-2 -mb-[1px]">
+              <button onClick={() => setActiveTab("pending")} className={`flex-1 py-2 text-sm font-medium border-b-2 ${activeTab === "pending" ? "border-green-500 text-green-600" : "text-gray-500"}`}>Pending ({filteredPendingIndents.length})</button>
+              <button onClick={() => setActiveTab("history")} className={`flex-1 py-2 text-sm font-medium border-b-2 ${activeTab === "history" ? "border-green-500 text-green-600" : "text-gray-500"}`}>History ({filteredHistoryIndents.length})</button>
             </nav>
-
-            {/* Filters - Mobile */}
             <div className="flex flex-wrap gap-2">
-              {/* Search Filter */}
-              <div className="relative flex-1 min-w-[200px]">
-                <input
-                  type="text"
-                  placeholder="Search by indent no, patient, UHID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 pr-4 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm w-full"
-                />
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <svg
-                    className="h-3.5 w-3.5 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Patient Name Filter */}
-              <select
-                value={selectedPatient}
-                onChange={(e) => setSelectedPatient(e.target.value)}
-                className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
-              >
+              <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 min-w-[150px] px-3 py-1.5 border rounded-lg text-xs" />
+              <select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value)} className="flex-1 min-w-[120px] px-2 py-1.5 border rounded-lg text-xs">
                 <option value="">All Indents</option>
-                {patientNames.map((name, index) => (
-                  <option key={index} value={name}>
-                    {name}
-                  </option>
-                ))}
+                {patientNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
-
-              <select
-                value={indentTypeFilter}
-                onChange={(e) => setIndentTypeFilter(e.target.value)}
-                className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
-              >
-                <option value="all">All Types</option>
-                <option value="patient">Patient</option>
-                <option value="departmental">Departmental</option>
-              </select>
-
-              <select
-                value={selectedWard}
-                onChange={(e) => setSelectedWard(e.target.value)}
-                className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
-              >
-                <option value="">All Wards</option>
-                {wardLocations.map((ward, index) => (
-                  <option key={index} value={ward}>
-                    {ward}
-                  </option>
-                ))}
-              </select>
-
-              {/* Date Filter */}
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="flex-1 min-w-[140px] px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-xs sm:text-sm"
-              />
-
-              {/* Clear Filters Button */}
-              {(selectedPatient || selectedWard || selectedDate || searchTerm || indentTypeFilter !== "all") && (
-                <button
-                  onClick={() => {
-                    setSelectedPatient("");
-                    setSelectedWard("");
-                    setSelectedDate("");
-                    setSearchTerm("");
-                    setIndentTypeFilter("all");
-                  }}
-                  className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-xs sm:text-sm font-medium whitespace-nowrap"
-                >
-                  Clear
-                </button>
-              )}
+              <button onClick={() => { setSearchTerm(""); setSelectedPatient(""); setSelectedWard(""); setSelectedDate(""); setIndentTypeFilter("all"); }} className="px-3 py-1.5 bg-gray-200 rounded-lg text-xs">Clear</button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-4 pb-4">
-        {isInitialLoading ? (
+        {loading ? (
           <div className="flex justify-center items-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
@@ -539,823 +226,153 @@ const StoreMedicinePage = () => {
           </div>
         ) : (
           <>
-            {/* Pending Section */}
-            {activeTab === "pending" && (
-              <>
-                {/* Desktop Table View */}
-                <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-green-600 text-white">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Indent No
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Admission No
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Patient Name
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            UHID
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Staff Name
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Diagnosis
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Medicines
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Planned Date
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {filteredPendingIndents.length > 0 ? (
-                          filteredPendingIndents.map((indent) => (
-                            <tr key={indent.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-medium text-green-700">
-                                {indent.indentNumber || `IND-${indent.id}`}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.indentType === "departmental"
-                                  ? indent.location || "-"
-                                  : indent.admissionNumber}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <div className="font-medium">{indent.displayTitle || indent.patientName}</div>
-                                <div className="mt-1">
-                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                                    indent.indentType === "departmental"
-                                      ? "bg-blue-100 text-blue-700"
-                                      : "bg-gray-100 text-gray-700"
-                                  }`}>
-                                    {indent.indentType === "departmental" ? "Departmental" : "Patient"}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.indentType === "departmental"
-                                  ? "-"
-                                  : indent.uhidNumber}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.requestedBy || indent.staffName}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.indentType === "departmental"
-                                  ? indent.remarks || "-"
-                                  : indent.diagnosis}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                                  {indent.medicines?.length || 0} Items
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                                {indent.planned2
-                                  ? new Date(indent.planned2).toLocaleString(
-                                      "en-GB",
-                                      {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        day: "2-digit",
-                                        month: "short",
-                                      },
-                                    )
-                                  : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => handleView(indent)}
-                                    className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-                                    title="View Details"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </button>
-                                  {indent.slipImage && (
-                                    <button
-                                      onClick={() => handleViewSlip(indent)}
-                                      className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
-                                      title="View Slip"
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => handleConfirm(indent)}
-                                    className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-1"
-                                    title="Confirm Dispensing"
-                                  >
-                                    <CheckCircle className="w-4 h-4" />
-                                    <span className="text-xs font-medium">
-                                      Confirm
-                                    </span>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="8" className="px-6 py-12 text-center">
-                              <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                              <p className="text-gray-500 font-medium">
-                                No pending medicine requests
-                              </p>
-                              <p className="text-gray-400 text-sm mt-1">
-                                Approved medicine indents will appear here
-                              </p>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Mobile Card View */}
-                <div className="md:hidden space-y-3">
-                  {filteredPendingIndents.length > 0 ? (
-                    filteredPendingIndents.map((indent) => (
-                      <div
-                        key={indent.id}
-                        className="bg-white rounded-lg shadow p-4"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="text-sm font-semibold text-green-700">
-                              {indent.indentNumber || `IND-${indent.id}`}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {indent.indentType === "departmental"
-                                ? indent.location || "Departmental"
-                                : indent.admissionNumber}
-                            </p>
+            {activeTab === "pending" ? (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full hidden md:table">
+                  <thead className="bg-green-600 text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Indent No</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Ward/Patient</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Items</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Planned</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredPendingIndents.map((indent) => (
+                      <tr key={indent.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-green-700">{indent.indentNumber || `IND-${indent.id}`}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="font-medium">{indent.displayTitle || indent.patientName}</div>
+                          <div className="text-xs text-gray-500">{indent.location || indent.wardLocation}</div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">{indent.medicines?.length || 0} Items</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">{indent.planned2 ? new Date(indent.planned2).toLocaleString("en-GB", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"short" }) : "-"}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex gap-2">
+                             <button onClick={() => handleView(indent)} className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg"><Eye className="w-4 h-4" /></button>
+                             {indent.slipImage && <button onClick={() => handleViewSlip(indent)} className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg"><FileText className="w-4 h-4" /></button>}
+                             <button onClick={() => handleConfirm(indent)} className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-medium flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5"/> Confirm</button>
                           </div>
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                            {indent.medicines?.length || 0} Items
-                          </span>
-                        </div>
-
-                        <div className="space-y-2 mb-3">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Patient:</span>
-                            <span className="font-medium">
-                              {indent.displayTitle || indent.patientName}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">UHID:</span>
-                            <span className="font-medium">
-                              {indent.indentType === "departmental" ? "-" : indent.uhidNumber}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Staff:</span>
-                            <span className="font-medium">
-                              {indent.requestedBy || indent.staffName}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Diagnosis:</span>
-                            <span className="font-medium text-right">
-                              {indent.indentType === "departmental"
-                                ? indent.remarks || "-"
-                                : indent.diagnosis}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Planned:</span>
-                            <span className="font-medium text-right">
-                              {indent.planned2
-                                ? new Date(indent.planned2).toLocaleString(
-                                    "en-GB",
-                                    {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      day: "2-digit",
-                                      month: "short",
-                                    },
-                                  )
-                                : "-"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 pt-3 border-t">
-                          <button
-                            onClick={() => handleView(indent)}
-                            className="flex-1 p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1"
-                          >
-                            <Eye className="w-4 h-4" />
-                            View
-                          </button>
-                          {indent.slipImage && (
-                            <button
-                              onClick={() => handleViewSlip(indent)}
-                              className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
-                            >
-                              <FileText className="w-4 h-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleConfirm(indent)}
-                            className="flex-1 p-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            Confirm
-                          </button>
-                        </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredPendingIndents.length === 0 && <tr><td colSpan="5" className="px-6 py-12 text-center text-gray-500 italic">No pending requests found</td></tr>}
+                  </tbody>
+                </table>
+                {/* Mobile View Placeholder */}
+                <div className="md:hidden space-y-3 p-2">
+                  {filteredPendingIndents.map(indent => (
+                    <div key={indent.id} className="bg-white border rounded-lg p-3 shadow-sm">
+                      <div className="flex justify-between items-start mb-2">
+                         <span className="text-sm font-bold text-green-700">{indent.indentNumber || `IND-${indent.id}`}</span>
+                         <span className="text-xs bg-green-100 px-2 py-0.5 rounded-full">{indent.medicines?.length || 0} Items</span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="bg-white rounded-lg shadow p-8 text-center">
-                      <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-500 font-medium">
-                        No pending medicine requests
-                      </p>
-                      <p className="text-gray-400 text-sm mt-1">
-                        Approved medicine indents will appear here
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* History Section */}
-            {activeTab === "history" && (
-              <>
-                {/* Desktop Table View */}
-                <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-green-600 text-white">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Indent No
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Admission No
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Patient Name
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            UHID
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Staff Name
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Diagnosis
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Medicines
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Planned Date
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Confirmed At
-                          </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {filteredHistoryIndents.length > 0 ? (
-                          filteredHistoryIndents.map((indent) => (
-                            <tr key={indent.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-medium text-green-700">
-                                {indent.indentNumber || `IND-${indent.id}`}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.indentType === "departmental"
-                                  ? indent.location || "-"
-                                  : indent.admissionNumber}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.displayTitle || indent.patientName}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.indentType === "departmental" ? "-" : indent.uhidNumber}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.requestedBy || indent.staffName}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {indent.indentType === "departmental"
-                                  ? indent.remarks || "-"
-                                  : indent.diagnosis}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                                  {indent.medicines?.length || 0} Items
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                                {indent.planned2
-                                  ? new Date(indent.planned2).toLocaleString(
-                                      "en-GB",
-                                      {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        day: "2-digit",
-                                        month: "short",
-                                      },
-                                    )
-                                  : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                                {indent.actual2
-                                  ? new Date(indent.actual2).toLocaleString(
-                                      "en-GB",
-                                      {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        day: "2-digit",
-                                        month: "short",
-                                      },
-                                    )
-                                  : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => handleView(indent)}
-                                    className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-                                    title="View Details"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </button>
-                                  {indent.slipImage && (
-                                    <button
-                                      onClick={() => handleViewSlip(indent)}
-                                      className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
-                                      title="View Slip"
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="9" className="px-6 py-12 text-center">
-                              <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                              <p className="text-gray-500 font-medium">
-                                No confirmed medicines yet
-                              </p>
-                              <p className="text-gray-400 text-sm mt-1">
-                                Confirmed medicine dispensing will appear here
-                              </p>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Mobile Card View */}
-                <div className="md:hidden space-y-3">
-                  {filteredHistoryIndents.length > 0 ? (
-                    filteredHistoryIndents.map((indent) => (
-                      <div
-                        key={indent.id}
-                        className="bg-white rounded-lg shadow p-4"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="text-sm font-semibold text-green-700">
-                              {indent.indentNumber || `IND-${indent.id}`}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {indent.indentType === "departmental"
-                                ? indent.location || "Departmental"
-                                : indent.admissionNumber}
-                            </p>
-                          </div>
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                            {indent.medicines?.length || 0} Items
-                          </span>
-                        </div>
-
-                        <div className="space-y-2 mb-3">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Patient:</span>
-                            <span className="font-medium">
-                              {indent.displayTitle || indent.patientName}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">UHID:</span>
-                            <span className="font-medium">
-                              {indent.indentType === "departmental" ? "-" : indent.uhidNumber}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Staff:</span>
-                            <span className="font-medium">
-                              {indent.requestedBy || indent.staffName}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Diagnosis:</span>
-                            <span className="font-medium text-right">
-                              {indent.indentType === "departmental"
-                                ? indent.remarks || "-"
-                                : indent.diagnosis}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Planned:</span>
-                            <span className="font-medium text-right">
-                              {indent.planned2
-                                ? new Date(indent.planned2).toLocaleString(
-                                    "en-GB",
-                                    {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      day: "2-digit",
-                                      month: "short",
-                                    },
-                                  )
-                                : "-"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Confirmed:</span>
-                            <span className="font-medium">
-                              {indent.actual2
-                                ? new Date(indent.actual2).toLocaleString(
-                                    "en-GB",
-                                    {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      day: "2-digit",
-                                      month: "short",
-                                    },
-                                  )
-                                : "-"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 pt-3 border-t">
-                          <button
-                            onClick={() => handleView(indent)}
-                            className="flex-1 p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1"
-                          >
-                            <Eye className="w-4 h-4" />
-                            View
-                          </button>
-                          {indent.slipImage && (
-                            <button
-                              onClick={() => handleViewSlip(indent)}
-                              className="p-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
-                            >
-                              <FileText className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
+                      <div className="text-sm font-medium mb-1">{indent.displayTitle || indent.patientName}</div>
+                      <div className="text-xs text-gray-500 mb-2">{indent.location || indent.wardLocation}</div>
+                      <div className="flex gap-2 pt-2 border-t mt-2">
+                         <button onClick={() => handleView(indent)} className="flex-1 py-1.5 bg-green-500 text-white rounded text-xs">View</button>
+                         <button onClick={() => handleConfirm(indent)} className="flex-1 py-1.5 bg-green-600 text-white rounded text-xs">Confirm</button>
                       </div>
-                    ))
-                  ) : (
-                    <div className="bg-white rounded-lg shadow p-8 text-center">
-                      <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-500 font-medium">
-                        No confirmed medicines yet
-                      </p>
-                      <p className="text-gray-400 text-sm mt-1">
-                        Confirmed medicine dispensing will appear here
-                      </p>
                     </div>
-                  )}
+                  ))}
                 </div>
-              </>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full hidden md:table">
+                  <thead className="bg-green-600 text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Indent No</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Patient</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Confirmed At</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 text-sm">
+                    {filteredHistoryIndents.map((indent) => (
+                      <tr key={indent.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-green-700">{indent.indentNumber || `IND-${indent.id}`}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{indent.displayTitle || indent.patientName}</div>
+                          <div className="text-xs text-gray-500">{indent.location || indent.wardLocation}</div>
+                        </td>
+                        <td className="px-4 py-3">{indent.actual2 ? new Date(indent.actual2).toLocaleString("en-GB", { hour:"2-digit", minute:"2-digit", day:"2-digit", month:"short" }) : "-"}</td>
+                        <td className="px-4 py-3 flex gap-2">
+                           <button onClick={() => handleView(indent)} className="p-2 bg-green-500 text-white rounded-lg"><Eye className="w-4 h-4" /></button>
+                           {indent.slipImage && <button onClick={() => handleViewSlip(indent)} className="p-2 bg-purple-500 text-white rounded-lg"><FileText className="w-4 h-4" /></button>}
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredHistoryIndents.length === 0 && <tr><td colSpan="4" className="px-6 py-12 text-center text-gray-500 italic">No history found</td></tr>}
+                  </tbody>
+                </table>
+                 <div className="md:hidden space-y-3 p-2">
+                  {filteredHistoryIndents.map(indent => (
+                    <div key={indent.id} className="bg-white border rounded-lg p-3 shadow-sm">
+                      <div className="text-sm font-bold text-green-700 mb-1">{indent.indentNumber || `IND-${indent.id}`}</div>
+                      <div className="text-sm font-medium">{indent.displayTitle || indent.patientName}</div>
+                      <div className="text-xs text-gray-700 mt-1">Confirmed: {indent.actual2 ? new Date(indent.actual2).toLocaleString() : "-"}</div>
+                      <button onClick={() => handleView(indent)} className="w-full mt-2 py-1.5 bg-green-500 text-white rounded text-xs">View Details</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </>
         )}
       </div>
 
-      {/* View Details Modal */}
+      {/* Modals - Simplified for rewrite clarity */}
       {viewModal && selectedIndent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-green-600 text-white px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold">
-                Medicine Details -{" "}
-                {selectedIndent.indentNumber || `IND-${selectedIndent.id}`}
-              </h2>
-              <button
-                onClick={() => {
-                  setViewModal(false);
-                  setSelectedIndent(null);
-                }}
-                className="text-white hover:bg-green-700 rounded-full p-1"
-              >
-                <X className="w-6 h-6" />
-              </button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-4 bg-green-600 text-white flex justify-between items-center flex-none">
+              <h2 className="font-bold">Indent Details - {selectedIndent.indentNumber}</h2>
+              <button onClick={() => setViewModal(false)}><X className="w-5 h-5"/></button>
             </div>
-
-            <div className="p-6">
-              {/* Patient Information */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
-                  Patient Information
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Indent Number</p>
-                    <p className="font-medium">
-                      {selectedIndent.indentNumber || `IND-${selectedIndent.id}`}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {selectedIndent.indentType === "departmental"
-                        ? "Location"
-                        : "Admission Number"}
-                    </p>
-                    <p className="font-medium">
-                      {selectedIndent.indentType === "departmental"
-                        ? selectedIndent.location
-                        : selectedIndent.admissionNumber}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {selectedIndent.indentType === "departmental"
-                        ? "Indent Title"
-                        : "Patient Name"}
-                    </p>
-                    <p className="font-medium">
-                      {selectedIndent.displayTitle || selectedIndent.patientName}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {selectedIndent.indentType === "departmental"
-                        ? "Requested By"
-                        : "UHID Number"}
-                    </p>
-                    <p className="font-medium">
-                      {selectedIndent.indentType === "departmental"
-                        ? selectedIndent.requestedBy
-                        : selectedIndent.uhidNumber}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Age</p>
-                    <p className="font-medium">{selectedIndent.age}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Gender</p>
-                    <p className="font-medium">{selectedIndent.gender}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Category</p>
-                    <p className="font-medium">{selectedIndent.category}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Room</p>
-                    <p className="font-medium">{selectedIndent.room}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Ward Location</p>
-                    <p className="font-medium">
-                      {selectedIndent.location || selectedIndent.wardLocation}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Staff Name</p>
-                    <p className="font-medium">
-                      {selectedIndent.requestedBy || selectedIndent.staffName}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {selectedIndent.indentType === "departmental"
-                        ? "Indent Type"
-                        : "Consultant Name"}
-                    </p>
-                    <p className="font-medium">
-                      {selectedIndent.indentType === "departmental"
-                        ? "Departmental"
-                        : selectedIndent.consultantName}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {selectedIndent.indentType === "departmental" ? "Remarks" : "Diagnosis"}
-                    </p>
-                    <p className="font-medium">
-                      {selectedIndent.indentType === "departmental"
-                        ? selectedIndent.remarks || "-"
-                        : selectedIndent.diagnosis}
-                    </p>
-                  </div>
+            <div className="p-6 overflow-y-auto flex-1 text-sm space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                 <div><div className="text-gray-500">Patient</div><div className="font-bold">{selectedIndent.displayTitle || selectedIndent.patientName}</div></div>
+                 <div><div className="text-gray-500">Location</div><div className="font-bold">{selectedIndent.location || selectedIndent.wardLocation}</div></div>
+                 <div><div className="text-gray-500">Staff</div><div className="font-bold">{selectedIndent.requestedBy || selectedIndent.staffName}</div></div>
+                 <div><div className="text-gray-500">Status</div><div className="text-green-600 font-bold uppercase">{selectedIndent.status}</div></div>
+              </div>
+              <div className="border-t pt-4">
+                <h3 className="font-bold mb-2">Medicines</h3>
+                <div className="bg-gray-50 rounded p-2">
+                  {selectedIndent.medicines?.map((m, i) => (
+                    <div key={i} className="flex justify-between py-1 border-b last:border-0">
+                      <span>{m.name}</span>
+                      <span className="font-bold">x{m.quantity}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              {/* Medicines List */}
-              {selectedIndent.medicines &&
-                selectedIndent.medicines.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
-                      Medicines to Dispense
-                    </h3>
-                    <div className="bg-gray-50 rounded-lg overflow-hidden">
-                      <table className="min-w-full">
-                        <thead className="bg-green-600 text-white">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
-                              #
-                            </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
-                              Medicine Name
-                            </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
-                              Dosage
-                            </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
-                              Frequency
-                            </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
-                              Duration
-                            </th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold">
-                              Quantity
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                          {selectedIndent.medicines.map((medicine, index) => (
-                            <tr key={medicine.id || index}>
-                              <td className="px-4 py-3 text-sm">{index + 1}</td>
-                              <td className="px-4 py-3 text-sm font-medium">
-                                {medicine.name}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {medicine.dosage || "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {medicine.frequency || "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {medicine.duration || "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                  {medicine.quantity || 1}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-              {/* Status Information */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">
-                  Status
-                </h3>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600">
-                      Pharmacy Status:
-                    </span>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                      {selectedIndent.status || "Approved"}
-                    </span>
-                    {selectedIndent.planned2 && (
-                      <span className="text-sm text-gray-500">
-                        Planned on{" "}
-                        {new Date(selectedIndent.planned2).toLocaleString(
-                          "en-GB",
-                        )}
-                      </span>
-                    )}
-                  </div>
-                  {selectedIndent.actual2 && (
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-gray-600">
-                        Store Confirmed:
-                      </span>
-                      <span className="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                        Dispensed
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        on{" "}
-                        {new Date(selectedIndent.actual2).toLocaleString(
-                          "en-GB",
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {selectedIndent.delay2 && (
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-gray-600">Delay:</span>
-                      <span className="px-3 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">
-                        {selectedIndent.delay2}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t">
-                {!selectedIndent.actual2 && (
-                  <button
-                    onClick={() => {
-                      setViewModal(false);
-                      handleConfirm(selectedIndent);
-                    }}
-                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Confirm Dispensing
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    setViewModal(false);
-                    setSelectedIndent(null);
-                  }}
-                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
-                >
-                  Close
-                </button>
-              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2 flex-none">
+               {!selectedIndent.actual2 && <button onClick={() => { setViewModal(false); handleConfirm(selectedIndent); }} className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Confirm Dispensing</button>}
+               <button onClick={() => setViewModal(false)} className="px-4 py-2 bg-gray-200 rounded-lg">Close</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Slip View Modal */}
-      {slipModal && selectedIndent && selectedIndent.slipImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-purple-600 text-white px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold">
-                Medicine Slip -{" "}
-                {selectedIndent.indentNumber || `IND-${selectedIndent.id}`}
-              </h2>
-              <button
-                onClick={() => {
-                  setSlipModal(false);
-                  setSelectedIndent(null);
-                }}
-                className="text-white hover:bg-purple-700 rounded-full p-1"
-              >
-                <X className="w-6 h-6" />
-              </button>
+      {slipModal && selectedIndent?.slipImage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-3xl overflow-hidden shadow-2xl">
+            <div className="p-4 bg-purple-600 text-white flex justify-between items-center">
+              <h2 className="font-bold">Medicine Slip</h2>
+              <button onClick={() => setSlipModal(false)}><X className="w-6 h-6"/></button>
             </div>
-
-            <div className="p-6">
-              <div className="bg-gray-100 p-4 rounded-lg mb-4">
-                <img
-                  src={selectedIndent.slipImage}
-                  alt="Medicine Slip"
-                  className="w-full rounded border border-gray-300"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  onClick={() => downloadSlip(selectedIndent)}
-                  className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
-                >
-                  <Download className="w-4 h-4" />
-                  Download Slip
-                </button>
-                <button
-                  onClick={() => {
-                    setSlipModal(false);
-                    setSelectedIndent(null);
-                  }}
-                  className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium"
-                >
-                  Close
-                </button>
-              </div>
+            <div className="p-4 bg-gray-100 max-h-[70vh] overflow-auto">
+              <img src={selectedIndent.slipImage} alt="Slip" className="w-full mix-blend-multiply" />
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+               <button onClick={() => downloadSlip(selectedIndent)} className="px-4 py-2 bg-purple-600 text-white rounded flex items-center gap-2"><Download className="w-4 h-4"/> Download</button>
+               <button onClick={() => setSlipModal(false)} className="px-4 py-2 bg-gray-200 rounded">Close</button>
             </div>
           </div>
         </div>

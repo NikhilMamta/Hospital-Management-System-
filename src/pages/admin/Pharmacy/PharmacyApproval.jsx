@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Eye,
   CheckCircle,
@@ -13,15 +13,25 @@ import {
   Search,
   ChevronDown,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient"; // Adjust the path as needed
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
-import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import {
+  getPendingIndents,
+  getHistoryIndents,
+  getMedicines,
+  getInvestigations,
+  updateIndentStatus,
+  uploadSlipToStorage
+} from "../../../api/pharmacy";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import {
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
   parseJsonField,
 } from "../../../utils/pharmacyIndentUtils";
 
+// (drawWrappedText and MedicineDropdown stay same)
 const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
   if (!text) return;
 
@@ -149,340 +159,113 @@ const MedicineDropdown = ({
 };
 
 const PharmacyApproval = () => {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("pending");
   const [viewModal, setViewModal] = useState(false);
   const [slipModal, setSlipModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
-  const [pendingIndents, setPendingIndents] = useState([]);
-  const [historyIndents, setHistoryIndents] = useState([]);
   const [statusChanges, setStatusChanges] = useState({});
-  const [loading, setLoading] = useState(false);
   const { showNotification } = useNotification();
-
-  // Investigation tests from Supabase
-  const [pathologyTests, setPathologyTests] = useState([]);
-  const [xrayTests, setXrayTests] = useState([]);
-  const [ctScanTests, setCtScanTests] = useState([]);
-  const [usgTests, setUsgTests] = useState([]);
-
-  // Medicines from database
-  const [medicines, setMedicines] = useState([]);
 
   // Filter States
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
-  const [patientNames, setPatientNames] = useState([]);
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
 
-  // Show popup function (legacy - use showNotification)
-  const showPopup = (message, type = "success") => {
-    showNotification(message, type);
-  };
+  // --- Queries ---
 
-  // Fetch investigation tests from Supabase
-  const fetchInvestigationTests = async () => {
-    try {
-      setLoading(true);
+  const { data: rawPending = { patient: [], departmental: [] }, isLoading: isLoadingPending } = useQuery({
+    queryKey: ['pharmacy', 'approval', 'pending'],
+    queryFn: getPendingIndents
+  });
 
-      // Fetch Pathology tests
-      const { data: pathologyData, error: pathologyError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "Pathology")
-        .order("name");
+  const { data: rawHistory = { patient: [], departmental: [] }, isLoading: isLoadingHistory } = useQuery({
+    queryKey: ['pharmacy', 'approval', 'history'],
+    queryFn: getHistoryIndents
+  });
 
-      if (pathologyError) {
-        console.error("Error fetching pathology tests:", pathologyError);
-        showPopup("Error fetching pathology tests", "error");
-      } else {
-        setPathologyTests(pathologyData.map((item) => item.name));
-      }
+  const { data: medicines = [] } = useQuery({ queryKey: ['pharmacy', 'medicines'], queryFn: getMedicines });
+  const { data: investigations = { Pathology: [], 'X-ray': [], 'CT-scan': [], USG: [] } } = useQuery({ 
+    queryKey: ['pharmacy', 'investigations'], 
+    queryFn: getInvestigations 
+  });
 
-      // Fetch CT Scan tests
-      const { data: ctScanData, error: ctScanError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "CT Scan")
-        .order("name");
+  // Real-time
+  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'approval', 'pending']);
+  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'approval', 'history']);
 
-      if (ctScanError) {
-        console.error("Error fetching CT Scan tests:", ctScanError);
-        showPopup("Error fetching CT Scan tests", "error");
-      } else {
-        setCtScanTests(ctScanData.map((item) => item.name));
-      }
+  // --- Derived Data ---
 
-      // Fetch X-ray tests
-      const { data: xrayData, error: xrayError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "X-ray")
-        .order("name");
+  const pendingIndents = useMemo(() => {
+    return [
+      ...rawPending.patient.map(normalizePatientPharmacyIndent),
+      ...rawPending.departmental.map(normalizeDepartmentalPharmacyIndent),
+    ].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  }, [rawPending]);
 
-      if (xrayError) {
-        console.error("Error fetching X-ray tests:", xrayError);
-        showPopup("Error fetching X-ray tests", "error");
-      } else {
-        setXrayTests(xrayData.map((item) => item.name));
-      }
+  const historyIndents = useMemo(() => {
+    return [
+      ...rawHistory.patient.map(normalizePatientPharmacyIndent),
+      ...rawHistory.departmental.map(normalizeDepartmentalPharmacyIndent),
+    ].sort((a, b) => new Date(b.actual1 || 0) - new Date(a.actual1 || 0));
+  }, [rawHistory]);
 
-      // Fetch USG tests
-      const { data: usgData, error: usgError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "USG")
-        .order("name");
+  const patientNames = useMemo(() => {
+    const all = [...pendingIndents, ...historyIndents].map(r => r.displayTitle || r.patientName).filter(Boolean);
+    return [...new Set(all)].sort();
+  }, [pendingIndents, historyIndents]);
 
-      if (usgError) {
-        console.error("Error fetching USG tests:", usgError);
-        showPopup("Error fetching USG tests", "error");
-      } else {
-        setUsgTests(usgData.map((item) => item.name));
-      }
-    } catch (error) {
-      console.error("Error in fetchInvestigationTests:", error);
-      showPopup("Error loading investigation tests", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loading = isLoadingPending || isLoadingHistory;
 
-  // Fetch medicines from Supabase
-  const fetchMedicines = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("medicine")
-        .select("medicine_name")
-        .order("medicine_name");
+  // --- Mutations ---
 
-      if (error) {
-        console.error("Error fetching medicines:", error);
-        showPopup("Error loading medicines", "error");
-      } else {
-        setMedicines(data.map((item) => item.medicine_name));
-      }
-    } catch (error) {
-      console.error("Error in fetchMedicines:", error);
-      showPopup("Error loading medicines", "error");
-    }
-  };
-
-  // Load data from Supabase
-  const loadData = async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
-
-      const [
-        { data: patientPending, error: patientPendingError },
-        { data: patientHistory, error: patientHistoryError },
-        { data: departmentPending, error: departmentPendingError },
-        { data: departmentHistory, error: departmentHistoryError },
-      ] = await Promise.all([
-        supabase
-          .from("pharmacy")
-          .select("*")
-          .not("planned1", "is", null)
-          .is("actual1", null)
-          .eq("status", "pending")
-          .order("timestamp", { ascending: false }),
-        supabase
-          .from("pharmacy")
-          .select("*")
-          .not("actual1", "is", null)
-          .not("planned1", "is", null)
-          .in("status", ["approved", "rejected"])
-          .order("actual1", { ascending: false }),
-        supabase
-          .from("departmental_pharmacy_indent")
-          .select("*")
-          .not("planned1", "is", null)
-          .is("actual1", null)
-          .eq("status", "pending")
-          .order("timestamp", { ascending: false }),
-        supabase
-          .from("departmental_pharmacy_indent")
-          .select("*")
-          .not("actual1", "is", null)
-          .not("planned1", "is", null)
-          .in("status", ["approved", "rejected"])
-          .order("actual1", { ascending: false }),
-      ]);
-
-      if (patientPendingError) throw patientPendingError;
-      if (patientHistoryError) throw patientHistoryError;
-      if (departmentPendingError) throw departmentPendingError;
-      if (departmentHistoryError) throw departmentHistoryError;
-
-      const formattedPending = [
-        ...(patientPending || []).map(normalizePatientPharmacyIndent),
-        ...(departmentPending || []).map(normalizeDepartmentalPharmacyIndent),
-      ].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-
-      const formattedHistory = [
-        ...(patientHistory || []).map(normalizePatientPharmacyIndent),
-        ...(departmentHistory || []).map(normalizeDepartmentalPharmacyIndent),
-      ].sort((a, b) => new Date(b.actual1 || 0) - new Date(a.actual1 || 0));
-
-      setPendingIndents(formattedPending);
-      setHistoryIndents(formattedHistory);
-
-      const allPatients = [...formattedPending, ...formattedHistory]
-        .map((r) => r.displayTitle || r.patientName)
-        .filter(Boolean);
-      setPatientNames([...new Set(allPatients)].sort());
-    } catch (error) {
-      console.error("Error loading data:", error);
-      showPopup(`Error loading data: ${error.message}`, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Setup realtime subscription and initial data load
-  useEffect(() => {
-    loadData();
-    fetchInvestigationTests();
-    fetchMedicines();
-  }, []);
-
-  useRealtimeTable("pharmacy", loadData);
-  useRealtimeTable("departmental_pharmacy_indent", loadData);
-  useRealtimeTable("medicine", fetchMedicines);
-
-  // Handle status dropdown change
-  const handleStatusChange = (indentId, indentNumber, status) => {
-    setStatusChanges((prev) => ({
-      ...prev,
-      [indentId]: { status, indentNumber },
-    }));
-  };
-
-  // Upload slip image to Supabase Storage
-  const uploadSlipToStorage = async (slipImageBase64, indentNumber) => {
-    try {
-      // Convert base64 to blob
-      const base64Response = await fetch(slipImageBase64);
-      const blob = await base64Response.blob();
-
-      // Create a file from blob
-      const fileName = `pharmacy_slip_${indentNumber}_${Date.now()}.png`;
-
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from("slip_image")
-        .upload(fileName, blob, {
-          contentType: "image/png",
-          upsert: true,
-        });
-
-      if (error) {
-        console.error("Error uploading to storage:", error);
-        return null;
-      }
-
-      // Get public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("slip_image").getPublicUrl(fileName);
-
-      return publicUrl;
-    } catch (error) {
-      console.error("Error in uploadSlipToStorage:", error);
-      return null;
-    }
-  };
-
-  // Save status changes to Supabase
-  const handleSaveStatusChanges = async () => {
-    if (Object.keys(statusChanges).length === 0) {
-      showPopup("No changes to save", "warning");
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // Process each status change
-      for (const [id, { status, indentNumber }] of Object.entries(
-        statusChanges,
-      )) {
+  const saveStatusMutation = useMutation({
+    mutationFn: async (changes) => {
+      for (const [id, { status, indentNumber }] of Object.entries(changes)) {
         const indent = pendingIndents.find((p) => String(p.id) === String(id));
-
-        if (!indent) {
-          console.warn(`Indent with ID ${id} not found in pending list.`);
-          continue;
-        }
+        if (!indent) continue;
 
         const updateData = {
-          status: status.toLowerCase(),
-          actual1: new Date()
-            .toLocaleString("en-CA", {
-              timeZone: "Asia/Kolkata",
-              hour12: false,
-            })
-            .replace(",", ""),
-          planned2: new Date()
-            .toLocaleString("en-CA", {
-              timeZone: "Asia/Kolkata",
-              hour12: false,
-            })
-            .replace(",", ""),
+          actual1: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+          planned2: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
         };
 
         if (status === "Approved") {
           const user = JSON.parse(localStorage.getItem("mis_user"));
           updateData.approved_by = user?.name || "Unknown";
-
-          // Generate slip image
+          
           const slipImageBase64 = generateSlipImage(indent);
-
           if (slipImageBase64) {
-            // Then upload to storage and update with URL
-            try {
-              const slipImageUrl = await uploadSlipToStorage(
-                slipImageBase64,
-                indentNumber,
-              );
-              if (slipImageUrl) {
-                updateData.slip_image = slipImageUrl;
-              }
-            } catch (uploadError) {
-              console.error("Failed to upload slip to storage:", uploadError);
-              // Continue even if storage upload fails
-            }
+            const url = await uploadSlipToStorage(slipImageBase64, indentNumber);
+            if (url) updateData.slip_image = url;
           }
         }
 
-        // Update the database
-        const { error } = await supabase
-          .from(indent.sourceTable)
-          .update(updateData)
-          .eq("id", indent.sourceId);
-
-        if (error) {
-          console.error(`Error updating indent ${id}:`, error);
-          throw new Error(`Failed to update indent ${indentNumber}`);
-        }
+        await updateIndentStatus({
+          table: indent.sourceTable,
+          id: indent.sourceId,
+          status,
+          updateData
+        });
       }
-
-      // Clear status changes
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'approval'] });
       setStatusChanges({});
+      showNotification("Status changes saved successfully", "success");
+    },
+    onError: (error) => showNotification(`Error saving changes: ${error.message}`, "error")
+  });
 
-      // Reload data
-      await loadData();
+  const handleStatusChange = (indentId, indentNumber, status) => {
+    setStatusChanges((prev) => ({ ...prev, [indentId]: { status, indentNumber } }));
+  };
 
-      showNotification(
-        `${Object.keys(statusChanges).length} indent(s) processed successfully!`,
-        "success",
-      );
-    } catch (error) {
-      console.error("Error saving status changes:", error);
-      showPopup(`Failed to save status changes: ${error.message}`, "error");
-    } finally {
-      setLoading(false);
-    }
+  const handleSaveStatusChanges = () => {
+    if (Object.keys(statusChanges).length === 0) return showNotification("No changes to save", "warning");
+    saveStatusMutation.mutate(statusChanges);
   };
 
   // Generate slip image (same as before)

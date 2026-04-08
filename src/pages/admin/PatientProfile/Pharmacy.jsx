@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Pill,
   Plus,
@@ -13,9 +13,22 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useOutletContext, useNavigate } from "react-router-dom";
-import supabase from "../../../SupabaseClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
+import supabase from "../../../SupabaseClient";
 import { sendIndentApprovalNotification } from "../../../utils/whatsappService";
+import { 
+  getPatientPharmacyIndents, 
+  getMedicines, 
+  getInvestigations, 
+  getCategories,
+  getNextIndentNumber,
+  createPharmacyIndent,
+  updatePharmacyIndent,
+  deletePharmacyIndent
+} from "../../../api/pharmacy";
+import { normalizePatientPharmacyIndent } from "../../../utils/pharmacyIndentUtils";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -96,32 +109,41 @@ export default function Pharmacy() {
   const { data } = useOutletContext();
   const currentIpdNumber = data?.personalInfo?.ipd || "";
 
+  const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
   const [successModal, setSuccessModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedIndent, setSelectedIndent] = useState(null);
-  const [submittedIndents, setSubmittedIndents] = useState([]);
-  const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
   const [successData, setSuccessData] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [formStep, setFormStep] = useState(1);
-
-  // New state from PharmacyIndent.jsx
   const [medicineSearchTerm, setMedicineSearchTerm] = useState("");
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(null);
-  const [medicinesList, setMedicinesList] = useState([]);
-  const [categories, setCategories] = useState([]);
 
-  // Investigation tests state
-  const [investigationTests, setInvestigationTests] = useState({
-    Pathology: [],
-    "X-ray": [],
-    "CT-scan": [],
-    USG: [],
+  // Metadata Queries
+  const { data: medicinesList = [] } = useQuery({ queryKey: ["pharmacy", "medicines"], queryFn: getMedicines });
+  const { data: categories = [] } = useQuery({ queryKey: ["pharmacy", "categories"], queryFn: getCategories });
+  const { data: investigationTests = { Pathology: [], "X-ray": [], "CT-scan": [], USG: [] } } = useQuery({ 
+    queryKey: ["pharmacy", "investigations"], 
+    queryFn: getInvestigations 
   });
+
+  // Main Indents Query
+  const { data: rawIndents = [], isLoading: isLoadingIndents } = useQuery({
+    queryKey: ["pharmacy", "indents", "patient", currentIpdNumber],
+    queryFn: () => getPatientPharmacyIndents(currentIpdNumber),
+    enabled: !!currentIpdNumber,
+  });
+
+  const submittedIndents = useMemo(() => {
+    return rawIndents.map(normalizePatientPharmacyIndent);
+  }, [rawIndents]);
+
+  // Real-time synchronization
+  useRealtimeQuery("pharmacy", ["pharmacy", "indents", "patient", currentIpdNumber]);
 
   // User name from local storage
   const getCurrentUser = () => {
@@ -277,15 +299,6 @@ export default function Pharmacy() {
     "Serum Homocysteine",
   ];
 
-  // Load data from Supabase
-  useEffect(() => {
-    if (currentIpdNumber) {
-      loadData();
-      loadMedicinesList();
-      loadInvestigationTests();
-      loadCategories();
-    }
-  }, [currentIpdNumber]);
 
   // Add effects to update form data when personal info changes
   useEffect(() => {
@@ -328,6 +341,25 @@ export default function Pharmacy() {
     fetchAdmissionDetails();
   }, [data, currentIpdNumber]);
 
+  // Filtering
+  const filteredIndents = useMemo(() => {
+    return submittedIndents.filter((indent) => {
+      const matchesSearch =
+        !searchTerm ||
+        indent.indentNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        indent.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        indent.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesStatus =
+        filterStatus === "all" ||
+        (filterStatus === "pending" && (indent.status === "pending" || indent.status === "pending approval")) ||
+        (filterStatus === "completed" && (indent.status === "completed" || indent.status === "approved & dispensed")) ||
+        (filterStatus === "approved" && indent.status.toLowerCase().includes("approved"));
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [submittedIndents, searchTerm, filterStatus]);
+
   // Add delay close for medicine dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -343,244 +375,6 @@ export default function Pharmacy() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMedicineDropdown]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      await fetchIndents();
-    } catch (error) {
-      console.error("Error loading data:", error);
-      showNotification("Error loading data", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchIndents = async () => {
-    try {
-      const { data: indents, error } = await supabase
-        .from("pharmacy")
-        .select("*")
-        .or(
-          `ipd_number.eq.${currentIpdNumber},admission_number.eq.${currentIpdNumber}`,
-        )
-        .order("timestamp", { ascending: false });
-
-      if (error) throw error;
-
-      const formattedIndents = (indents || []).map((indent) => ({
-        indentNumber: indent.indent_no,
-        patientName: indent.patient_name,
-        admissionNo: indent.admission_number || indent.ipd_number || "",
-        uhidNumber: indent.uhid_number,
-        diagnosis: indent.diagnosis,
-        requestTypes: indent.request_types
-          ? JSON.parse(indent.request_types)
-          : {},
-        medicines: indent.medicines ? JSON.parse(indent.medicines) : [],
-        investigationAdvice: indent.investigation_advice
-          ? JSON.parse(indent.investigation_advice)
-          : {},
-        submittedAt: indent.timestamp,
-        updatedAt: indent.updated_at,
-        status: indent.status,
-        staffName: indent.staff_name,
-        consultantName: indent.consultant_name,
-        age: indent.age,
-        gender: indent.gender,
-        wardLocation: indent.ward_location,
-        category: indent.category || "", // ✅ FIX: Use category from pharmacy table (will be populated from formData)
-        room: indent.room,
-        ipdNumber: indent.ipd_number,
-        slip_image: indent.slip_image,
-        actual2: indent.actual2,
-        plannedTime: indent.planned1
-          ? new Date(indent.planned1).toLocaleString("en-GB", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "",
-      }));
-
-      setSubmittedIndents(formattedIndents);
-    } catch (error) {
-      console.error("Error fetching indents:", error);
-      setSubmittedIndents([]);
-    }
-  };
-
-  const loadMedicinesList = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("medicine")
-        .select("medicine_name");
-
-      if (error) {
-        console.error("Error loading medicines:", error);
-        setMedicinesList([
-          "Paracetamol 500mg",
-          "Amoxicillin 250mg",
-          "Ibuprofen 400mg",
-          "Cough Syrup",
-          "Vitamin D3",
-          "Omeprazole 20mg",
-          "Aspirin 75mg",
-          "Metformin 500mg",
-          "Cetirizine 10mg",
-          "Azithromycin 500mg",
-        ]);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const medNames = data
-          .map((item) => item.medicine_name)
-          .filter((name) => name);
-        setMedicinesList(medNames);
-      } else {
-        setMedicinesList([
-          "Paracetamol 500mg",
-          "Amoxicillin 250mg",
-          "Ibuprofen 400mg",
-          "Cough Syrup",
-          "Vitamin D3",
-          "Omeprazole 20mg",
-          "Aspirin 75mg",
-          "Metformin 500mg",
-          "Cetirizine 10mg",
-          "Azithromycin 500mg",
-        ]);
-      }
-    } catch (error) {
-      console.error("Error loading medicines list:", error);
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("category")
-        .select("name")
-        .order("name");
-
-      if (error) throw error;
-
-      setCategories(data || []);
-    } catch (err) {
-      console.error("Error loading categories:", err);
-    }
-  };
-
-  const loadInvestigationTests = async () => {
-    try {
-      // Load Pathology
-      const { data: pathologyData, error: pathologyError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "Pathology")
-        .order("name");
-
-      if (!pathologyError && pathologyData?.length > 0) {
-        const tests = pathologyData
-          .map((test) => test.name)
-          .filter((name) => name);
-        setInvestigationTests((prev) => ({ ...prev, Pathology: tests }));
-      } else {
-        setInvestigationTests((prev) => ({
-          ...prev,
-          Pathology: staticPathologyTests,
-        }));
-      }
-
-      // Load X-ray
-      const { data: xrayData, error: xrayError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "X-ray")
-        .order("name");
-
-      if (!xrayError && xrayData?.length > 0) {
-        const tests = xrayData.map((test) => test.name).filter((name) => name);
-        setInvestigationTests((prev) => ({ ...prev, "X-ray": tests }));
-      } else {
-        const fallbackXray = [
-          "X-Ray",
-          "Barium Enema",
-          "Barium Swallow",
-          "Cologram",
-          "Nephrostrogram",
-          "R.G.P.",
-          "Retrograde Urethrogram",
-          "Urethogram",
-          "X Ray Abdomen Upright",
-          "X Ray Cystogram",
-          "X Ray Hand Both",
-          "X Ray LS Spine Extension Flexion",
-          "X Ray Thoracic Spine",
-          "X Ray Tibia Fibula AP/Lat (Left/Right)",
-          "X-Ray Abdomen Erect/Standing/Upright",
-          "X-Ray Abdomen Flat Plate",
-          "X-Ray Abdomen KUB",
-          "X-Ray Ankle Joint AP And Lat (Left/Right)",
-          "X-Ray Chest PA",
-          "X-Ray Chest AP",
-          "X-Ray Chest Lateral View",
-          "X-Ray KUB",
-          "X-Ray LS Spine AP/Lat",
-          "X-Ray Pelvis AP",
-          "X-Ray Skull AP/Lat",
-        ];
-        setInvestigationTests((prev) => ({ ...prev, "X-ray": fallbackXray }));
-      }
-
-      // Load CT-scan
-      const { data: ctScanData } = await supabase
-        .from("investigation")
-        .select("name")
-        .eq("type", "CT Scan");
-      if (ctScanData?.length > 0) {
-        setInvestigationTests((prev) => ({
-          ...prev,
-          "CT-scan": ctScanData.map((t) => t.name),
-        }));
-      } else {
-        const fallbackCT = [
-          "CT Scan",
-          "CT Brain",
-          "CT Chest",
-          "CECT Abdomen",
-          "HRCT",
-        ];
-        setInvestigationTests((prev) => ({ ...prev, "CT-scan": fallbackCT }));
-      }
-
-      // Load USG
-      const { data: usgData } = await supabase
-        .from("investigation")
-        .select("name")
-        .eq("type", "USG");
-      if (usgData?.length > 0) {
-        setInvestigationTests((prev) => ({
-          ...prev,
-          USG: usgData.map((t) => t.name),
-        }));
-      } else {
-        const fallbackUSG = [
-          "USG",
-          "USG Whole Abdomen",
-          "USG KUB",
-          "TVS",
-          "USG Upper Abdomen",
-        ];
-        setInvestigationTests((prev) => ({ ...prev, USG: fallbackUSG }));
-      }
-    } catch (error) {
-      console.error("Error loading investigation tests:", error);
-    }
-  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -762,58 +556,18 @@ export default function Pharmacy() {
     setFormStep(formStep - 1);
   };
 
-  // when the database trigger is unavailable we still generate an indent sequence
-  const generateIndentNumber = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("pharmacy")
-        .select("indent_no")
-        .order("timestamp", { ascending: false })
-        .limit(1);
+  // Mutations
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const currentTimestamp = new Date()
+        .toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false })
+        .replace(",", "");
 
-      if (error) {
-        console.error("Error fetching last indent number:", error);
-        return "IND-15000";
-      }
-
-      if (data && data.length > 0) {
-        const last = data[0].indent_no;
-        if (last && last.startsWith("IND-")) {
-          const num = parseInt(last.replace("IND-", ""), 10);
-          if (!isNaN(num)) {
-            const next = num >= 15000 ? num + 1 : 15000;
-            return `IND-${next}`;
-          }
-        }
-      }
-      return "IND-15000";
-    } catch (err) {
-      console.error("Exception generating indent number:", err);
-      return "IND-15000";
-    }
-  };
-
-  const handleSubmit = async () => {
-    // Final validation
-    if (!validateStep(3)) {
-      return;
-    }
-
-    try {
-      setLoading(true);
+      const indent_no = editMode && selectedIndent ? selectedIndent.indentNumber : await getNextIndentNumber();
 
       const pharmacyData = {
-        timestamp: new Date()
-          .toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false,
-          })
-          .replace(",", ""),
-        indent_no:
-          editMode && selectedIndent
-            ? selectedIndent.indentNumber
-            : await generateIndentNumber(),
-
+        timestamp: currentTimestamp,
+        indent_no,
         admission_number: formData.admissionNumber || "",
         ipd_number: currentIpdNumber || "",
         staff_name: formData.staffName || "",
@@ -823,7 +577,7 @@ export default function Pharmacy() {
         age: formData.age || "",
         gender: formData.gender || "",
         ward_location: formData.wardLocation || "",
-        category: formData.category?.trim() || "", // ✅ CORRECT: Use formData.category (from IPD admissions)
+        category: formData.category?.trim() || "",
         room: formData.room || "",
         diagnosis: formData.diagnosis.trim(),
         request_types: JSON.stringify(requestTypes),
@@ -831,55 +585,25 @@ export default function Pharmacy() {
         investigations: JSON.stringify(investigations || []),
         investigation_advice: JSON.stringify(investigationAdvice),
         status: "pending",
-        planned1: new Date()
-          .toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false,
-          })
-          .replace(",", ""),
+        planned1: currentTimestamp,
       };
-      let savedRow;
 
       if (editMode && selectedIndent) {
-        const { data, error } = await supabase
-          .from("pharmacy")
-          .update(pharmacyData)
-          .eq("indent_no", selectedIndent.indentNumber)
-          .select()
-          .single();
-
-        if (error) throw error;
-        savedRow = data;
-
-        showNotification("Indent updated successfully!");
-
-        const currentRole = getCurrentUserRole();
-        if (currentRole === "nurse") {
-          sendIndentApprovalNotification(
-            savedRow,
-            medicines,
-            requestTypes,
-          ).catch((err) =>
-            console.error("[WhatsApp] Notification error:", err),
-          );
-        }
+        return await updatePharmacyIndent({ id: selectedIndent.sourceId, updateData: pharmacyData });
       } else {
-        const { data, error } = await supabase
-          .from("pharmacy")
-          .insert([pharmacyData])
-          .select()
-          .single();
+        return await createPharmacyIndent(pharmacyData);
+      }
+    },
+    onSuccess: (savedRow) => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "indents", "patient", currentIpdNumber] });
+      showNotification(editMode ? "Indent updated successfully!" : "Indent created successfully!");
 
-        if (error) throw error;
-        savedRow = data;
-        showNotification("Indent created successfully!");
-
-        sendIndentApprovalNotification(savedRow, medicines, requestTypes).catch(
-          (err) => console.error("[WhatsApp] Notification error:", err),
+      const currentRole = getCurrentUserRole();
+      if (!editMode || currentRole === "nurse") {
+        sendIndentApprovalNotification(savedRow, medicines, requestTypes).catch(err => 
+          console.error("[WhatsApp] Notification error:", err)
         );
       }
-
-      await fetchIndents();
 
       const totalMedicines = requestTypes.medicineSlip
         ? medicines.reduce((sum, med) => sum + parseInt(med.quantity || 0), 0)
@@ -896,42 +620,38 @@ export default function Pharmacy() {
       setEditMode(false);
       setSuccessModal(true);
       resetForm();
-    } catch (error) {
-      console.error("Error saving indent:", error);
-      showNotification(`Failed to save indent: ${error.message}`, "error");
-    } finally {
-      setLoading(false);
+    },
+    onError: (error) => showNotification(`Failed to save indent: ${error.message}`, "error")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deletePharmacyIndent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "indents", "patient", currentIpdNumber] });
+      showNotification("Indent deleted successfully");
+    },
+    onError: (error) => showNotification(`Error deleting indent: ${error.message}`, "error")
+  });
+  
+  const loading = isLoadingIndents || submitMutation.isPending || deleteMutation.isPending;
+
+  const handleSubmit = () => {
+    if (validateStep(3)) {
+      submitMutation.mutate();
     }
   };
 
-  const handleDelete = async (indentNumber) => {
+
+  const handleDelete = (indent) => {
     if (isNurse) return;
-    const indent = submittedIndents.find(
-      (i) => i.indentNumber === indentNumber,
-    );
-    if (indent && isApprovedIndent(indent.status)) {
-      showNotification(
-        "This indent has been approved and cannot be deleted.",
-        "error",
-      );
+    
+    if (isApprovedIndent(indent.status)) {
+      showNotification("This indent has been approved and cannot be deleted.", "error");
       return;
     }
 
     if (window.confirm("Are you sure you want to delete this indent?")) {
-      try {
-        const { error } = await supabase
-          .from("pharmacy")
-          .delete()
-          .eq("indent_no", indentNumber);
-
-        if (error) throw error;
-
-        await fetchIndents();
-        showNotification("Indent deleted successfully");
-      } catch (error) {
-        console.error("Error deleting indent:", error);
-        showNotification("Error deleting indent", "error");
-      }
+      deleteMutation.mutate(indent.sourceId);
     }
   };
 
@@ -1046,23 +766,7 @@ export default function Pharmacy() {
     setShowModal(true);
   };
 
-  const getFilteredIndents = () => {
-    return submittedIndents.filter((indent) => {
-      const matchesSearch =
-        indent.indentNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        indent.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        indent.admissionNo?.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesStatus =
-        filterStatus === "all" || indent.status === filterStatus;
-
-      return matchesSearch && matchesStatus;
-    });
-  };
-
   if (!data) return null;
-
-  const filteredIndents = getFilteredIndents();
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 300px)" }}>
@@ -1281,7 +985,7 @@ export default function Pharmacy() {
                           <span>Edit</span>
                         </button>
                         <button
-                          onClick={() => handleDelete(indent.indentNumber)}
+                          onClick={() => handleDelete(indent)}
                           disabled={
                             isNurse ||
                             isApprovedIndent(indent.status) ||
@@ -1450,7 +1154,7 @@ export default function Pharmacy() {
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDelete(indent.indentNumber)}
+                            onClick={() => handleDelete(indent)}
                             disabled={
                               isNurse ||
                               isApprovedIndent(indent.status) ||
@@ -2584,7 +2288,7 @@ export default function Pharmacy() {
       )}
 
       {/* Animation Styles */}
-      <style jsx>{`
+      <style>{`
         @keyframes slide-up {
           from {
             transform: translateY(100%);

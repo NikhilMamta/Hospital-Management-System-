@@ -801,7 +801,7 @@ const PatientCareDashboard = () => {
       </div>
 
       {/* Add animation styles */}
-      <style jsx>{`
+      <style>{`
         @keyframes slide-up {
           from {
             transform: translateY(100%);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
   Users,
   UserCheck,
@@ -12,26 +12,26 @@ import {
   ClipboardCheck,
   ArrowUpRight,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
-import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { useQuery } from "@tanstack/react-query";
+import { getDashboardStats } from "../../../api/dashboard";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
 export default function Dashboard() {
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    patientAdmissionCount: 0,
-    ipdAdmissionCount: 0,
-    wardDistribution: [],
-    departmentDistribution: [],
-    genderDistribution: [],
-    admissionTrends: [],
-    activePatients: 0,
-    dischargedPatients: 0,
-    doctorCount: 0,
-    nurseCount: 0,
-    rmoCount: 0,
-    otStaffCount: 0,
-    featuredNurses: [],
+  // Fetch dashboard data
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['dashboard', 'stats'],
+    queryFn: getDashboardStats,
   });
+
+  // Real-time synchronization
+  useRealtimeQuery("patient_admission", ['dashboard']);
+  useRealtimeQuery("ipd_admissions", ['dashboard']);
+  useRealtimeQuery("nurse_assign_task", ['dashboard']);
+
+  // Calculate percentage for progress bars
+  const calculatePercentage = (value, total) => {
+    return total > 0 ? Math.round((value / total) * 100) : 0;
+  };
 
   // Function to get color based on index
   const getChartColor = (index) => {
@@ -48,84 +48,8 @@ export default function Dashboard() {
     return colors[index % colors.length];
   };
 
-  // Calculate percentage for progress bars
-  const calculatePercentage = (value, total) => {
-    return total > 0 ? Math.round((value / total) * 100) : 0;
-  };
-
-  // Helper function to process distribution data
-  const processDistributionData = (data, field) => {
-    const distribution = {};
-
-    data?.forEach((item) => {
-      const value = item[field];
-      if (value) {
-        distribution[value] = (distribution[value] || 0) + 1;
-      }
-    });
-
-    return Object.entries(distribution).map(([name, count]) => ({
-      name,
-      count,
-      percentage: calculatePercentage(count, data?.length || 0),
-    }));
-  };
-
-  // Format date for display (e.g., "Mon 15")
-  const formatDateForDisplay = (dateString) => {
-    const date = new Date(dateString);
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `${days[date.getDay()]} ${date.getDate()}`;
-  };
-
-  // Get admission trends for last 7 days
-  const getAdmissionTrends = async () => {
-    try {
-      const today = new Date();
-      const sevenDaysAgo = new Date(today);
-      sevenDaysAgo.setDate(today.getDate() - 6); // Last 7 days including today
-
-      // Format dates for Supabase query
-      const startDate = sevenDaysAgo.toISOString().split("T")[0];
-      const endDate = today.toISOString().split("T")[0];
-
-      // Get daily admissions from patient_admission
-      const { data: patientAdmissions, error } = await supabase
-        .from("patient_admission")
-        .select("timestamp")
-        .gte("timestamp", `${startDate}T00:00:00`)
-        .lte("timestamp", `${endDate}T23:59:59`);
-
-      if (error) throw error;
-
-      // Generate dates for last 7 days
-      const dates = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        dates.push(date.toISOString().split("T")[0]);
-      }
-
-      // Count admissions per day
-      const dailyCounts = {};
-      patientAdmissions?.forEach((admission) => {
-        const date = admission.timestamp.split("T")[0];
-        dailyCounts[date] = (dailyCounts[date] || 0) + 1;
-      });
-
-      // Format for chart
-      return dates.map((date) => ({
-        date: formatDateForDisplay(date),
-        count: dailyCounts[date] || 0,
-      }));
-    } catch (error) {
-      console.error("Error fetching admission trends:", error);
-      return [];
-    }
-  };
-
   // Calculate pie chart segments for gender distribution
-  const calculatePieChartSegments = (genderDistribution) => {
+  const calculatePieChartSegments = (genderDistribution = []) => {
     const total = genderDistribution.reduce(
       (sum, gender) => sum + gender.percentage,
       0,
@@ -145,197 +69,7 @@ export default function Dashboard() {
     });
   };
 
-  // Fetch staff counts from all_staff table
-  const fetchStaffCounts = async () => {
-    try {
-      // Fetch everything in parallel to maximize speed
-      const [docRes, nurseRes, rmoRes, otRes] = await Promise.all([
-        supabase.from("doctors").select("*", { count: "exact", head: true }),
-        supabase.from("all_staff").select("*", { count: "exact", head: true }).eq("designation", "Staff Nurse"),
-        supabase.from("all_staff").select("*", { count: "exact", head: true }).eq("designation", "RMO"),
-        supabase.from("all_staff").select("*", { count: "exact", head: true }).eq("designation", "OT STAFF")
-      ]);
-
-      const doctorCount = docRes.count || 0;
-      const nurseCount = nurseRes.count || 0;
-      const rmoCount = rmoRes.count || 0;
-      const otStaffCount = otRes.count || 0;
-      const doctorError = docRes.error;
-      const nurseError = nurseRes.error;
-      const rmoError = rmoRes.error;
-      const otStaffError = otRes.error;
-
-      // 1. Calculate top performing nurses based on task completion (Last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const startDateStr = thirtyDaysAgo.toISOString().split("T")[0];
-
-      const { data: taskPerformance, error: taskPerfError } = await supabase
-        .from("nurse_assign_task")
-        .select("assign_nurse, planned1, actual1")
-        .gte("start_date", startDateStr);
-
-      let topNurseNames = [];
-      if (!taskPerfError && taskPerformance) {
-        const nurseStatsMap = {};
-        taskPerformance.forEach((task) => {
-          const name = task.assign_nurse?.trim();
-          if (name) {
-            if (!nurseStatsMap[name])
-              nurseStatsMap[name] = { total: 0, done: 0 };
-            nurseStatsMap[name].total++;
-            if (task.planned1 && task.actual1) nurseStatsMap[name].done++;
-          }
-        });
-
-        topNurseNames = Object.entries(nurseStatsMap)
-          .map(([name, stats]) => ({
-            name,
-            score: Math.round((stats.done / stats.total) * 100),
-            done: stats.done,
-          }))
-          .sort((a, b) => b.score - a.score || b.done - a.done)
-          .slice(0, 2)
-          .map((n) => n.name);
-      }
-
-      // 2. Fetch full details for these specific nurses
-      let featuredNurses = [];
-      if (topNurseNames.length > 0) {
-        const { data: nursesData, error: nursesDataError } = await supabase
-          .from("all_staff")
-          .select("*")
-          .in("name", topNurseNames);
-
-        if (!nursesDataError && nursesData) {
-          // Preserve the performance rank order
-          featuredNurses = nursesData.sort(
-            (a, b) =>
-              topNurseNames.indexOf(a.name) - topNurseNames.indexOf(b.name),
-          );
-        }
-      }
-
-      // Fallback: If no task data, just show 2 nurses by designation
-      if (featuredNurses.length === 0) {
-        const { data: fallbackNurses } = await supabase
-          .from("all_staff")
-          .select("*")
-          .ilike("designation", "%Nurse%")
-          .limit(2);
-        featuredNurses = fallbackNurses || [];
-      }
-
-      if (doctorError || nurseError || rmoError || otStaffError) {
-        console.error("Error fetching staff counts:", {
-          doctorError,
-          nurseError,
-          rmoError,
-          otStaffError,
-        });
-        return {
-          doctorCount: 0,
-          nurseCount: 0,
-          rmoCount: 0,
-          otStaffCount: 0,
-          featuredNurses: [],
-        };
-      }
-
-      return {
-        doctorCount: doctorCount || 0,
-        nurseCount: nurseCount || 0,
-        rmoCount: rmoCount || 0,
-        otStaffCount: otStaffCount || 0,
-        featuredNurses: featuredNurses || [],
-      };
-    } catch (error) {
-      console.error("Error in fetchStaffCounts:", error);
-      return { doctorCount: 0, nurseCount: 0, rmoCount: 0, otStaffCount: 0 };
-    }
-  };
-
-  // Fetch all dashboard data
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-
-      // Consolidate queries and fetch in parallel for maximum performance
-      const [patientRes, ipdRes, staffCounts, admissionTrends] = await Promise.all([
-        supabase.from("patient_admission").select("gender, timestamp"),
-        supabase.from("ipd_admissions").select("ward_type, department, planned1, actual1"),
-        fetchStaffCounts(),
-        getAdmissionTrends()
-      ]);
-
-      if (patientRes.error || ipdRes.error) {
-        console.error("Error fetching dashboard data:", { patientError: patientRes.error, ipdError: ipdRes.error });
-        return;
-      }
-
-      const patientAdmissionCount = patientRes.data?.length || 0;
-      const ipdAdmissionCount = ipdRes.data?.length || 0;
-      
-      const wardData = ipdRes.data?.filter(i => i.ward_type);
-      const departmentData = ipdRes.data?.filter(i => i.department);
-      const genderData = patientRes.data?.filter(p => p.gender);
-      const ipdStatusData = ipdRes.data;
-
-      // Process ward distribution
-      const wardDistribution = processDistributionData(wardData, "ward_type");
-
-      // Process department distribution
-      const departmentDistribution = processDistributionData(
-        departmentData,
-        "department",
-      );
-
-      // Process gender distribution
-      const genderDistribution = processDistributionData(genderData, "gender");
-
-      // Process active/discharged patients based on planned1 and actual1
-      const activePatients =
-        ipdStatusData?.filter((patient) => patient.planned1 && !patient.actual1)
-          .length || 0;
-
-      const dischargedPatients =
-        ipdStatusData?.filter((patient) => patient.planned1 && patient.actual1)
-          .length || 0;
-
-
-      setStats({
-        patientAdmissionCount: patientAdmissionCount || 0,
-        ipdAdmissionCount: ipdAdmissionCount || 0,
-        wardDistribution: wardDistribution.sort((a, b) => b.count - a.count),
-        departmentDistribution: departmentDistribution.sort(
-          (a, b) => b.count - a.count,
-        ),
-        genderDistribution,
-        admissionTrends,
-        activePatients,
-        dischargedPatients,
-        doctorCount: staffCounts.doctorCount,
-        nurseCount: staffCounts.nurseCount,
-        rmoCount: staffCounts.rmoCount,
-        otStaffCount: staffCounts.otStaffCount,
-        featuredNurses: staffCounts.featuredNurses,
-      });
-    } catch (error) {
-      console.error("Error in fetchDashboardData:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Real-time sync: refresh dashboard when admissions change
-  useRealtimeTable("patient_admission", fetchDashboardData);
-  useRealtimeTable("ipd_admissions", fetchDashboardData);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  if (loading) {
+  if (isLoading || !stats) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">

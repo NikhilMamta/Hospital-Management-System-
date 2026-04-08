@@ -16,83 +16,39 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import supabase from "../../../SupabaseClient";
-import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
+import { getWorkflowData } from "../../../api/pharmacy";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import {
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
 } from "../../../utils/pharmacyIndentUtils";
 
 const STAGES = [
-  {
-    key: "request_received",
-    label: "Prescription Received",
-    shortLabel: "Received",
-    route: "/admin/pharmacy/indent",
-    icon: ClipboardList,
-  },
-  {
-    key: "medication_verification",
-    label: "Medication Verification",
-    shortLabel: "Verification",
-    route: "/admin/pharmacy/approval",
-    icon: FileText,
-  },
-  {
-    key: "dispensing_queue",
-    label: "Inventory and Dispensing",
-    shortLabel: "Dispensing",
-    route: "/admin/pharmacy/store",
-    icon: Pill,
-  },
-  {
-    key: "completed",
-    label: "Completed",
-    shortLabel: "Done",
-    route: "/admin/pharmacy/store",
-    icon: CheckCircle,
-  },
+  { key: "request_received", label: "Prescription Received", shortLabel: "Received", route: "/admin/pharmacy/indent", icon: ClipboardList },
+  { key: "medication_verification", label: "Medication Verification", shortLabel: "Verification", route: "/admin/pharmacy/approval", icon: FileText },
+  { key: "dispensing_queue", label: "Inventory and Dispensing", shortLabel: "Dispensing", route: "/admin/pharmacy/store", icon: Pill },
+  { key: "completed", label: "Completed", shortLabel: "Done", route: "/admin/pharmacy/store", icon: CheckCircle },
 ];
 
-const REQUEST_TYPE_LABELS = {
-  medicineSlip: "Medicine Slip",
-  investigation: "Investigation",
-  package: "Package",
-  nonPackage: "Non-Package",
-};
+const REQUEST_TYPE_LABELS = { medicineSlip: "Medicine Slip", investigation: "Investigation", package: "Package", nonPackage: "Non-Package" };
 
 const parseJsonField = (value, fallback) => {
   if (!value) return fallback;
   if (typeof value === "object") return value;
-
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    console.error("Error parsing pharmacy JSON field:", error);
-    return fallback;
-  }
+  try { return JSON.parse(value); } catch (e) { return fallback; }
 };
 
 const normalizeStatus = (value) => String(value || "pending").trim().toLowerCase();
 
 const formatDateTime = (value) => {
   if (!value) return { date: "-", time: "-" };
-
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return { date: "-", time: "-" };
-
   return {
-    date: parsed.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    time: parsed.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }),
+    date: parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    time: parsed.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }),
   };
 };
 
@@ -100,129 +56,66 @@ const formatDuration = (minutes) => {
   const total = Math.max(Math.abs(minutes), 0);
   const hours = Math.floor(total / 60);
   const mins = total % 60;
-
   if (hours && mins) return `${hours}h ${mins}m`;
   if (hours) return `${hours}h`;
   return `${mins}m`;
 };
 
 const getTimingMeta = (plannedAt, actualAt) => {
-  if (!plannedAt) {
-    return { label: "Not scheduled", tone: "muted", overdue: false };
-  }
-
+  if (!plannedAt) return { label: "Not scheduled", tone: "muted", overdue: false };
   const plannedMs = new Date(plannedAt).getTime();
-  if (Number.isNaN(plannedMs)) {
-    return { label: "Invalid schedule", tone: "muted", overdue: false };
-  }
-
+  if (Number.isNaN(plannedMs)) return { label: "Invalid schedule", tone: "muted", overdue: false };
   const compareMs = actualAt ? new Date(actualAt).getTime() : Date.now();
-  if (Number.isNaN(compareMs)) {
-    return { label: "Invalid timing", tone: "muted", overdue: false };
-  }
-
   const diffMinutes = Math.round((compareMs - plannedMs) / 60000);
-
   if (actualAt) {
-    if (Math.abs(diffMinutes) <= 5) {
-      return { label: "On time", tone: "success", overdue: false };
-    }
-
-    if (diffMinutes > 0) {
-      return {
-        label: `${formatDuration(diffMinutes)} late`,
-        tone: "warning",
-        overdue: true,
-      };
-    }
-
-    return {
-      label: `${formatDuration(diffMinutes)} early`,
-      tone: "info",
-      overdue: false,
-    };
+    if (Math.abs(diffMinutes) <= 5) return { label: "On time", tone: "success", overdue: false };
+    if (diffMinutes > 0) return { label: `${formatDuration(diffMinutes)} late`, tone: "warning", overdue: true };
+    return { label: `${formatDuration(diffMinutes)} early`, tone: "info", overdue: false };
   }
-
-  if (diffMinutes > 5) {
-    return {
-      label: `Overdue by ${formatDuration(diffMinutes)}`,
-      tone: "danger",
-      overdue: true,
-    };
-  }
-
-  if (diffMinutes >= -5) {
-    return { label: "Due now", tone: "warning", overdue: false };
-  }
-
-  return {
-    label: `Due in ${formatDuration(diffMinutes)}`,
-    tone: "info",
-    overdue: false,
-  };
+  if (diffMinutes > 5) return { label: `Overdue by ${formatDuration(diffMinutes)}`, tone: "danger", overdue: true };
+  if (diffMinutes >= -5) return { label: "Due now", tone: "warning", overdue: false };
+  return { label: `Due in ${formatDuration(diffMinutes)}`, tone: "info", overdue: false };
 };
 
 const getStatusClasses = (status) => {
   switch (status) {
-    case "completed":
-      return "bg-green-50 text-green-700 border-green-200";
-    case "blocked":
-      return "bg-red-50 text-red-700 border-red-200";
-    case "overdue":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "pending":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    default:
-      return "bg-gray-50 text-gray-600 border-gray-200";
+    case "completed": return "bg-green-50 text-green-700 border-green-200";
+    case "blocked": return "bg-red-50 text-red-700 border-red-200";
+    case "overdue": return "bg-amber-50 text-amber-700 border-amber-200";
+    case "pending": return "bg-blue-50 text-blue-700 border-blue-200";
+    default: return "bg-gray-50 text-gray-600 border-gray-200";
   }
 };
 
 const getDashboardClasses = (status) => {
   switch (status) {
-    case "completed":
-      return "bg-green-50 text-green-700 border-green-200";
-    case "rejected":
-      return "bg-red-50 text-red-700 border-red-200";
-    case "overdue":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "ready_to_dispense":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "pending_review":
-      return "bg-purple-50 text-purple-700 border-purple-200";
-    default:
-      return "bg-gray-50 text-gray-600 border-gray-200";
+    case "completed": return "bg-green-50 text-green-700 border-green-200";
+    case "rejected": return "bg-red-50 text-red-700 border-red-200";
+    case "overdue": return "bg-amber-50 text-amber-700 border-amber-200";
+    case "ready_to_dispense": return "bg-blue-50 text-blue-700 border-blue-200";
+    case "pending_review": return "bg-purple-50 text-purple-700 border-purple-200";
+    default: return "bg-gray-50 text-gray-600 border-gray-200";
   }
 };
 
 const getDashboardLabel = (status) => {
   switch (status) {
-    case "completed":
-      return "Completed";
-    case "rejected":
-      return "Rejected";
-    case "overdue":
-      return "Delayed";
-    case "ready_to_dispense":
-      return "Ready to Dispense";
-    case "pending_review":
-      return "Pending Review";
-    default:
-      return "Active";
+    case "completed": return "Completed";
+    case "rejected": return "Rejected";
+    case "overdue": return "Delayed";
+    case "ready_to_dispense": return "Ready to Dispense";
+    case "pending_review": return "Pending Review";
+    default: return "Active";
   }
 };
 
 const getTimingClasses = (tone) => {
   switch (tone) {
-    case "success":
-      return "text-green-700";
-    case "warning":
-      return "text-amber-700";
-    case "danger":
-      return "text-red-700";
-    case "info":
-      return "text-blue-700";
-    default:
-      return "text-gray-500";
+    case "success": return "text-green-700";
+    case "warning": return "text-amber-700";
+    case "danger": return "text-red-700";
+    case "info": return "text-blue-700";
+    default: return "text-gray-500";
   }
 };
 
@@ -236,13 +129,7 @@ const getProgressColor = (progress) => {
 
 const getInitials = (name) => {
   if (!name) return "PT";
-
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  return name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
 };
 
 const resolveStatus = ({ plannedAt, actualAt, blocked = false }) => {
@@ -253,7 +140,7 @@ const resolveStatus = ({ plannedAt, actualAt, blocked = false }) => {
   return "not_started";
 };
 
-const getRequestTypeLabels = (requestTypes) =>
+const getRequestTypeLabelsArr = (requestTypes) =>
   Object.entries(REQUEST_TYPE_LABELS)
     .filter(([key]) => requestTypes?.[key])
     .map(([, label]) => label);
@@ -266,57 +153,32 @@ const buildStage = (definition, order) => {
     case "request_received":
       return {
         ...definition,
-        route:
-          order.indentType === "departmental"
-            ? "/admin/pharmacy/departmental-indent"
-            : definition.route,
+        route: order.indentType === "departmental" ? "/admin/pharmacy/departmental-indent" : definition.route,
         plannedAt: order.planned1 || order.timestamp || null,
         actualAt: order.timestamp || order.planned1 || null,
-        owner: order.staff_name || order.staffName || order.requestedBy || "",
+        owner: order.requestedBy || order.staffName || "",
         ownerRole: "Requested by",
-        result:
-          order.requestTypeLabels.length > 0
-            ? order.requestTypeLabels.join(", ")
-            : "Order created",
-        attachmentUrl: null,
-        attachmentLabel: "",
+        result: order.requestTypeLabels.length > 0 ? order.requestTypeLabels.join(", ") : "Order created",
         status: "completed",
         timing: { label: "Created", tone: "success", overdue: false },
-        note: (order.indent_no || order.indentNumber)
-          ? `Indent No: ${order.indent_no || order.indentNumber}`
-          : "Workflow initiated",
+        note: order.indentNumber ? `Indent No: ${order.indentNumber}` : "Workflow initiated",
       };
-
     case "medication_verification": {
       const blocked = status === "rejected";
       return {
         ...definition,
         plannedAt: order.planned1 || null,
         actualAt: order.actual1 || null,
-        owner: order.approved_by || order.approvedBy || "",
+        owner: order.approvedBy || "",
         ownerRole: "Verified by",
-        result:
-          status === "approved"
-            ? "Approved"
-            : blocked
-              ? "Rejected"
-              : "Awaiting pharmacist/admin review",
+        result: status === "approved" ? "Approved" : blocked ? "Rejected" : "Awaiting review",
         attachmentUrl: slipUrl,
         attachmentLabel: slipUrl ? "View Pharmacy Slip" : "",
-        status: resolveStatus({
-          plannedAt: order.planned1,
-          actualAt: status === "approved" ? order.actual1 : null,
-          blocked,
-        }),
+        status: resolveStatus({ plannedAt: order.planned1, actualAt: status === "approved" ? order.actual1 : null, blocked }),
         timing: getTimingMeta(order.planned1, order.actual1),
-        note: blocked
-          ? "This order was rejected during verification."
-          : status === "approved" && !slipUrl
-            ? "Approved, but no slip attachment is available."
-            : "",
+        note: blocked ? "Order rejected during verification." : "",
       };
     }
-
     case "dispensing_queue": {
       const blocked = status === "rejected";
       return {
@@ -325,189 +187,79 @@ const buildStage = (definition, order) => {
         actualAt: order.actual2 || null,
         owner: "",
         ownerRole: "Store Desk",
-        result: blocked
-          ? "Not forwarded to store"
-          : order.actual2
-            ? "Dispensed"
-            : order.planned2
-              ? "Awaiting dispensing"
-              : "Waiting for approval",
+        result: blocked ? "Not forwarded" : order.actual2 ? "Dispensed" : "Awaiting dispensing",
         attachmentUrl: slipUrl,
         attachmentLabel: slipUrl ? "View Pharmacy Slip" : "",
-        status: resolveStatus({
-          plannedAt: order.planned2,
-          actualAt: order.actual2,
-          blocked,
-        }),
+        status: resolveStatus({ plannedAt: order.planned2, actualAt: order.actual2, blocked }),
         timing: getTimingMeta(order.planned2, order.actual2),
-        note:
-          order.planned2 && !order.actual2
-            ? "Current schema does not separate inventory check from store confirmation."
-            : "",
       };
     }
-
     case "completed":
       return {
         ...definition,
         plannedAt: order.planned2 || null,
         actualAt: order.actual2 || null,
-        owner: "",
-        ownerRole: "Completion",
-        result: status === "rejected" ? "Closed as rejected" : order.actual2 ? "Completed" : "Awaiting completion",
-        attachmentUrl: slipUrl,
-        attachmentLabel: slipUrl ? "View Pharmacy Slip" : "",
-        status:
-          status === "rejected"
-            ? "blocked"
-            : order.actual2
-              ? "completed"
-              : "not_started",
-        timing: order.actual2
-          ? getTimingMeta(order.planned2, order.actual2)
-          : { label: "Final confirmation pending", tone: "muted", overdue: false },
-        note:
-          order.actual2 && !order.dispensed_by
-            ? "Store handler is not captured in the current schema."
-            : "",
+        result: status === "rejected" ? "Closed (Rejected)" : order.actual2 ? "Completed" : "Awaiting completion",
+        status: status === "rejected" ? "blocked" : order.actual2 ? "completed" : "not_started",
+        timing: order.actual2 ? getTimingMeta(order.planned2, order.actual2) : { label: "Pending", tone: "muted", overdue: false },
       };
-
     default:
-      return {
-        ...definition,
-        plannedAt: null,
-        actualAt: null,
-        owner: "",
-        ownerRole: "",
-        result: "",
-        attachmentUrl: null,
-        attachmentLabel: "",
-        status: "not_started",
-        timing: { label: "Not started", tone: "muted", overdue: false },
-        note: "",
-      };
+      return { ...definition, status: "not_started", timing: { label: "Not started", tone: "muted", overdue: false } };
   }
 };
 
 const getDashboardStatus = (order, currentStage) => {
   const status = normalizeStatus(order.status);
-
   if (status === "rejected") return "rejected";
   if (order.actual2) return "completed";
   if (currentStage.status === "overdue") return "overdue";
   if (currentStage.key === "medication_verification") return "pending_review";
-  if (currentStage.key === "dispensing_queue" || currentStage.key === "completed") {
-    return "ready_to_dispense";
-  }
+  if (currentStage.key === "dispensing_queue" || currentStage.key === "completed") return "ready_to_dispense";
   return "active";
 };
 
 const buildWorkflowOrder = (row) => {
   const requestTypes = row.requestTypes || parseJsonField(row.request_types, {});
-  const medicines = Array.isArray(row.medicines)
-    ? row.medicines
-    : parseJsonField(row.medicines, []);
-  const investigations = Array.isArray(row.investigations)
-    ? row.investigations
-    : parseJsonField(row.investigations, []);
-  const requestTypeLabels = getRequestTypeLabels(requestTypes);
-  const medicationCount = Array.isArray(medicines) ? medicines.length : 0;
-  const investigationCount = Array.isArray(investigations) ? investigations.length : 0;
-  const stages = STAGES.map((definition) =>
-    buildStage(definition, {
-      ...row,
-      requestTypeLabels,
-      medicines,
-      investigations,
-    }),
-  );
-  const completedCount = stages.filter((stage) => stage.status === "completed").length;
+  const medicines = Array.isArray(row.medicines) ? row.medicines : parseJsonField(row.medicines, []);
+  const investigations = Array.isArray(row.investigations) ? row.investigations : parseJsonField(row.investigations, []);
+  const requestTypeLabels = getRequestTypeLabelsArr(requestTypes);
+  const stages = STAGES.map(d => buildStage(d, { ...row, requestTypeLabels, medicines, investigations }));
+  const completedCount = stages.filter(s => s.status === "completed").length;
   const progress = Math.round((completedCount / stages.length) * 100);
-  const currentStage =
-    stages.find((stage) => stage.status !== "completed") || stages[stages.length - 1];
+  const currentStage = stages.find(s => s.status !== "completed") || stages[stages.length - 1];
   const dashboardStatus = getDashboardStatus(row, currentStage);
 
   return {
     ...row,
-    status: normalizeStatus(row.status),
-    requestTypes,
-    requestTypeLabels,
-    medicines,
-    investigations,
-    medicationCount,
-    investigationCount,
     stages,
     currentStage,
-    completedCount,
-    totalStages: stages.length,
     progress,
     dashboardStatus,
-    searchableText: [
-      row.displayTitle,
-      row.patient_name,
-      row.patientName,
-      row.indent_no,
-      row.indentNumber,
-      row.admission_number,
-      row.admissionNumber,
-      row.ipd_number,
-      row.ipdNumber,
-      row.consultant_name,
-      row.consultantName,
-      row.diagnosis,
-      row.remarks,
-      row.location,
-      currentStage.label,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase(),
+    medicationCount: medicines.length,
+    investigationCount: investigations.length,
+    completedCount,
+    totalStages: stages.length,
+    searchableText: [row.displayTitle, row.patientName, row.indentNumber, row.admissionNumber, row.ipdNumber, row.consultantName, row.diagnosis, row.remarks, row.location, currentStage.label].filter(Boolean).join(" ").toLowerCase(),
   };
 };
 
 const SummaryCard = ({ icon: Icon, label, value, accentClass }) => (
   <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg">
     <div className="flex items-center gap-3">
-      <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accentClass}`}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div>
-        <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-        <h3 className="text-2xl font-semibold text-gray-900">{value}</h3>
-      </div>
+      <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accentClass}`}><Icon className="h-5 w-5" /></div>
+      <div><p className="text-xs uppercase tracking-wide text-gray-500">{label}</p><h3 className="text-2xl font-semibold text-gray-900">{value}</h3></div>
     </div>
   </div>
 );
 
 const StatusPill = ({ status }) => (
-  <span
-    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getStatusClasses(status)}`}
-  >
-    {status === "completed" && <CheckCircle className="h-3.5 w-3.5" />}
-    {(status === "blocked" || status === "overdue") && (
-      <AlertCircle className="h-3.5 w-3.5" />
-    )}
-    {status === "pending" && <Clock className="h-3.5 w-3.5" />}
-    {status === "not_started" && <ClipboardList className="h-3.5 w-3.5" />}
-    {status === "completed"
-      ? "Completed"
-      : status === "blocked"
-        ? "Blocked"
-        : status === "overdue"
-          ? "Overdue"
-          : status === "pending"
-            ? "Pending"
-            : "Not Started"}
+  <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getStatusClasses(status)}`}>
+    {status === "completed" ? <CheckCircle className="h-3.5 w-3.5" /> : (status === "blocked" || status === "overdue") ? <AlertCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+    {status === "completed" ? "Completed" : status === "blocked" ? "Blocked" : status === "overdue" ? "Overdue" : status === "pending" ? "Pending" : "Not Started"}
   </span>
 );
 
-const WorkflowBadge = ({ status }) => (
-  <span
-    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${getDashboardClasses(status)}`}
-  >
-    {getDashboardLabel(status)}
-  </span>
-);
+const WorkflowBadge = ({ status }) => <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${getDashboardClasses(status)}`}>{getDashboardLabel(status)}</span>;
 
 const WorkflowStepper = ({ stages, currentStageKey }) => (
   <div className="overflow-x-auto pb-2">
@@ -515,33 +267,18 @@ const WorkflowStepper = ({ stages, currentStageKey }) => (
       {stages.map((stage, index) => {
         const Icon = stage.icon;
         const isCurrent = stage.key === currentStageKey;
-
         return (
           <React.Fragment key={stage.key}>
             <div className="min-w-[132px]">
               <div className="flex items-center gap-2">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold transition-all ${
-                    isCurrent
-                      ? "border-green-300 bg-green-50 text-green-700 ring-4 ring-green-100"
-                      : getStatusClasses(stage.status)
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
+                <div className={`flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold transition-all ${isCurrent ? "border-green-300 bg-green-50 text-green-700 ring-4 ring-green-100" : getStatusClasses(stage.status)}`}><Icon className="h-4 w-4" /></div>
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold text-gray-800">
-                    {stage.shortLabel}
-                  </p>
-                  <p className={`text-[11px] ${getTimingClasses(stage.timing.tone)}`}>
-                    {stage.status === "completed" ? "Done" : stage.timing.label}
-                  </p>
+                  <p className="truncate text-xs font-semibold text-gray-800">{stage.shortLabel}</p>
+                  <p className={`text-[11px] ${getTimingClasses(stage.timing.tone)}`}>{stage.status === "completed" ? "Done" : stage.timing.label}</p>
                 </div>
               </div>
             </div>
-            {index < stages.length - 1 && (
-              <div className="mt-4 h-0.5 w-9 flex-shrink-0 rounded-full bg-gray-200" />
-            )}
+            {index < stages.length - 1 && <div className="mt-4 h-0.5 w-9 flex-shrink-0 rounded-full bg-gray-200" />}
           </React.Fragment>
         );
       })}
@@ -549,853 +286,160 @@ const WorkflowStepper = ({ stages, currentStageKey }) => (
   </div>
 );
 
-const StageDetailCard = ({
-  stage,
-  isCurrent,
-  onOpenStage,
-  onOpenAttachment,
-  onHandlerClick,
-}) => {
-  const planned = formatDateTime(stage.plannedAt);
-  const actual = formatDateTime(stage.actualAt);
-
-  return (
-    <div
-      className={`rounded-xl border bg-white p-4 shadow-sm transition-all ${
-        isCurrent ? "border-green-200 ring-1 ring-green-100" : "border-gray-200"
-      }`}
-    >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">{stage.label}</p>
-          <p className="mt-1 text-xs text-gray-500">{stage.ownerRole || "Workflow stage"}</p>
-        </div>
-        <StatusPill status={stage.status} />
-      </div>
-
-      <div className="space-y-2 text-xs text-gray-600">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-gray-500">Planned</span>
-          <span className="text-right font-medium text-gray-800">
-            {planned.date} {planned.time}
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-gray-500">Actual</span>
-          <span className="text-right font-medium text-gray-800">
-            {actual.date} {actual.time}
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-gray-500">Timing</span>
-          <span className={`text-right font-medium ${getTimingClasses(stage.timing.tone)}`}>
-            {stage.timing.label}
-          </span>
-        </div>
-        <div className="flex items-start justify-between gap-3">
-          <span className="text-gray-500">Result</span>
-          <span className="text-right font-medium text-gray-800">
-            {stage.result || "-"}
-          </span>
-        </div>
-        <div className="flex items-start justify-between gap-3">
-          <span className="text-gray-500">Handler</span>
-          {stage.owner ? (
-            <button
-              type="button"
-              onClick={() => onHandlerClick(stage)}
-              className="text-right font-medium text-green-700 underline-offset-2 hover:text-green-800 hover:underline"
-            >
-              {stage.owner}
-            </button>
-          ) : (
-            <span className="text-right font-medium text-gray-500">Not recorded</span>
-          )}
-        </div>
-      </div>
-
-      {stage.note && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          {stage.note}
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onOpenStage(stage)}
-          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700 transition-all hover:border-green-200 hover:bg-green-50 hover:text-green-700"
-        >
-          Open Stage
-          <ArrowRight className="h-3.5 w-3.5" />
-        </button>
-        {stage.attachmentUrl && (
-          <button
-            type="button"
-            onClick={() => onOpenAttachment(stage)}
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-          >
-            <FileText className="h-3.5 w-3.5" />
-            {stage.attachmentLabel || "View Attachment"}
-          </button>
-        )}
+const StageDetailCard = ({ stage, isCurrent, onOpenStage, onOpenAttachment, onHandlerClick }) => (
+  <div className={`rounded-xl border bg-white p-4 shadow-sm transition-all ${isCurrent ? "border-green-200 ring-1 ring-green-100" : "border-gray-200"}`}>
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div><p className="text-sm font-semibold text-gray-900">{stage.label}</p><p className="mt-1 text-xs text-gray-500">{stage.ownerRole || "Workflow stage"}</p></div>
+      <StatusPill status={stage.status} />
+    </div>
+    <div className="space-y-2 text-xs text-gray-600">
+      <div className="flex justify-between"><span>Planned</span><span className="font-medium text-gray-800">{formatDateTime(stage.plannedAt).date} {formatDateTime(stage.plannedAt).time}</span></div>
+      <div className="flex justify-between"><span>Actual</span><span className="font-medium text-gray-800">{formatDateTime(stage.actualAt).date} {formatDateTime(stage.actualAt).time}</span></div>
+      <div className="flex justify-between"><span>Handler</span>
+        {stage.owner ? <button onClick={() => onHandlerClick(stage)} className="text-green-700 underline font-medium">{stage.owner}</button> : <span className="text-gray-500">Not recorded</span>}
       </div>
     </div>
-  );
-};
+    <div className="mt-4 flex gap-2">
+      <button onClick={() => onOpenStage(stage)} className="px-3 py-1.5 border rounded text-xs font-medium hover:bg-gray-100 flex items-center gap-1">Open Stage <ArrowRight className="w-3 h-3"/></button>
+      {stage.attachmentUrl && <button onClick={() => onOpenAttachment(stage)} className="px-3 py-1.5 border rounded text-xs font-medium hover:bg-gray-100 flex items-center gap-1"><FileText className="w-3 h-3"/> View Slip</button>}
+    </div>
+  </div>
+);
 
-const PharmacyOrderCard = ({
-  workflow,
-  isExpanded,
-  onToggle,
-  onOpenStage,
-  onOpenAttachment,
-  onHandlerClick,
-}) => {
-  return (
-    <div
-      className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
-        workflow.dashboardStatus === "rejected"
-          ? "border-red-200"
-          : workflow.dashboardStatus === "overdue"
-            ? "border-amber-200"
-            : isExpanded
-              ? "border-green-200 ring-1 ring-green-100"
-              : "border-gray-200"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-green-50/40 md:px-5"
-      >
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
-          {getInitials(workflow.displayTitle || workflow.patient_name || workflow.patientName)}
+const PharmacyOrderCard = ({ workflow, isExpanded, onToggle, onOpenStage, onOpenAttachment, onHandlerClick }) => (
+  <div className={`rounded-2xl border bg-white shadow-sm transition-all ${isExpanded ? "border-green-300 ring-1 ring-green-100" : "border-gray-200"}`}>
+    <button onClick={onToggle} className="w-full flex items-center gap-4 p-4 text-left hover:bg-gray-50 transition-colors">
+      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-600">{getInitials(workflow.displayTitle || workflow.patientName)}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="font-bold truncate">{workflow.displayTitle || workflow.patientName}</h3>
+          <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded border">ID: {workflow.indentNumber}</span>
         </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-base font-semibold text-gray-900">
-              {workflow.displayTitle || workflow.patient_name || workflow.patientName || "Unknown Indent"}
-            </h3>
-            <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-              Indent: {workflow.indent_no || workflow.indentNumber || "N/A"}
-            </span>
-            {(workflow.ipd_number || workflow.ipdNumber) && (
-              <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                IPD: {workflow.ipd_number || workflow.ipdNumber}
-              </span>
-            )}
-            <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
-              workflow.indentType === "departmental"
-                ? "border-blue-200 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-gray-50 text-gray-600"
-            }`}>
-              {workflow.indentType === "departmental" ? "Departmental" : "Patient"}
-            </span>
-          </div>
-
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-            <span>
-              {workflow.indentType === "departmental"
-                ? `Location ${workflow.location || "N/A"}`
-                : `Admission ${workflow.admission_number || workflow.admissionNumber || "N/A"}`}
-            </span>
-            <span>{workflow.ward_location || workflow.location || "Ward N/A"}</span>
-            <span>
-              {workflow.indentType === "departmental"
-                ? workflow.requestedBy || "Requester N/A"
-                : workflow.consultant_name || workflow.consultantName || "Consultant N/A"}
-            </span>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {workflow.requestTypeLabels.map((label) => (
-              <span
-                key={`${workflow.id}-${label}`}
-                className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-600"
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <WorkflowBadge status={workflow.dashboardStatus} />
-            <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600">
-              Current: {workflow.currentStage.shortLabel}
-            </span>
-          </div>
+        <div className="text-xs text-gray-500 flex gap-3">
+          <span>{workflow.indentType === "departmental" ? `Loc: ${workflow.location}` : `Adm: ${workflow.admissionNumber}`}</span>
+          <span>{workflow.wardLocation || workflow.location}</span>
         </div>
-
-        <div className="hidden w-40 flex-shrink-0 sm:block">
-          <div className="mb-1 flex items-center justify-between text-xs font-medium text-gray-600">
-            <span>
-              {workflow.completedCount}/{workflow.totalStages}
-            </span>
-            <span>{workflow.progress}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-            <div
-              className={`h-full rounded-full transition-all ${getProgressColor(workflow.progress)}`}
-              style={{ width: `${workflow.progress}%` }}
-            />
-          </div>
-          <p className="mt-1 text-right text-[11px] text-gray-500">
-            {workflow.currentStage.status === "completed"
-              ? "Completed"
-              : workflow.currentStage.timing.label}
-          </p>
-        </div>
-
-        <div className="flex-shrink-0 text-gray-400">
-          {isExpanded ? (
-            <ChevronUp className="h-5 w-5" />
-          ) : (
-            <ChevronDown className="h-5 w-5" />
-          )}
-        </div>
-      </button>
-
-      <div className="px-4 pb-4 sm:hidden">
-        <div className="mb-1 flex items-center justify-between text-xs font-medium text-gray-600">
-          <span>
-            {workflow.completedCount}/{workflow.totalStages} complete
-          </span>
-          <span>{workflow.progress}%</span>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-          <div
-            className={`h-full rounded-full ${getProgressColor(workflow.progress)}`}
-            style={{ width: `${workflow.progress}%` }}
-          />
+        <div className="mt-2 flex gap-2"><WorkflowBadge status={workflow.dashboardStatus} /><span className="text-[10px] bg-white border px-2 py-0.5 rounded-full">Current: {workflow.currentStage.shortLabel}</span></div>
+      </div>
+      <div className="hidden sm:block w-32">
+        <div className="flex justify-between text-[10px] font-bold mb-1"><span>{workflow.completedCount}/{workflow.totalStages}</span><span>{workflow.progress}%</span></div>
+        <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className={`h-full ${getProgressColor(workflow.progress)}`} style={{ width: `${workflow.progress}%` }} /></div>
+      </div>
+      <div className="text-gray-400">{isExpanded ? <ChevronUp/> : <ChevronDown/>}</div>
+    </button>
+    {isExpanded && (
+      <div className="p-4 bg-gray-50 border-t border-gray-100">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {workflow.stages.map(s => <StageDetailCard key={s.key} stage={s} isCurrent={s.key === workflow.currentStage.key} onOpenStage={onOpenStage} onOpenAttachment={onOpenAttachment} onHandlerClick={onHandlerClick}/>)}
         </div>
       </div>
-
-      {isExpanded && (
-        <div className="animate-fade-in border-t border-gray-100 bg-gray-50/40 px-4 py-4 md:px-5">
-          <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-gray-600 md:grid-cols-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Medicines
-                  </p>
-                  <p className="mt-1 font-semibold text-gray-900">
-                    {workflow.medicationCount}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Investigations
-                  </p>
-                  <p className="mt-1 font-semibold text-gray-900">
-                    {workflow.investigationCount}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Category
-                  </p>
-                  <p className="mt-1 font-semibold text-gray-900">
-                    {workflow.category || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                    Room
-                  </p>
-                  <p className="mt-1 font-semibold text-gray-900">
-                    {workflow.room || "N/A"}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onOpenStage(workflow.currentStage)}
-                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-green-700"
-              >
-                Open Current Stage
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            {workflow.diagnosis && (
-              <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
-                <span className="font-semibold text-gray-900">Diagnosis:</span>{" "}
-                {workflow.diagnosis}
-              </div>
-            )}
-
-            <WorkflowStepper
-              stages={workflow.stages}
-              currentStageKey={workflow.currentStage.key}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {workflow.stages.map((stage) => (
-              <StageDetailCard
-                key={stage.key}
-                stage={stage}
-                isCurrent={stage.key === workflow.currentStage.key}
-                onOpenStage={onOpenStage}
-                onOpenAttachment={onOpenAttachment}
-                onHandlerClick={onHandlerClick}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+    )}
+  </div>
+);
 
 const PharmacyWorkflowDashboard = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { showNotification } = useNotification();
-
-  const [rawOrders, setRawOrders] = useState([]);
-  const [handlerMap, setHandlerMap] = useState({});
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [requestTypeFilter, setRequestTypeFilter] = useState("all");
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [visibleCount, setVisibleCount] = useState(12);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
   const [activeHandler, setActiveHandler] = useState(null);
-  const [showHandlerSheet, setShowHandlerSheet] = useState(false);
-  const [isTabletOrMobile, setIsTabletOrMobile] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
 
-  useEffect(() => {
-    const checkDevice = () => {
-      setIsTabletOrMobile(window.innerWidth < 1024);
-    };
+  const { data: rawData = { orders: { patient: [], departmental: [] }, contacts: {} }, isLoading: loading } = useQuery({
+    queryKey: ['pharmacy', 'workflow'],
+    queryFn: getWorkflowData
+  });
 
-    checkDevice();
-    window.addEventListener("resize", checkDevice);
-    return () => window.removeEventListener("resize", checkDevice);
-  }, []);
+  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'workflow']);
 
-  const fetchDashboardData = useCallback(async () => {
-    try {
-      setLoading(true);
+  const workflows = useMemo(() => {
+    const orders = [
+      ...rawData.orders.patient.map(normalizePatientPharmacyIndent),
+      ...rawData.orders.departmental.map(normalizeDepartmentalPharmacyIndent)
+    ];
+    return orders.map(buildWorkflowOrder);
+  }, [rawData]);
 
-      const [
-        { data: pharmacyData, error: pharmacyError },
-        { data: departmentalData, error: departmentalError },
-        { data: staffData, error: staffError },
-      ] =
-        await Promise.all([
-          supabase.from("pharmacy").select("*").order("timestamp", { ascending: false }),
-          supabase
-            .from("departmental_pharmacy_indent")
-            .select("*")
-            .order("timestamp", { ascending: false }),
-          supabase.from("all_staff").select("name, phone_number"),
-        ]);
+  const filteredWorkflows = useMemo(() => workflows.filter(w => {
+    if (searchTerm && !w.searchableText.includes(searchTerm.toLowerCase())) return false;
+    if (statusFilter !== "all" && w.dashboardStatus !== statusFilter) return false;
+    if (stageFilter !== "all" && w.currentStage.key !== stageFilter) return false;
+    if (requestTypeFilter !== "all" && !w.requestTypes?.[requestTypeFilter]) return false;
+    return true;
+  }), [workflows, searchTerm, statusFilter, stageFilter, requestTypeFilter]);
 
-      if (pharmacyError) throw pharmacyError;
-      if (departmentalError) throw departmentalError;
-      if (staffError) {
-        console.error("Error loading pharmacy handler contacts:", staffError);
-      }
-
-      const contacts = {};
-      (staffData || []).forEach((member) => {
-        contacts[member.name] = member.phone_number || "";
-      });
-
-      setRawOrders([
-        ...(pharmacyData || []).map(normalizePatientPharmacyIndent),
-        ...(departmentalData || []).map(normalizeDepartmentalPharmacyIndent),
-      ]);
-      setHandlerMap(contacts);
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Error loading pharmacy workflow dashboard:", error);
-      showNotification("Error loading pharmacy workflow dashboard", "error");
-      setRawOrders([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [showNotification]);
-
-  useRealtimeTable("pharmacy", fetchDashboardData);
-  useRealtimeTable("departmental_pharmacy_indent", fetchDashboardData);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
-
-  const workflows = useMemo(
-    () => rawOrders.map((row) => buildWorkflowOrder(row)),
-    [rawOrders],
-  );
-
-  const filteredWorkflows = useMemo(
-    () =>
-      workflows.filter((workflow) => {
-        const matchesSearch = searchTerm.trim()
-          ? workflow.searchableText.includes(searchTerm.toLowerCase())
-          : true;
-        const matchesStatus =
-          statusFilter === "all" || workflow.dashboardStatus === statusFilter;
-        const matchesStage =
-          stageFilter === "all" || workflow.currentStage.key === stageFilter;
-        const matchesRequestType =
-          requestTypeFilter === "all" || workflow.requestTypes?.[requestTypeFilter];
-
-        return matchesSearch && matchesStatus && matchesStage && matchesRequestType;
-      }),
-    [workflows, searchTerm, statusFilter, stageFilter, requestTypeFilter],
-  );
-
-  const visibleWorkflows = useMemo(
-    () => filteredWorkflows.slice(0, visibleCount),
-    [filteredWorkflows, visibleCount],
-  );
+  const visibleWorkflows = useMemo(() => filteredWorkflows.slice(0, visibleCount), [filteredWorkflows, visibleCount]);
 
   const stats = useMemo(() => {
-    const totalOrders = workflows.length;
-    const pendingReview = workflows.filter(
-      (workflow) => workflow.dashboardStatus === "pending_review",
-    ).length;
-    const readyToDispense = workflows.filter(
-      (workflow) => workflow.dashboardStatus === "ready_to_dispense",
-    ).length;
-    const delayed = workflows.filter(
-      (workflow) => workflow.dashboardStatus === "overdue",
-    ).length;
-    const completed = workflows.filter(
-      (workflow) => workflow.dashboardStatus === "completed",
-    ).length;
-
-    return { totalOrders, pendingReview, readyToDispense, delayed, completed };
+    return {
+      total: workflows.length,
+      pending: workflows.filter(w => w.dashboardStatus === "pending_review").length,
+      ready: workflows.filter(w => w.dashboardStatus === "ready_to_dispense").length,
+      delayed: workflows.filter(w => w.dashboardStatus === "overdue").length,
+      completed: workflows.filter(w => w.dashboardStatus === "completed").length,
+    };
   }, [workflows]);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (
-        window.innerHeight + window.scrollY >=
-          document.documentElement.scrollHeight - 220 &&
-        visibleCount < filteredWorkflows.length
-      ) {
-        setVisibleCount((previous) =>
-          Math.min(previous + 12, filteredWorkflows.length),
-        );
-      }
-    };
+  const handleOpenStage = (stage) => navigate(stage.route);
+  const handleOpenAttachment = (stage) => stage.attachmentUrl && setAttachmentPreview({ url: stage.attachmentUrl, label: stage.attachmentLabel || stage.label });
+  const handleHandlerClick = (stage) => setActiveHandler({ name: stage.owner, role: stage.ownerRole || "Handler", phone: rawData.contacts[stage.owner] || "" });
 
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [visibleCount, filteredWorkflows.length]);
-
-  useEffect(() => {
-    setVisibleCount(12);
-  }, [searchTerm, statusFilter, stageFilter, requestTypeFilter]);
-
-  const handleOpenStage = (stage) => {
-    navigate(stage.route);
-  };
-
-  const handleHandlerClick = (stage) => {
-    if (!stage.owner) return;
-
-    setActiveHandler({
-      name: stage.owner,
-      role: stage.ownerRole || "Handler",
-      phone: handlerMap[stage.owner] || "",
-    });
-
-    if (isTabletOrMobile) {
-      setShowHandlerSheet(true);
-    }
-  };
-
-  const handleOpenAttachment = (stage) => {
-    if (!stage.attachmentUrl) return;
-
-    setAttachmentPreview({
-      url: stage.attachmentUrl,
-      label: stage.attachmentLabel || stage.label,
-    });
-  };
-
-  const closeHandlerCard = () => {
-    setActiveHandler(null);
-    setShowHandlerSheet(false);
-  };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 text-gray-800 sm:p-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-12 w-12 rounded-full border-2 border-gray-200 border-t-green-500 animate-spin" />
-          <p className="text-sm text-gray-500">Loading pharmacy workflow...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-gray-50"><div className="animate-spin h-10 w-10 border-b-2 border-green-500 rounded-full"/></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 text-gray-800 sm:p-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 text-gray-800">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-light text-gray-800 md:text-2xl">
-                Pharmacy Workflow Dashboard
-              </h1>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-                Live updates enabled
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-gray-500">
-              Monitor pharmacy requests from prescription receipt through verification
-              and dispensing.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={fetchDashboardData}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600 transition-all hover:border-green-200 hover:text-green-700"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
-          </button>
+        <div className="flex flex-col md:flex-row justify-between gap-4">
+          <div><h1 className="text-2xl font-bold">Pharmacy Workflow Dashboard</h1><p className="text-xs text-gray-500">Live multi-stage order tracking</p></div>
+          <button onClick={() => queryClient.invalidateQueries(['pharmacy', 'workflow'])} className="px-4 py-2 bg-white border rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50"><RefreshCw className="w-4 h-4"/> Refresh</button>
         </div>
 
-        <div className="flex flex-wrap gap-4 text-xs font-medium text-gray-600">
-          <span>Orders: {stats.totalOrders}</span>
-          <span>Pending Review: {stats.pendingReview}</span>
-          <span>Ready to Dispense: {stats.readyToDispense}</span>
-          <span>Delayed: {stats.delayed}</span>
-          <span>Completed: {stats.completed}</span>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <SummaryCard icon={ClipboardList} label="Total Orders" value={stats.total} accentClass="bg-blue-50 text-blue-700" />
+          <SummaryCard icon={FileText} label="Pending Review" value={stats.pending} accentClass="bg-purple-50 text-purple-700" />
+          <SummaryCard icon={Pill} label="Ready" value={stats.ready} accentClass="bg-green-50 text-green-700" />
+          <SummaryCard icon={AlertCircle} label="Delayed" value={stats.delayed} accentClass="bg-amber-50 text-amber-700" />
+          <SummaryCard icon={CheckCircle} label="Completed" value={stats.completed} accentClass="bg-emerald-50 text-emerald-700" />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
-          <SummaryCard
-            icon={ClipboardList}
-            label="Orders"
-            value={stats.totalOrders}
-            accentClass="bg-green-50 text-green-700"
-          />
-          <SummaryCard
-            icon={FileText}
-            label="Pending Review"
-            value={stats.pendingReview}
-            accentClass="bg-purple-50 text-purple-700"
-          />
-          <SummaryCard
-            icon={Pill}
-            label="Ready"
-            value={stats.readyToDispense}
-            accentClass="bg-blue-50 text-blue-700"
-          />
-          <SummaryCard
-            icon={AlertCircle}
-            label="Delayed"
-            value={stats.delayed}
-            accentClass="bg-amber-50 text-amber-700"
-          />
-          <SummaryCard
-            icon={CheckCircle}
-            label="Completed"
-            value={stats.completed}
-            accentClass="bg-emerald-50 text-emerald-700"
-          />
-        </div>
-
-        <div className="sticky top-0 z-20 bg-gray-50 pb-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search patient, indent, admission, IPD, consultant..."
-                  className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm text-gray-700 placeholder-gray-400 transition-all focus:border-green-300 focus:ring-2 focus:ring-green-200"
-                />
-              </div>
-
-              <div className="relative">
-                <Filter className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                  className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-8 text-sm text-gray-700 transition-all focus:border-green-300 focus:ring-2 focus:ring-green-200"
-                >
-                  <option value="all">All statuses</option>
-                  <option value="pending_review">Pending Review</option>
-                  <option value="ready_to_dispense">Ready to Dispense</option>
-                  <option value="overdue">Delayed</option>
-                  <option value="completed">Completed</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-
-              <div>
-                <select
-                  value={stageFilter}
-                  onChange={(event) => setStageFilter(event.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition-all focus:border-green-300 focus:ring-2 focus:ring-green-200"
-                >
-                  <option value="all">All stages</option>
-                  {STAGES.map((stage) => (
-                    <option key={stage.key} value={stage.key}>
-                      {stage.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <select
-                  value={requestTypeFilter}
-                  onChange={(event) => setRequestTypeFilter(event.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition-all focus:border-green-300 focus:ring-2 focus:ring-green-200"
-                >
-                  <option value="all">All request types</option>
-                  {Object.entries(REQUEST_TYPE_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+        <div className="sticky top-0 z-10 bg-gray-50/80 backdrop-blur py-3">
+          <div className="bg-white p-3 rounded-xl shadow-sm border space-y-3 lg:space-y-0 lg:flex lg:gap-3">
+             <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/><input type="text" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-400 transition-all"/></div>
+             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-2 border rounded-lg text-sm outline-none">
+                <option value="all">All statuses</option>
+                <option value="pending_review">Pending Review</option>
+                <option value="ready_to_dispense">Ready to Dispense</option>
+                <option value="overdue">Delayed</option>
+                <option value="completed">Completed</option>
+             </select>
           </div>
         </div>
 
-        <div className="space-y-3">
-          {filteredWorkflows.length === 0 ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm">
-              <Pill className="mx-auto mb-3 h-10 w-10 text-gray-300" />
-              <p className="text-sm font-medium text-gray-700">
-                No pharmacy orders match your filters
-              </p>
-              <p className="mt-1 text-xs text-gray-400">
-                Try widening the search, status, stage, or request type filters.
-              </p>
-            </div>
-          ) : (
-            visibleWorkflows.map((workflow) => (
-              <PharmacyOrderCard
-                key={workflow.id}
-                workflow={workflow}
-                isExpanded={expandedOrder === workflow.id}
-                onToggle={() =>
-                  setExpandedOrder((previous) =>
-                    previous === workflow.id ? null : workflow.id,
-                  )
-                }
-                onOpenStage={handleOpenStage}
-                onOpenAttachment={handleOpenAttachment}
-                onHandlerClick={handleHandlerClick}
-              />
-            ))
-          )}
+        <div className="space-y-4">
+          {visibleWorkflows.map(w => <PharmacyOrderCard key={w.id} workflow={w} isExpanded={expandedOrder === w.id} onToggle={() => setExpandedOrder(expandedOrder === w.id ? null : w.id)} onOpenStage={handleOpenStage} onOpenAttachment={handleOpenAttachment} onHandlerClick={handleHandlerClick} />)}
+          {visibleWorkflows.length === 0 && <div className="text-center py-20 bg-white border rounded-2xl text-gray-400 italic">No matching orders found</div>}
+          {visibleWorkflows.length < filteredWorkflows.length && <button onClick={() => setVisibleCount(v => v + 12)} className="w-full py-3 bg-white border rounded-xl text-sm font-medium hover:bg-gray-50">Load More</button>}
         </div>
-
-        {visibleWorkflows.length < filteredWorkflows.length && (
-          <div className="py-4 text-center text-sm text-gray-500">Loading more...</div>
-        )}
-
-        {filteredWorkflows.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-gray-200 pt-3 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>Last updated: {lastUpdated.toLocaleTimeString()}</p>
-            <p>
-              Showing {visibleWorkflows.length} of {filteredWorkflows.length}
-            </p>
-          </div>
-        )}
       </div>
 
-      {activeHandler && !isTabletOrMobile && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
-          onClick={closeHandlerCard}
-        >
-          <div
-            className="w-72 rounded-2xl border border-green-100 bg-white p-4 shadow-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{activeHandler.name}</p>
-                <p className="mt-1 text-xs text-gray-500">{activeHandler.role}</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeHandlerCard}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-2 text-xs text-gray-600">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-gray-400" />
-                <span>{activeHandler.name}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-gray-400" />
-                <span>{activeHandler.phone || "No phone number available"}</span>
-              </div>
-            </div>
-
-            {activeHandler.phone && (
-              <div className="mt-4 flex gap-2">
-                <a
-                  href={`tel:${activeHandler.phone}`}
-                  className="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-xs font-medium text-green-700 hover:bg-green-100"
-                >
-                  Call
-                </a>
-                <a
-                  href={`https://wa.me/${String(activeHandler.phone).replace(/\D/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-xs font-medium text-green-700 hover:bg-green-100"
-                >
-                  WhatsApp
-                </a>
-              </div>
-            )}
+      {activeHandler && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setActiveHandler(null)}><div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="flex justify-between items-start mb-6"><div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold">{getInitials(activeHandler.name)}</div><button onClick={() => setActiveHandler(null)}><X className="w-6 h-6 text-gray-400"/></button></div>
+          <h2 className="text-xl font-bold mb-1">{activeHandler.name}</h2><p className="text-sm text-gray-500 mb-6">{activeHandler.role}</p>
+          <div className="space-y-4">
+             <div className="flex items-center gap-3 text-sm"><User className="w-4 h-4 text-gray-400"/><span>Contact info available below</span></div>
+             <div className="flex gap-3"><a href={`tel:${activeHandler.phone}`} className="flex-1 py-3 bg-green-600 text-white text-center rounded-xl font-bold hover:bg-green-700 transition-colors">Call Handler</a><a href={`https://wa.me/${activeHandler.phone?.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" className="flex-1 py-3 bg-green-100 text-green-700 text-center rounded-xl font-bold hover:bg-green-200 transition-colors">WhatsApp</a></div>
           </div>
-        </div>
-      )}
+      </div></div>}
 
-      {showHandlerSheet && activeHandler && (
-        <div
-          className="fixed inset-0 z-50 flex items-end bg-black/20"
-          onClick={closeHandlerCard}
-        >
-          <div
-            className="w-full rounded-t-3xl bg-white p-5 shadow-xl animate-slide-up"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-gray-200" />
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-900">{activeHandler.name}</p>
-              <p className="mt-1 text-xs text-gray-500">{activeHandler.role}</p>
-              <p className="mt-3 text-sm text-gray-600">
-                {activeHandler.phone || "No phone number available"}
-              </p>
-            </div>
-
-            {activeHandler.phone && (
-              <div className="mt-5 flex gap-3">
-                <a
-                  href={`tel:${activeHandler.phone}`}
-                  className="flex-1 rounded-lg bg-green-50 px-4 py-2.5 text-center text-sm font-medium text-green-700 hover:bg-green-100"
-                >
-                  Call
-                </a>
-                <a
-                  href={`https://wa.me/${String(activeHandler.phone).replace(/\D/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 rounded-lg bg-green-50 px-4 py-2.5 text-center text-sm font-medium text-green-700 hover:bg-green-100"
-                >
-                  WhatsApp
-                </a>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={closeHandlerCard}
-              className="mt-4 w-full rounded-lg px-4 py-2.5 text-sm text-gray-500"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {attachmentPreview && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setAttachmentPreview(null)}
-        >
-          <div
-            className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">
-                  {attachmentPreview.label}
-                </p>
-                <p className="text-xs text-gray-500">Attachment preview</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAttachmentPreview(null)}
-                className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto bg-gray-50 p-4">
-              {String(attachmentPreview.url).toLowerCase().includes(".pdf") ? (
-                <iframe
-                  src={attachmentPreview.url}
-                  title={attachmentPreview.label}
-                  className="h-[72vh] w-full rounded-xl border border-gray-200 bg-white"
-                />
-              ) : (
-                <img
-                  src={attachmentPreview.url}
-                  alt={attachmentPreview.label}
-                  className="mx-auto max-h-[72vh] w-auto rounded-xl border border-gray-200 bg-white object-contain"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(6px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes slideUp {
-          from {
-            transform: translateY(100%);
-          }
-          to {
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fadeIn 0.25s ease;
-        }
-
-        .animate-slide-up {
-          animation: slideUp 0.25s ease-out;
-        }
-      `}</style>
+      {attachmentPreview && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setAttachmentPreview(null)}><div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-2xl overflow-hidden flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="p-4 border-b flex justify-between items-center"><span className="font-bold">{attachmentPreview.label}</span><button onClick={() => setAttachmentPreview(null)}><X className="w-6 h-6"/></button></div>
+          <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center"><img src={attachmentPreview.url} alt="Slip" className="max-w-full h-auto object-contain" /></div>
+      </div></div>}
     </div>
   );
 };

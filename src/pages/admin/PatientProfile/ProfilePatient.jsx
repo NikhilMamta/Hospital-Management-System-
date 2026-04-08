@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Eye,
   Trash2,
@@ -10,216 +10,89 @@ import {
   Layers,
   LayoutDashboard,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import supabase from "../../../SupabaseClient"; // Adjust the path to your supabase client
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNotification } from "../../../contexts/NotificationContext";
 import PatientCard from "../../../components/PatientCard";
+import { fetchIpdPatients, getDischargedAdmissions, deleteIpdPatient } from "../../../api/patientProfile";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
 // Main Component
 export default function PatientProfile() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { showNotification } = useNotification();
+  const location = useLocation();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [wardFilter, setWardFilter] = useState("All Patients");
-  const [patientsData, setPatientsData] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState("");
   const [statusFilter, setStatusFilter] = useState("Active");
   const [doctorTab, setDoctorTab] = useState("active");
-  const [dischargedAdmissions, setDischargedAdmissions] = useState(new Set());
   const [compactView, setCompactView] = useState(false);
   const [visibleCount, setVisibleCount] = useState(12);
 
-  const location = useLocation();
+  const currentUser = useMemo(() => JSON.parse(localStorage.getItem("mis_user")), []);
+  const userRole = currentUser?.role?.toLowerCase();
+  const userName = currentUser?.name?.trim();
+
   const normalizeKey = (value) =>
     String(value || "")
       .trim()
       .toLowerCase();
 
-  const getShiftTimeRange = () => {
+  const getShiftTimeRange = useCallback(() => {
     const now = new Date();
     const hour = now.getHours();
-
     const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000)
-      .toISOString()
-      .split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
 
     if (hour >= 8 && hour < 14) {
-      // Shift A
-      return {
-        shift: "A",
-        start: `${today} 08:00:00`,
-        end: `${today} 14:00:00`,
-      };
+      return { shift: "A", start: `${today} 08:00:00`, end: `${today} 14:00:00` };
     }
-
     if (hour >= 14 && hour < 20) {
-      // Shift B
-      return {
-        shift: "B",
-        start: `${today} 14:00:00`,
-        end: `${today} 20:00:00`,
-      };
+      return { shift: "B", start: `${today} 14:00:00`, end: `${today} 20:00:00` };
     }
-
-    // Shift C (Night shift)
     if (hour >= 20) {
-      return {
-        shift: "C",
-        start: `${today} 20:00:00`,
-        end: `${today} 23:59:59`,
-      };
+      return { shift: "C", start: `${today} 20:00:00`, end: `${today} 23:59:59` };
     }
-
-    // Between 12 AM – 8 AM (belongs to previous night shift)
-    return {
-      shift: "C",
-      start: `${yesterday} 20:00:00`,
-      end: `${today} 08:00:00`,
-    };
-  };
-  const currentUser = JSON.parse(localStorage.getItem("mis_user"));
-  const userRole = currentUser?.role?.toLowerCase();
-  const userName = currentUser?.name?.trim();
-
-  // Load discharge mapping from Supabase so we only treat patients as "discharged" if they exist in the discharge table.
-  const fetchDischargedAdmissions = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from("discharge")
-        .select("admission_no");
-
-      if (error) throw error;
-
-      const set = new Set(
-        (data || []).map((d) => normalizeKey(d.admission_no)).filter(Boolean),
-      );
-      setDischargedAdmissions(set);
-    } catch (err) {
-      console.error("Error fetching discharge records:", err);
-      setDischargedAdmissions(new Set());
-    }
+    return { shift: "C", start: `${yesterday} 20:00:00`, end: `${today} 08:00:00` };
   }, []);
 
-  // Load patients from Supabase
-  const fetchPatients = useCallback(async () => {
-    try {
-      setLoading(true);
-      setIsRefreshing(true);
+  // --- Queries ---
 
-      const { start, end } = getShiftTimeRange();
-      console.log("Current Shift Time Range:", start, end);
-      let ipdNumbers = [];
-      let shouldFilter = false;
+  const { data: dischargedAdmissions = new Set(), isLoading: isLoadingDischarge } = useQuery({
+    queryKey: ['patients', 'discharged', 'map'],
+    queryFn: getDischargedAdmissions,
+  });
 
-      // ============================
-      // NURSE / OT / OT STAFF
-      // ============================
-      if (["nurse", "ot", "ot staff"].includes(userRole)) {
-        shouldFilter = true;
+  const { data: patientsData = [], isLoading: isLoadingPatients, isFetching: isRefreshing } = useQuery({
+    queryKey: ['patients', 'ipd', userRole, userName, doctorTab],
+    queryFn: () => fetchIpdPatients({
+      userRole,
+      userName,
+      doctorTab,
+      shiftRange: getShiftTimeRange()
+    }),
+  });
 
-        console.log("username", userName);
+  // Real-time updates
+  useRealtimeQuery(['public', 'ipd_admissions'], ['patients', 'ipd', userRole, userName, doctorTab]);
+  useRealtimeQuery(['public', 'discharge'], ['patients', 'discharged', 'map']);
 
-        const { data, error } = await supabase
-          .from("nurse_assign_task")
-          .select("Ipd_number")
-          .ilike("assign_nurse", `%${userName.trim()}%`)
-          .not("Ipd_number", "is", null); // include all assigned patients until discharge
+  // --- Mutations ---
 
-        console.log("Nurse Assign Task Data:", data);
-        if (!error && data) {
-          ipdNumbers = Array.from(
-            new Set(
-              data
-                .map((t) => t.Ipd_number)
-                .filter((num) => num)
-                .map((num) => String(num).trim()),
-            ),
-          );
-        }
-      }
-
-      // ============================
-      // RMO
-      // ============================
-      else if (userRole === "rmo") {
-        shouldFilter = true;
-
-        const { data, error } = await supabase
-          .from("rmo_assign_task")
-          .select("ipd_number")
-          .eq("assign_rmo", userName)
-          .gte("planned1", start)
-          .lte("planned1", end);
-
-        if (!error && data) {
-          ipdNumbers = data.map((t) => t.ipd_number);
-        }
-      }
-      // ============================
-      // DRESSING STAFF
-      // ============================
-      // else if (userRole === 'dressing staff') {
-      //     shouldFilter = true;
-
-      //     const { data, error } = await supabase
-      //         .from('dressing')   // 👈 your table name
-      //         .select('ipd_number')
-      //         .eq('assign_staff', userName)   // 👈 column holding staff name
-      //         .gte('planned1', start)
-      //         .lte('planned1', end);
-
-      //     if (!error && data) {
-      //         ipdNumbers = data.map(t => t.ipd_number);
-      //     }
-      // }
-
-      // ============================
-      // FETCH PATIENTS
-      // ============================
-      let query = supabase
-        .from("ipd_admissions")
-        .select("*")
-        .order("timestamp", { ascending: false });
-
-      if (userRole === "doctor") {
-        if (doctorTab === "active" || doctorTab === "discharged") {
-          // Only assigned to this doctor
-          query = query.eq("consultant_dr", userName);
-        }
-      }
-      if (shouldFilter) {
-        if (ipdNumbers.length > 0) {
-          query = query.in("ipd_number", ipdNumbers);
-        } else {
-          query = query.eq("id", -1); // no patients
-        }
-      }
-
-      const { data, error } = await query;
-
-      if (!error) {
-        setPatientsData(data || []);
-      } else {
-        console.error(error);
-        setPatientsData([]);
-      }
-    } catch (err) {
-      console.error("fetchPatients error:", err);
-      setPatientsData([]);
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-      setLastUpdated(new Date().toLocaleTimeString());
+  const deleteMutation = useMutation({
+    mutationFn: deleteIpdPatient,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients', 'ipd'] });
+      showNotification("Patient record deleted successfully!", "success");
+    },
+    onError: (error) => {
+      console.error("Error deleting patient:", error);
+      showNotification("Failed to delete patient record.", "error");
     }
-  }, [doctorTab, userRole, userName]);
-
-  useEffect(() => {
-    fetchDischargedAdmissions();
-    fetchPatients();
-  }, [fetchDischargedAdmissions, fetchPatients, location.key]);
+  });
 
   const wardFilters = [
     "All Patients",
@@ -232,71 +105,66 @@ export default function PatientProfile() {
     "General Ward(5th floor)",
   ];
 
-  // Get unique ward types from data for dynamic filters
-  const dynamicWardFilters = Array.from(
-    new Set(patientsData.map((p) => p.ward_type).filter(Boolean)),
-  ).sort();
+  const dynamicWardFilters = useMemo(() => 
+    Array.from(new Set(patientsData.map((p) => p.ward_type).filter(Boolean))).sort(),
+    [patientsData]
+  );
 
-  // Combine static and dynamic filters
-  const allWardFilters = [
+  const allWardFilters = useMemo(() => [
     ...wardFilters,
     ...dynamicWardFilters.filter((w) => !wardFilters.includes(w)),
-  ];
+  ], [dynamicWardFilters]);
 
-  const filteredPatients = patientsData.filter((patient) => {
-    const patientName = patient.patient_name || "";
-    const admissionNo = patient.admission_no || "";
-    const ipdNo = patient.ipd_number || "";
-    const consultantDr = patient.consultant_dr || "";
-    const bedLocation =
-      patient.bed_location || patient.location_status || patient.ward || "";
-    const patCategory = patient.pat_category || "";
-    const wardType = patient.ward_type || "";
-    const department = patient.department || "";
+  const filteredPatients = useMemo(() => {
+    return patientsData.filter((patient) => {
+      const patientName = patient.patient_name || "";
+      const admissionNo = patient.admission_no || "";
+      const ipdNo = patient.ipd_number || "";
+      const consultantDr = patient.consultant_dr || "";
+      const bedLocation = patient.bed_location || patient.location_status || patient.ward || "";
+      const patCategory = patient.pat_category || "";
+      const wardType = patient.ward_type || "";
+      const department = patient.department || "";
 
-    const matchesSearch =
-      patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      admissionNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ipdNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      consultantDr.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      department.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        admissionNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ipdNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        consultantDr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        department.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesWard =
-      wardFilter === "All Patients" ||
-      bedLocation === wardFilter ||
-      wardType === wardFilter;
-    const matchesCategory =
-      filterCategory === "All" || patCategory === filterCategory;
+      const matchesWard =
+        wardFilter === "All Patients" ||
+        bedLocation === wardFilter ||
+        wardType === wardFilter;
+      const matchesCategory =
+        filterCategory === "All" || patCategory === filterCategory;
 
-    let matchesStatus = true;
+      let matchesStatus = true;
+      const isDischarged =
+        dischargedAdmissions.has(normalizeKey(admissionNo)) ||
+        dischargedAdmissions.has(normalizeKey(ipdNo));
 
-    // ✅ Doctor tab logic (use discharge table rather than actual1)
-    const isDischarged =
-      dischargedAdmissions.has(normalizeKey(admissionNo)) ||
-      dischargedAdmissions.has(normalizeKey(ipdNo));
-
-    if (userRole === "doctor") {
-      if (doctorTab === "active") {
-        matchesStatus = !isDischarged;
-      } else if (doctorTab === "discharged") {
-        matchesStatus = isDischarged;
+      if (userRole === "doctor") {
+        if (doctorTab === "active") {
+          matchesStatus = !isDischarged;
+        } else if (doctorTab === "discharged") {
+          matchesStatus = isDischarged;
+        }
+      } else {
+        matchesStatus =
+          statusFilter === "All" ||
+          (statusFilter === "Active" && !isDischarged) ||
+          (statusFilter === "Discharged" && isDischarged);
       }
-      // doctorTab === 'all' → no status filter
-    } else {
-      // Existing status filter for other roles (use discharge table)
-      matchesStatus =
-        statusFilter === "All" ||
-        (statusFilter === "Active" && !isDischarged) ||
-        (statusFilter === "Discharged" && isDischarged);
-    }
 
-    return matchesSearch && matchesWard && matchesCategory && matchesStatus;
-  });
+      return matchesSearch && matchesWard && matchesCategory && matchesStatus;
+    });
+  }, [patientsData, searchTerm, wardFilter, filterCategory, statusFilter, doctorTab, dischargedAdmissions, userRole]);
 
-  // Infinite Scroll Logic
   const visiblePatients = filteredPatients.slice(0, visibleCount);
 
-  // Scroll Handler Effect
+  // Infinite Scroll Hook
   useEffect(() => {
     const container = document.getElementById("scroll-container");
     if (!container) return;
@@ -307,7 +175,6 @@ export default function PatientProfile() {
         scrollTop + clientHeight >= scrollHeight - 300 &&
         visibleCount < filteredPatients.length
       ) {
-        // Load more patients
         setVisibleCount((prev) => Math.min(prev + 12, filteredPatients.length));
       }
     };
@@ -325,57 +192,24 @@ export default function PatientProfile() {
     navigate(`/admin/patient-profile/${patient.id}`, { state: { patient } });
   };
 
-  const handleEdit = async (patientId) => {
-    // Find the patient to edit
+  const handleEdit = (patientId) => {
     const patient = patientsData.find((p) => p.id === patientId);
     if (patient) {
-      alert(
-        `Edit functionality for patient: ${patient.patient_name}\nID: ${patientId}`,
-      );
-      // You can implement an edit modal here
+      alert(`Edit functionality for patient: ${patient.patient_name}\nID: ${patientId}`);
     }
   };
 
-  const handleDelete = async (patientId) => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete this patient record? This action cannot be undone.",
-      )
-    ) {
-      try {
-        const { error } = await supabase
-          .from("ipd_admissions")
-          .delete()
-          .eq("id", patientId);
-
-        if (error) {
-          console.error("Error deleting patient:", error);
-          alert("Failed to delete patient record.");
-          return;
-        }
-
-        // Refresh the list
-        await fetchPatients();
-        alert("Patient record deleted successfully!");
-      } catch (error) {
-        console.error("Error deleting patient:", error);
-        alert("Failed to delete patient record.");
-      }
+  const handleDelete = (patientId) => {
+    if (window.confirm("Are you sure you want to delete this patient record? This action cannot be undone.")) {
+      deleteMutation.mutate(patientId);
     }
   };
-
-  // Check if any filter is active
-  const hasActiveFilters =
-    wardFilter !== "All Patients" || filterCategory !== "All";
 
   const handleManualRefresh = () => {
-    if (!isRefreshing) {
-      fetchDischargedAdmissions();
-      fetchPatients();
-    }
+    queryClient.invalidateQueries({ queryKey: ['patients'] });
   };
 
-  if (loading && patientsData.length === 0) {
+  if (isLoadingPatients && patientsData.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">
@@ -386,25 +220,19 @@ export default function PatientProfile() {
     );
   }
 
+  const hasActiveFilters = wardFilter !== "All Patients" || filterCategory !== "All";
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       <div className="flex flex-col flex-1 overflow-hidden">
-        {/* Header with Quick Actions */}
+        {/* Header */}
         <div className="flex-shrink-0 p-4 lg:p-6 bg-gray-50">
           <div className="max-w-full mx-auto">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h1 className="text-xl font-bold text-gray-900 lg:text-2xl">
-                  Patient Profiles
-                </h1>
+                <h1 className="text-xl font-bold text-gray-900 lg:text-2xl">Patient Profiles</h1>
                 <p className="mt-1 text-sm text-gray-600">
-                  Total Patients: {patientsData.length} | Showing:{" "}
-                  {filteredPatients.length}
-                  {lastUpdated && (
-                    <span className="ml-2 text-gray-500">
-                      Last updated: {lastUpdated}
-                    </span>
-                  )}
+                  Total Patients: {patientsData.length} | Showing: {filteredPatients.length}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -415,49 +243,33 @@ export default function PatientProfile() {
                     placeholder="Search patients..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full py-2 pl-10 pr-4 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                    className="w-full py-2 pl-10 pr-4 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 outline-none"
                   />
                 </div>
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-700 transition-colors bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
                   <Filter className="w-4 h-4" />
                   <span className="hidden sm:inline">Filters</span>
-                  {hasActiveFilters && (
-                    <span className="px-1.5 py-0.5 text-xs font-semibold text-white bg-green-600 rounded-full">
-                      ●
-                    </span>
-                  )}
+                  {hasActiveFilters && <span className="px-1.5 py-0.5 text-xs font-semibold text-white bg-green-600 rounded-full">●</span>}
                 </button>
                 <button
                   onClick={handleManualRefresh}
                   disabled={isRefreshing}
-                  className="flex items-center gap-2 px-4 py-2 text-white transition-colors bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
-                  <RefreshCw
-                    className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
-                  />
-                  <span className="hidden sm:inline text-sm">
-                    {isRefreshing ? "Refreshing..." : "Refresh"}
-                  </span>
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline text-sm">{isRefreshing ? "Refreshing..." : "Refresh"}</span>
                 </button>
                 <button
                   onClick={() => setCompactView(!compactView)}
-                  className={`flex items-center gap-2 px-4 py-2 transition-all rounded-lg border font-bold text-sm ${
-                    compactView
-                      ? "bg-blue-50 border-blue-200 text-blue-700"
-                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-bold text-sm ${
+                    compactView ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  {compactView ? (
-                    <Layers className="w-4 h-4" />
-                  ) : (
-                    <LayoutDashboard className="w-4 h-4" />
-                  )}
-                  <span className="hidden md:inline">
-                    {compactView ? "Normal" : "Compact"}
-                  </span>
+                  {compactView ? <Layers className="w-4 h-4" /> : <LayoutDashboard className="w-4 h-4" />}
+                  <span className="hidden md:inline">{compactView ? "Normal" : "Compact"}</span>
                 </button>
               </div>
             </div>
@@ -465,38 +277,18 @@ export default function PatientProfile() {
         </div>
 
         {/* Status Tabs */}
-        <div className="flex gap-8 px-4 mb-4 border-b lg:px-6">
+        <div className="flex gap-8 px-4 mb-4 border-b lg:px-6 bg-gray-50">
           {["All", "Active", "Discharged"].map((status) => {
-            const key = status.toLowerCase(); // 'all' | 'active' | 'discharged'
-
-            const isActive =
-              userRole === "doctor"
-                ? doctorTab === key
-                : statusFilter === status;
-
+            const key = status.toLowerCase();
+            const isActive = userRole === "doctor" ? doctorTab === key : statusFilter === status;
             return (
               <button
                 key={status}
-                onClick={() => {
-                  if (userRole === "doctor") {
-                    setDoctorTab(key);
-                  } else {
-                    setStatusFilter(status);
-                  }
-                }}
-                className={`pb-2 text-sm font-semibold transition-all relative
-                    ${
-                      isActive
-                        ? "text-green-600"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
+                onClick={() => userRole === "doctor" ? setDoctorTab(key) : setStatusFilter(status)}
+                className={`pb-2 text-sm font-semibold transition-all relative ${isActive ? "text-green-600" : "text-gray-500 hover:text-gray-700"}`}
               >
                 {status}
-
-                {/* Underline */}
-                {isActive && (
-                  <span className="absolute left-0 bottom-0 w-full h-[2px] bg-green-600 rounded-full"></span>
-                )}
+                {isActive && <span className="absolute left-0 bottom-0 w-full h-[2px] bg-green-600 rounded-full"></span>}
               </button>
             );
           })}
@@ -504,19 +296,14 @@ export default function PatientProfile() {
 
         {/* Ward Filter Buttons */}
         {showFilters && (
-          <div className="flex-shrink-0 px-4 pb-4 lg:px-6 bg-gray-50">
+          <div className="flex-shrink-0 px-4 pb-4 lg:px-6 bg-gray-50 animate-fade-in">
             <div className="max-w-full mx-auto">
               <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
                 <div className="flex flex-col gap-4 mb-4 lg:flex-row lg:items-center lg:justify-between">
-                  <h3 className="text-sm font-semibold tracking-wide text-gray-700 uppercase">
-                    Filter by Ward/Location
-                  </h3>
+                  <h3 className="text-sm font-semibold tracking-wide text-gray-700 uppercase">Filter by Ward/Location</h3>
                   <button
-                    onClick={() => {
-                      setWardFilter("All Patients");
-                      setFilterCategory("All");
-                    }}
-                    className="text-xs text-green-600 transition-colors hover:text-green-700"
+                    onClick={() => { setWardFilter("All Patients"); setFilterCategory("All"); }}
+                    className="text-xs text-green-600 hover:text-green-700"
                   >
                     Clear All
                   </button>
@@ -527,9 +314,7 @@ export default function PatientProfile() {
                       key={filter}
                       onClick={() => setWardFilter(filter)}
                       className={`px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                        wardFilter === filter
-                          ? "bg-green-600 text-white shadow-md"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        wardFilter === filter ? "bg-green-600 text-white shadow-md" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
                       {filter}
@@ -537,29 +322,15 @@ export default function PatientProfile() {
                   ))}
                 </div>
 
-                {/* Patient Category Filter */}
                 <div className="pt-4 mt-6 border-t">
-                  <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-700 uppercase">
-                    Patient Category
-                  </h3>
+                  <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-700 uppercase">Patient Category</h3>
                   <div className="flex flex-wrap gap-2">
-                    {[
-                      "All",
-                      "General",
-                      "Private",
-                      "VIP",
-                      "Insurance",
-                      "Corporate",
-                      "Ayushman",
-                      "GJAY",
-                    ].map((category) => (
+                    {["All", "General", "Private", "VIP", "Insurance", "Corporate", "Ayushman", "GJAY"].map((category) => (
                       <button
                         key={category}
                         onClick={() => setFilterCategory(category)}
                         className={`px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                          filterCategory === category
-                            ? "bg-blue-600 text-white shadow-md"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          filterCategory === category ? "bg-blue-600 text-white shadow-md" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                         }`}
                       >
                         {category}
@@ -572,11 +343,8 @@ export default function PatientProfile() {
           </div>
         )}
 
-        {/* Patients Grid - Scrollable */}
-        <div
-          id="scroll-container"
-          className="flex-1 px-4 pb-4 overflow-y-auto lg:px-6 lg:pb-12"
-        >
+        {/* Patients Grid */}
+        <div id="scroll-container" className="flex-1 px-4 pb-4 overflow-y-auto lg:px-6 lg:pb-12 bg-gray-50">
           <div className="max-w-full mx-auto">
             {isRefreshing && patientsData.length > 0 && (
               <div className="mb-4 text-center">
@@ -587,9 +355,7 @@ export default function PatientProfile() {
               </div>
             )}
 
-            <div
-              className={`flex flex-col gap-6 ${compactView ? "md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "md:grid md:grid-cols-2 lg:grid-cols-3"}`}
-            >
+            <div className={`flex flex-col gap-6 ${compactView ? "md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "md:grid md:grid-cols-2 lg:grid-cols-3"}`}>
               {visiblePatients.length > 0 ? (
                 visiblePatients.map((patient) => (
                   <div key={patient.id} className="animate-fade-in">
@@ -603,22 +369,14 @@ export default function PatientProfile() {
                   </div>
                 ))
               ) : (
-                <div className="py-12 text-center bg-white rounded-lg shadow-md col-span-full">
+                <div className="py-12 text-center bg-white rounded-lg shadow-md col-span-full border-dashed border-2 border-gray-200">
                   <div className="flex flex-col items-center gap-2">
                     <Filter className="w-12 h-12 text-gray-400" />
-                    <p className="mb-2 text-lg text-gray-500">
-                      No patients found
-                    </p>
-                    <p className="text-sm text-gray-400">
-                      No patients match your search criteria
-                    </p>
+                    <p className="mb-2 text-lg text-gray-500 font-semibold">No patients found</p>
+                    <p className="text-sm text-gray-400">No patients match your current search or filter criteria</p>
                     {hasActiveFilters && (
                       <button
-                        onClick={() => {
-                          setWardFilter("All Patients");
-                          setFilterCategory("All");
-                          setSearchTerm("");
-                        }}
+                        onClick={() => { setWardFilter("All Patients"); setFilterCategory("All"); setSearchTerm(""); }}
                         className="mt-4 text-sm text-green-600 hover:text-green-700 font-bold"
                       >
                         Clear filters to see all patients
@@ -629,41 +387,27 @@ export default function PatientProfile() {
               )}
             </div>
 
-            {/* Infinite Scroll Footer */}
+            {/* Pagination Footer */}
             {visiblePatients.length < filteredPatients.length && (
               <div className="py-12 flex flex-col items-center justify-center gap-4">
                 <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                  Loading more patients...
-                </p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Loading more patients...</p>
               </div>
             )}
 
-            {!loading &&
-              visiblePatients.length === filteredPatients.length &&
-              filteredPatients.length > 0 && (
-                <div className="py-12 text-center text-xs font-bold text-gray-300 uppercase tracking-widest">
-                  End of list
-                </div>
-              )}
+            {!isLoadingPatients && visiblePatients.length === filteredPatients.length && filteredPatients.length > 0 && (
+              <div className="py-12 text-center text-xs font-bold text-gray-300 uppercase tracking-widest">End of list</div>
+            )}
           </div>
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in {
-          animation: fadeIn 0.4s ease-out;
-        }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
       `}</style>
     </div>
   );

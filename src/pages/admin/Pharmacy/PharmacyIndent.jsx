@@ -13,28 +13,30 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
+import { 
+  getPharmacyIndents, 
+  getActiveAdmissions, 
+  getOtCompletionDays, 
+  getMedicines, 
+  getInvestigations, 
+  getCategories,
+  getNextIndentNumber,
+  createPharmacyIndent,
+  updatePharmacyIndent,
+  deletePharmacyIndent
+} from "../../../api/pharmacy";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
 const PharmacyIndents = () => {
+  const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
   const [successModal, setSuccessModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedIndent, setSelectedIndent] = useState(null);
-  const [indents, setIndents] = useState([]);
-  const [otDaysMap, setOtDaysMap] = useState({}); // { ipd_number: daysNumber }
-  const [admissionPatients, setAdmissionPatients] = useState([]);
-  const [activePatientsData, setactivePatientsData] = useState([]);
-  const [medicinesList, setMedicinesList] = useState([]);
-  const [categories, setCategories] = useState([]); // ✅ NEW: Categories state
-  const [investigationTests, setInvestigationTests] = useState({
-    Pathology: [],
-    "X-ray": [],
-    "CT-scan": [],
-    USG: [],
-  });
-  const [loading, setLoading] = useState(false);
   const [successData, setSuccessData] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const { showNotification } = useNotification();
@@ -42,8 +44,77 @@ const PharmacyIndents = () => {
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(null);
   const [admissionSearch, setAdmissionSearch] = useState("");
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState(null);
   const dropdownRef = useRef(null);
+
+  // --- Queries ---
+
+  // Main Indents Query
+  const { data: indents = [], isLoading: isLoadingIndents } = useQuery({
+    queryKey: ['pharmacy', 'indents'],
+    queryFn: getPharmacyIndents,
+  });
+
+  // Active Admissions Query
+  const { data: admissionPatients = [] } = useQuery({
+    queryKey: ['admissions', 'active'],
+    queryFn: getActiveAdmissions,
+  });
+
+  // OT Days Query (depends on indents)
+  const { data: otDaysMap = {} } = useQuery({
+    queryKey: ['ot', 'days', indents.map(i => i.ipd_number).join(',')],
+    queryFn: () => getOtCompletionDays(indents.map(i => i.ipd_number).filter(Boolean)),
+    enabled: indents.length > 0,
+  });
+
+  // Metadata Queries
+  const { data: medicinesList = [] } = useQuery({ queryKey: ['pharmacy', 'medicines'], queryFn: getMedicines });
+  const { data: categories = [] } = useQuery({ queryKey: ['pharmacy', 'categories'], queryFn: getCategories });
+  const { data: investigationTests = { Pathology: [], 'X-ray': [], 'CT-scan': [], USG: [] } } = useQuery({ 
+    queryKey: ['pharmacy', 'investigations'], 
+    queryFn: getInvestigations 
+  });
+
+  // Real-time synchronization
+  useRealtimeQuery('pharmacy', ['pharmacy', 'indents']);
+  useRealtimeQuery('ipd_admissions', ['admissions', 'active']);
+
+  // --- Mutations ---
+
+  const createMutation = useMutation({
+    mutationFn: createPharmacyIndent,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'indents'] });
+      setSuccessData(data);
+      setSuccessModal(true);
+      setShowModal(false);
+      resetForm();
+    },
+    onError: (error) => showNotification(`Error creating indent: ${error.message}`, "error")
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updatePharmacyIndent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'indents'] });
+      showNotification("Indent updated successfully", "success");
+      setShowModal(false);
+      resetForm();
+    },
+    onError: (error) => showNotification(`Error updating indent: ${error.message}`, "error")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deletePharmacyIndent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'indents'] });
+      showNotification("Indent deleted successfully", "success");
+    },
+    onError: (error) => showNotification(`Error deleting indent: ${error.message}`, "error")
+  });
+
+  // Legacy loading state flag
+  const loading = isLoadingIndents || createMutation.isPending || updateMutation.isPending;
 
   // Get user name from localStorage
   const getCurrentUser = () => {
@@ -60,12 +131,10 @@ const PharmacyIndents = () => {
   };
 
   const [formData, setFormData] = useState(() => {
-    // Initialize formData with user name from localStorage
     const currentUserName = getCurrentUser();
-
     return {
       admissionNumber: "",
-      staffName: currentUserName, // Auto-filled from localStorage
+      staffName: currentUserName,
       consultantName: "",
       patientName: "",
       uhidNumber: "",
@@ -97,497 +166,20 @@ const PharmacyIndents = () => {
     remarks: "",
   });
 
-  // Static pathology tests as fallback
-  const staticPathologyTests = [
-    "LFT",
-    "RFT",
-    "Lipid Profile",
-    "CBC",
-    "HBA1C",
-    "Electrolyte",
-    "PT/INR",
-    "Blood Group",
-    "ESR",
-    "CRP",
-    "Sugar",
-    "Urine R/M",
-    "Viral Marker",
-    "Malaria",
-    "Dengue",
-    "Widal",
-    "Troponin-I",
-    "Troponin-T",
-    "SGOT",
-    "SGPT",
-    "Serum Urea",
-    "Serum Creatinine",
-    "CT-BT",
-    "ABG",
-    "Urine C/S",
-    "Thyroid Profile",
-    "UPT",
-    "HB",
-    "PPD",
-    "Sickling",
-    "Peripheral Smear",
-    "ASO Titre",
-    "DS-DNA",
-    "Serum Amylase",
-    "TSH",
-    "D-Dimer",
-    "Serum Lipase",
-    "SR Cortisol",
-    "Serum Magnesium",
-    "Serum Calcium",
-    "Urine Culture & Sensitivity",
-    "Blood Culture & Sensitivity",
-    "Pus Culture & Sensitivity",
-    "Pleural Fluid R/M",
-    "Pleural Fluid Culture & Sensitivity",
-    "Pleural Fluid ADA",
-    "Vitamin D3",
-    "Vitamin B12",
-    "HIV",
-    "HBsAg",
-    "HCV",
-    "VDRL",
-    "Ascitic Fluid R/M",
-    "Ascitic Culture & Sensitivity",
-    "Ascitic Fluid ADA",
-    "Urine Sugar Ketone",
-    "Serum Platelets",
-    "Serum Potassium",
-    "Serum Sodium",
-    "Sputum R/M",
-    "Sputum AFB",
-    "Sputum C/S",
-    "CBNAAT",
-    "CKMB",
-    "Cardiac SOB",
-    "Pro-BNP",
-    "Serum Uric Acid",
-    "Platelet Count",
-    "TB Gold",
-    "PCT",
-    "COVID IGG Antibodies",
-    "ANA Profile",
-    "Stool R/M",
-    "eGFR",
-    "24 Hour Urine Protein Ratio",
-    "IGF-1",
-    "PTH",
-    "Serum FSH",
-    "Serum LH",
-    "Serum Prolactin",
-    "APTT",
-    "HB %",
-    "Biopsy Small",
-    "Biopsy Medium",
-    "Biopsy Large",
-    "Serum Homocysteine",
-  ];
-
-  // ✅ NEW: Load categories from database
-  const loadCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("category")
-        .select("name")
-        .order("name");
-
-      if (error) throw error;
-      setCategories(data || []);
-      console.log("Categories loaded:", data);
-    } catch (err) {
-      console.error("Error loading categories:", err);
-      // Fallback to hardcoded categories if database fetch fails
-      setCategories([
-        { name: "General" },
-        { name: "Critical" },
-        { name: "Private" },
-        { name: "Emergency" },
-      ]);
-    }
-  };
-
-  // Show popup message (legacy - use showNotification)
-  const showPopup = (message, type = "success") => {
-    showNotification(message, type);
-  };
-
-  //for closing admission dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowAdmissionDropdown(false);
       }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Load data from Supabase
-  useEffect(() => {
-    loadData();
-    loadMedicinesList();
-    loadInvestigationTests();
-    loadCategories(); // ✅ ADD THIS: Load categories
-    setupRealtimeSubscription();
-  }, []);
-
-  // Add effect to close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Close medicine dropdown if click is outside
-      if (
-        showMedicineDropdown &&
-        !event.target.closest(".medicine-dropdown-container")
-      ) {
+      if (showMedicineDropdown && !event.target.closest(".medicine-dropdown-container")) {
         setShowMedicineDropdown(null);
         setMedicineSearchTerm("");
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMedicineDropdown]);
-
-  // Fetch OT completion days for each unique IPD number in the given indents list.
-  // Only considers ot_information rows where actual2 IS set (OT completed).
-  const loadOtDaysForIndents = async (indentsList) => {
-    try {
-      const uniqueIpds = [
-        ...new Set(
-          (indentsList || []).map((i) => i.ipd_number).filter(Boolean),
-        ),
-      ];
-      if (uniqueIpds.length === 0) return;
-
-      const { data, error } = await supabase
-        .from("ot_information")
-        .select("ipd_number, actual2, status")
-        .in("ipd_number", uniqueIpds)
-        .not("actual2", "is", null);
-
-      if (error || !data) return;
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const map = {};
-      data.forEach((row) => {
-        // Skip cancelled OT records — no value should be shown
-        if (row.status === "Cancel") return;
-
-        const completedDate = new Date(row.actual2);
-        completedDate.setHours(0, 0, 0, 0);
-        const diffDays = Math.floor(
-          (today - completedDate) / (1000 * 60 * 60 * 24),
-        );
-        // Keep the smallest (earliest) completion gap if multiple rows exist
-        if (
-          map[row.ipd_number] === undefined ||
-          diffDays < map[row.ipd_number]
-        ) {
-          map[row.ipd_number] = diffDays < 0 ? 0 : diffDays;
-        }
-      });
-      setOtDaysMap(map);
-    } catch (err) {
-      console.error("Error loading OT days:", err);
-    }
-  };
-
-  const loadData = async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
-
-      // Load indents from pharmacy table
-      const { data: indentsData, error: indentsError } = await supabase
-        .from("pharmacy")
-        .select("*")
-        .order("timestamp", { ascending: false });
-
-      if (indentsError) throw indentsError;
-      setIndents(indentsData || []);
-
-      // Load OT completion days for the fetched indents
-      await loadOtDaysForIndents(indentsData || []);
-
-      // Load admission patients from ipd_admissions
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("ipd_admissions")
-        .select(
-          "admission_no, patient_name, consultant_dr, age, gender, ward_type, floor, room, bed_no, ipd_number",
-        )
-        .not("planned1", "is", null) // planned1 is not null
-        .is("actual1", null)
-        .order("admission_no", { ascending: false });
-
-      if (patientsError) throw patientsError;
-
-      const activePatients = admissionPatients.filter(
-        (patient) => patient.actual1 === null && patient.status === "Active",
-      );
-      setactivePatientsData(activePatients || []);
-      setAdmissionPatients(patientsData || []);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      showPopup("Error loading data from database", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMedicinesList = async () => {
-    try {
-      // Try to load medicines from pharmacy_inventory or use fallback
-      const { data, error } = await supabase
-        .from("medicine")
-        .select("medicine_name");
-
-      if (error) {
-        console.error("Error loading medicines:", error);
-        // Use fallback list
-        const fallbackMeds = [
-          "Paracetamol 500mg",
-          "Amoxicillin 250mg",
-          "Ibuprofen 400mg",
-          "Cough Syrup",
-          "Vitamin D3",
-          "Omeprazole 20mg",
-          "Aspirin 75mg",
-          "Metformin 500mg",
-          "Cetirizine 10mg",
-          "Azithromycin 500mg",
-        ];
-        setMedicinesList(fallbackMeds);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const medNames = data
-          .map((item) => item.medicine_name)
-          .filter((name) => name);
-        setMedicinesList(medNames);
-      } else {
-        // Use fallback if no data
-        const fallbackMeds = [
-          "Paracetamol 500mg",
-          "Amoxicillin 250mg",
-          "Ibuprofen 400mg",
-          "Cough Syrup",
-          "Vitamin D3",
-          "Omeprazole 20mg",
-          "Aspirin 75mg",
-          "Metformin 500mg",
-          "Cetirizine 10mg",
-          "Azithromycin 500mg",
-        ];
-        setMedicinesList(fallbackMeds);
-      }
-    } catch (error) {
-      console.error("Error loading medicines list:", error);
-    }
-  };
-
-  const loadInvestigationTests = async () => {
-    try {
-      // Load Pathology tests
-      const { data: pathologyData, error: pathologyError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "Pathology")
-        .order("name");
-
-      if (pathologyError) {
-        console.error("Error loading Pathology tests:", pathologyError);
-        setInvestigationTests((prev) => ({
-          ...prev,
-          Pathology: staticPathologyTests,
-        }));
-      } else if (pathologyData && pathologyData.length > 0) {
-        const pathologyTests = pathologyData
-          .map((test) => test.name)
-          .filter((name) => name);
-        setInvestigationTests((prev) => ({
-          ...prev,
-          Pathology: pathologyTests,
-        }));
-      } else {
-        setInvestigationTests((prev) => ({
-          ...prev,
-          Pathology: staticPathologyTests,
-        }));
-      }
-
-      // Load X-ray tests
-      const { data: xrayData, error: xrayError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "X-ray")
-        .order("name");
-
-      if (xrayError) {
-        console.error("Error loading X-ray tests:", xrayError);
-        // Fallback X-ray tests
-        const fallbackXray = [
-          "X-Ray",
-          "Barium Enema",
-          "Barium Swallow",
-          "Cologram",
-          "Nephrostrogram",
-          "R.G.P.",
-          "Retrograde Urethrogram",
-          "Urethogram",
-          "X Ray Abdomen Upright",
-          "X Ray Cystogram",
-          "X Ray Hand Both",
-          "X Ray LS Spine Extension Flexion",
-          "X Ray Thoracic Spine",
-          "X Ray Tibia Fibula AP/Lat (Left/Right)",
-          "X-Ray Abdomen Erect/Standing/Upright",
-          "X-Ray Abdomen Flat Plate",
-          "X-Ray Abdomen KUB",
-          "X-Ray Ankle Joint AP And Lat (Left/Right)",
-          "X-Ray Chest PA",
-          "X-Ray Chest AP",
-          "X-Ray Chest Lateral View",
-          "X-Ray KUB",
-          "X-Ray LS Spine AP/Lat",
-          "X-Ray Pelvis AP",
-          "X-Ray Skull AP/Lat",
-        ];
-        setInvestigationTests((prev) => ({ ...prev, "X-ray": fallbackXray }));
-      } else if (xrayData && xrayData.length > 0) {
-        const xrayTests = xrayData
-          .map((test) => test.name)
-          .filter((name) => name);
-        setInvestigationTests((prev) => ({ ...prev, "X-ray": xrayTests }));
-      }
-
-      // Load CT-scan tests
-      const { data: ctScanData, error: ctScanError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "CT Scan")
-        .order("name");
-
-      if (ctScanError) {
-        console.error("Error loading CT-scan tests:", ctScanError);
-        // Fallback CT-scan tests
-        const fallbackCTScan = [
-          "CT Scan",
-          "3D CT Ankle",
-          "3D CT Face",
-          "3D CT Head",
-          "CECT Abdomen",
-          "CECT Chest",
-          "CECT Head",
-          "CECT Neck",
-          "CT Brain",
-          "CT Chest",
-          "HRCT Chest",
-          "NCCT Head",
-          "CT Scan Brain Plain",
-          "CT Angiography",
-          "CT-Scan - Brain With Contrast",
-          "CT-Scan - Brain Without Contrast",
-          "HRCT Chest (COVID)",
-        ];
-        setInvestigationTests((prev) => ({
-          ...prev,
-          "CT-scan": fallbackCTScan,
-        }));
-      } else if (ctScanData && ctScanData.length > 0) {
-        const ctScanTests = ctScanData
-          .map((test) => test.name)
-          .filter((name) => name);
-        setInvestigationTests((prev) => ({ ...prev, "CT-scan": ctScanTests }));
-      }
-
-      // Load USG tests
-      const { data: usgData, error: usgError } = await supabase
-        .from("investigation")
-        .select("name, type")
-        .eq("type", "USG")
-        .order("name");
-
-      if (usgError) {
-        console.error("Error loading USG tests:", usgError);
-        // Fallback USG tests
-        const fallbackUSG = [
-          "USG",
-          "USG Whole Abdomen Male",
-          "USG Whole Abdomen Female",
-          "USG KUB Male",
-          "USG KUB Female",
-          "USG Pelvis Female",
-          "TVS",
-          "USG Upper Abdomen",
-          "USG Breast",
-          "USG Thyroid",
-          "USG Scrotum",
-          "Fetal Doppler USG",
-          "Carotid Doppler",
-          "USG OBS",
-          "Anomaly Scan",
-          "Growth Scan",
-          "USG Guided Biopsy",
-          "USG Abdomen With Pelvis",
-        ];
-        setInvestigationTests((prev) => ({ ...prev, USG: fallbackUSG }));
-      } else if (usgData && usgData.length > 0) {
-        const usgTests = usgData
-          .map((test) => test.name)
-          .filter((name) => name);
-        setInvestigationTests((prev) => ({ ...prev, USG: usgTests }));
-      }
-    } catch (error) {
-      console.error("Error loading investigation tests:", error);
-    }
-  };
-
-  const setupRealtimeSubscription = () => {
-    const channel = supabase
-      .channel("pharmacy_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pharmacy",
-        },
-        (payload) => {
-          const { eventType, new: newRow, old: oldRow } = payload;
-
-          if (eventType === "DELETE") {
-            const id = oldRow?.id;
-            if (id) {
-              setIndents((prev) => prev.filter((r) => r.id !== id));
-            }
-            return;
-          }
-
-          // INSERT or UPDATE — merge the changed row into state
-          const row = newRow;
-          if (!row) return;
-
-          setIndents((prev) => {
-            const without = prev.filter((r) => r.id !== row.id);
-            return [row, ...without];
-          });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
 
   const handleAdmissionSelect = (admissionNo) => {
     const selectedPatient = admissionPatients.find(
@@ -778,177 +370,60 @@ const PharmacyIndents = () => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.admissionNumber) {
-      showPopup("Please select Admission Number", "error");
-      return;
-    }
-
-    // Make diagnosis required - entered manually
-    if (!formData.diagnosis.trim()) {
-      showPopup("Please enter Diagnosis", "error");
-      return;
-    }
-
-    const hasRequestType = Object.values(requestTypes).some((value) => value);
-    if (!hasRequestType) {
-      showPopup("Please select at least one Request Type", "error");
-      return;
-    }
+    if (!formData.admissionNumber) return showNotification("Please select Admission Number", "error");
+    if (!formData.diagnosis.trim()) return showNotification("Please enter Diagnosis", "error");
+    if (!Object.values(requestTypes).some(Boolean)) return showNotification("Please select at least one Request Type", "error");
 
     if (requestTypes.medicineSlip && medicines.length === 0) {
-      showPopup("Please add at least one medicine", "error");
-      return;
+      return showNotification("Please add at least one medicine", "error");
     }
 
-    const incompleteMedicines = medicines.some(
-      (med) => !med.name || !med.quantity,
-    );
-    if (requestTypes.medicineSlip && incompleteMedicines) {
-      showPopup("Please fill all medicine details", "error");
-      return;
-    }
-
-    // Validation for investigation advice
     if (requestTypes.investigation) {
       if (!investigationAdvice.adviceCategory) {
-        showPopup(
-          "Please select Pathology or Radiology for investigation",
-          "error",
-        );
-        return;
+        return showNotification("Please select Pathology or Radiology for investigation", "error");
       }
-
-      if (
-        investigationAdvice.adviceCategory === "Pathology" &&
-        investigationAdvice.pathologyTests.length === 0
-      ) {
-        showPopup("Please select at least one pathology test", "error");
-        return;
+      if (investigationAdvice.adviceCategory === "Pathology" && investigationAdvice.pathologyTests.length === 0) {
+        return showNotification("Please select at least one pathology test", "error");
       }
-
       if (investigationAdvice.adviceCategory === "Radiology") {
-        if (!investigationAdvice.radiologyType) {
-          showPopup("Please select radiology type", "error");
-          return;
-        }
-        if (investigationAdvice.radiologyTests.length === 0) {
-          showPopup("Please select at least one radiology test", "error");
-          return;
-        }
+        if (!investigationAdvice.radiologyType) return showNotification("Please select radiology type", "error");
+        if (investigationAdvice.radiologyTests.length === 0) return showNotification("Please select at least one radiology test", "error");
       }
     }
 
-    try {
-      setLoading(true);
+    const selectedPatient = admissionPatients.find((p) => p.admission_no === formData.admissionNumber);
+    
+    const pharmacyData = {
+      timestamp: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+      admission_number: formData.admissionNumber,
+      ipd_number: selectedPatient?.ipd_number || "",
+      staff_name: formData.staffName,
+      consultant_name: formData.consultantName,
+      patient_name: formData.patientName,
+      uhid_number: formData.uhidNumber,
+      age: formData.age,
+      gender: formData.gender,
+      ward_location: formData.wardLocation,
+      category: formData.category,
+      room: formData.room,
+      diagnosis: formData.diagnosis.trim(),
+      request_types: JSON.stringify(requestTypes),
+      medicines: JSON.stringify(medicines),
+      investigations: JSON.stringify(investigations),
+      investigation_advice: JSON.stringify(investigationAdvice),
+      status: "pending",
+      planned1: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+    };
 
-      // Find the selected patient to get IPD number
-      const selectedPatient = admissionPatients.find(
-        (patient) => patient.admission_no === formData.admissionNumber,
-      );
-
-      const pharmacyData = {
-        timestamp: new Date()
-          .toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false,
-          })
-          .replace(",", ""),
-        admission_number: formData.admissionNumber,
-        ipd_number: selectedPatient?.ipd_number || "",
-        staff_name: formData.staffName,
-        consultant_name: formData.consultantName,
-        patient_name: formData.patientName,
-        uhid_number: formData.uhidNumber,
-        age: formData.age,
-        gender: formData.gender,
-        ward_location: formData.wardLocation,
-        category: formData.category, // ✅ Using selected category from dropdown
-        room: formData.room,
-        diagnosis: formData.diagnosis.trim(),
-        request_types: JSON.stringify(requestTypes),
-        medicines: JSON.stringify(medicines),
-        investigations: JSON.stringify(investigations),
-        investigation_advice: JSON.stringify(investigationAdvice),
-        status: "pending",
-        planned1: new Date()
-          .toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false,
-          })
-          .replace(",", ""),
-      };
-
-      let insertedData;
-      if (editMode && selectedIndent) {
-        // Update existing indent
-        const { data, error } = await supabase
-          .from("pharmacy")
-          .update(pharmacyData)
-          .eq("id", selectedIndent.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        insertedData = data;
-        showPopup("Indent updated successfully!");
-
-        // Notify the approval team again when a pending indent is updated
-        sendIndentApprovalNotification(
-          insertedData,
-          medicines,
-          requestTypes,
-        ).catch((err) => console.error("[WhatsApp] Notification error:", err));
-      } else {
-        // Create new indent
-        const { data, error } = await supabase
-          .from("pharmacy")
-          .insert([pharmacyData])
-          .select()
-          .single();
-
-        if (error) throw error;
-        insertedData = data;
-        showPopup("Indent created successfully!");
-
-        // fire and forget WhatsApp notification for new indents
-        sendIndentApprovalNotification(
-          insertedData,
-          medicines,
-          requestTypes,
-        ).catch((err) => console.error("[WhatsApp] Notification error:", err));
-      }
-      console.log(insertedData);
-
-      const totalMedicines = requestTypes.medicineSlip
-        ? medicines.reduce((sum, med) => sum + parseInt(med.quantity || 0), 0)
-        : 0;
-
-      setSuccessData({
-        indentNumber: insertedData.indent_no, // use returned indent_number
-        patientName: insertedData.patient_name,
-        admissionNo: insertedData.admission_number,
-        totalMedicines: totalMedicines,
-      });
-
-      setShowModal(false);
-      setEditMode(false);
-      setSuccessModal(true);
-      resetForm();
-
-      // Refresh data
-      await loadData();
-    } catch (error) {
-      console.error("Error saving indent:", error);
-      showPopup(`Failed to save indent: ${error.message}`, "error");
-    } finally {
-      setLoading(false);
+    if (editMode && selectedIndent) {
+      updateMutation.mutate({ id: selectedIndent.id, updateData: pharmacyData });
+    } else {
+      createMutation.mutate(pharmacyData);
     }
-  };
-
-  const resetForm = () => {
+  };  const resetForm = () => {
     setFormData({
       admissionNumber: "",
-      staffName: getCurrentUser(), // Reset with current user name
+      staffName: getCurrentUser(),
       consultantName: "",
       patientName: "",
       uhidNumber: "",
@@ -959,25 +434,12 @@ const PharmacyIndents = () => {
       room: "",
       diagnosis: "",
     });
-    setRequestTypes({
-      medicineSlip: false,
-      investigation: false,
-      package: false,
-      nonPackage: false,
-    });
+    setRequestTypes({ medicineSlip: false, investigation: false, package: false, nonPackage: false });
     setMedicines([]);
     setInvestigations([]);
-    setInvestigationAdvice({
-      priority: "Medium",
-      adviceCategory: "",
-      pathologyTests: [],
-      radiologyType: "",
-      radiologyTests: [],
-      remarks: "",
-    });
+    setInvestigationAdvice({ priority: "Medium", adviceCategory: "", pathologyTests: [], radiologyType: "", radiologyTests: [], remarks: "" });
     setSelectedIndent(null);
-    setMedicineSearchTerm("");
-    setShowMedicineDropdown(null);
+    setEditMode(false);
   };
 
   const parseJsonField = (field) => {
@@ -999,53 +461,32 @@ const PharmacyIndents = () => {
 
   const handleEdit = (indent) => {
     if (isApprovedIndent(indent.status)) {
-      showPopup("This indent has been approved and cannot be edited.");
+      showNotification("This indent has been approved and cannot be edited.", "warning");
       return;
     }
 
     setSelectedIndent(indent);
     setFormData({
       admissionNumber: indent.admission_number,
-      staffName: indent.staff_name || getCurrentUser(), // Use stored name or current user
+      staffName: indent.staff_name || getCurrentUser(),
       consultantName: indent.consultant_name,
       patientName: indent.patient_name,
-      uhidNumber: indent.uhid_number,
+      uhid_number: indent.uhid_number,
       age: indent.age,
       gender: indent.gender,
-      wardLocation: indent.ward_location,
+      ward_location: indent.ward_location,
       category: indent.category || "",
       room: indent.room,
       diagnosis: indent.diagnosis,
     });
 
-    // Parse JSON fields
-    const requestTypesData = parseJsonField(indent.request_types);
-    const medicinesData = parseJsonField(indent.medicines);
-    const investigationAdviceData = parseJsonField(indent.investigation_advice);
-
-    setRequestTypes(
-      requestTypesData || {
-        medicineSlip: false,
-        investigation: false,
-        package: false,
-        nonPackage: false,
-      },
-    );
-    setMedicines(medicinesData || []);
-    setInvestigations([]);
-    setInvestigationAdvice(
-      investigationAdviceData || {
-        priority: "Medium",
-        adviceCategory: "",
-        pathologyTests: [],
-        radiologyType: "",
-        radiologyTests: [],
-        remarks: "",
-      },
-    );
+    setRequestTypes(parseJsonField(indent.request_types));
+    setMedicines(parseJsonField(indent.medicines));
+    setInvestigationAdvice(parseJsonField(indent.investigation_advice));
     setEditMode(true);
     setShowModal(true);
   };
+
 
   const getSummaryData = () => {
     if (requestTypes.medicineSlip && medicines.length > 0) {

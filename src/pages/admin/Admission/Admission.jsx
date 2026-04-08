@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Plus, X, Edit2, Save, UserPlus, Search, Filter } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
-import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { getPatients, createPatient, updatePatient } from "../../../api/patients";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
 const Admission = () => {
-  const [patients, setPatients] = useState([]);
+  const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [modalError, setModalError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  
   const [formData, setFormData] = useState({
     patientName: "",
     phoneNumber: "",
@@ -21,78 +23,35 @@ const Admission = () => {
     gender: "Male",
   });
 
-  // Load patients from Supabase database
-  const loadPatients = async () => {
-    try {
-      setIsLoading(true);
+  // Queries
+  const { data: patients = [], isLoading } = useQuery({
+    queryKey: ['patients'],
+    queryFn: getPatients,
+  });
 
-      // Fetch data from Supabase patient_admission table
-      const { data, error } = await supabase
-        .from("patient_admission")
-        .select("*")
-        .order("timestamp", { ascending: false });
+  // Real-time synchronization
+  useRealtimeQuery('patient_admission', ['patients']);
 
-      if (error) {
-        console.error("Error loading patients from Supabase:", error);
-        setModalError("Failed to load patient data. Please try again.");
-        return;
-      }
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: createPatient,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setShowModal(false);
+      resetForm();
+    },
+    onError: (error) => setModalError(`Failed to save patient: ${error.message}`)
+  });
 
-      if (data) {
-        // Transform the data from snake_case to camelCase
-        const transformedPatients = data.map((patient) => ({
-          id: patient.id,
-          admissionNo:
-            patient.admission_no ||
-            `ADM-${patient.id?.toString().padStart(3, "0") || "001"}`,
-          patientName: patient.patient_name || "",
-          phoneNumber: patient.phone_no || "",
-          attenderName: patient.attender_name || "",
-          reasonForVisit: patient.reason_for_visit || "",
-          dateOfBirth: patient.date_of_birth || "",
-          age: patient.age || calculateAge(patient.date_of_birth),
-          gender: patient.gender || "Male",
-          status: patient.status || "pending",
-          timestamp: patient.timestamp || "",
-          timestampFormatted: patient.timestamp ? patient.timestamp : "-",
-          submittedBy: patient.submitted_by || "-",
-        }));
-
-        setPatients(transformedPatients);
-      }
-    } catch (error) {
-      console.error("Failed to load patients:", error);
-      setModalError("An error occurred while loading patient data.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Real-time sync: refresh patient list when any user modifies patient_admission
-  useRealtimeTable("patient_admission", loadPatients);
-
-  // Load existing patients from Supabase on component mount
-  useEffect(() => {
-    loadPatients();
-  }, []);
-
-  // Calculate age from date of birth
-  const calculateAge = (dob) => {
-    if (!dob) return "";
-    const today = new Date();
-    const birthDate = new Date(dob);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthDate.getDate())
-    ) {
-      age--;
-    }
-
-    return age;
-  };
+  const updateMutation = useMutation({
+    mutationFn: updatePatient,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setShowModal(false);
+      resetForm();
+    },
+    onError: (error) => setModalError(`Failed to update patient: ${error.message}`)
+  });
 
   // Format date from YYYY-MM-DD to DD/MM/YYYY
   const formatDateForDisplay = (dateString) => {
@@ -101,33 +60,29 @@ const Admission = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Generate admission number based on latest patient; start sequence at 5000
-
   // Filter patients based on search query and date filter
   const filteredPatients = patients.filter((patient) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
       searchQuery === "" ||
-      patient.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      patient.patientName.toLowerCase().includes(q) ||
       patient.phoneNumber.includes(searchQuery) ||
-      patient.admissionNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      patient.attenderName.toLowerCase().includes(searchQuery.toLowerCase());
+      patient.admissionNo.toLowerCase().includes(q) ||
+      patient.attenderName.toLowerCase().includes(q);
 
     const matchesDate = filterDate === "" || patient.dateOfBirth === filterDate;
 
     return matchesSearch && matchesDate;
   });
 
-  // Updates form data state on input change
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  // Submit new patient to Supabase
   const handleSubmit = async () => {
     if (
       !formData.patientName ||
@@ -139,12 +94,10 @@ const Admission = () => {
       return;
     }
 
-    setIsLoading(true);
     setModalError("");
 
     try {
       if (editingId) {
-        // Update existing patient
         const updateData = {
           patient_name: formData.patientName.trim(),
           phone_no: formData.phoneNumber.trim(),
@@ -154,17 +107,8 @@ const Admission = () => {
           age: formData.age,
           gender: formData.gender,
         };
-
-        const { error } = await supabase
-          .from("patient_admission")
-          .update(updateData)
-          .eq("id", editingId);
-
-        if (error) {
-          throw error;
-        }
+        updateMutation.mutate({ id: editingId, updateData });
       } else {
-        // Create new patient
         const timestamp = new Date()
           .toLocaleString("en-CA", {
             timeZone: "Asia/Kolkata",
@@ -195,29 +139,13 @@ const Admission = () => {
           planned1: timestamp,
           submitted_by: submittedBy,
         };
-
-        const { error } = await supabase
-          .from("patient_admission")
-          .insert(patientData);
-
-        if (error) {
-          throw error;
-        }
+        createMutation.mutate(patientData);
       }
-
-      // Refresh the patient list and reset state
-      await loadPatients();
-      setShowModal(false);
-      resetForm();
     } catch (error) {
       console.error("Error submitting patient:", error);
-      setModalError(`Failed to save patient: ${error.message}`);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  // Resets the form and clears errors
   const resetForm = () => {
     setFormData({
       patientName: "",
@@ -232,7 +160,6 @@ const Admission = () => {
     setModalError("");
   };
 
-  // Sets the patient data and opens modal for editing
   const handleEdit = (patient) => {
     setEditingId(patient.id);
     setFormData({
