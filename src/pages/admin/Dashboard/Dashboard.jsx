@@ -1,7 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Users, UserCheck, Home, Building, Activity, Calendar, UserCog, Stethoscope, UserPlus, ClipboardCheck } from 'lucide-react';
-import supabase from '../../../SupabaseClient';
-import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import React, { useState, useEffect } from "react";
+import {
+  Users,
+  UserCheck,
+  Home,
+  Building,
+  Activity,
+  Calendar,
+  UserCog,
+  Stethoscope,
+  UserPlus,
+  ClipboardCheck,
+  ArrowUpRight,
+} from "lucide-react";
+import supabase from "../../../SupabaseClient";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -17,20 +29,21 @@ export default function Dashboard() {
     doctorCount: 0,
     nurseCount: 0,
     rmoCount: 0,
-    otStaffCount: 0
+    otStaffCount: 0,
+    featuredNurses: [],
   });
 
   // Function to get color based on index
   const getChartColor = (index) => {
     const colors = [
-      '#10B981', // Green
-      '#3B82F6', // Blue
-      '#8B5CF6', // Purple
-      '#EF4444', // Red
-      '#F59E0B', // Yellow
-      '#EC4899', // Pink
-      '#06B6D4', // Cyan
-      '#84CC16', // Lime
+      "#10B981", // Green
+      "#3B82F6", // Blue
+      "#8B5CF6", // Purple
+      "#EF4444", // Red
+      "#F59E0B", // Yellow
+      "#EC4899", // Pink
+      "#06B6D4", // Cyan
+      "#84CC16", // Lime
     ];
     return colors[index % colors.length];
   };
@@ -44,7 +57,7 @@ export default function Dashboard() {
   const processDistributionData = (data, field) => {
     const distribution = {};
 
-    data?.forEach(item => {
+    data?.forEach((item) => {
       const value = item[field];
       if (value) {
         distribution[value] = (distribution[value] || 0) + 1;
@@ -54,14 +67,14 @@ export default function Dashboard() {
     return Object.entries(distribution).map(([name, count]) => ({
       name,
       count,
-      percentage: calculatePercentage(count, data?.length || 0)
+      percentage: calculatePercentage(count, data?.length || 0),
     }));
   };
 
   // Format date for display (e.g., "Mon 15")
   const formatDateForDisplay = (dateString) => {
     const date = new Date(dateString);
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     return `${days[date.getDay()]} ${date.getDate()}`;
   };
 
@@ -73,15 +86,15 @@ export default function Dashboard() {
       sevenDaysAgo.setDate(today.getDate() - 6); // Last 7 days including today
 
       // Format dates for Supabase query
-      const startDate = sevenDaysAgo.toISOString().split('T')[0];
-      const endDate = today.toISOString().split('T')[0];
+      const startDate = sevenDaysAgo.toISOString().split("T")[0];
+      const endDate = today.toISOString().split("T")[0];
 
       // Get daily admissions from patient_admission
       const { data: patientAdmissions, error } = await supabase
-        .from('patient_admission')
-        .select('timestamp')
-        .gte('timestamp', `${startDate}T00:00:00`)
-        .lte('timestamp', `${endDate}T23:59:59`);
+        .from("patient_admission")
+        .select("timestamp")
+        .gte("timestamp", `${startDate}T00:00:00`)
+        .lte("timestamp", `${endDate}T23:59:59`);
 
       if (error) throw error;
 
@@ -90,31 +103,33 @@ export default function Dashboard() {
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
-        dates.push(date.toISOString().split('T')[0]);
+        dates.push(date.toISOString().split("T")[0]);
       }
 
       // Count admissions per day
       const dailyCounts = {};
-      patientAdmissions?.forEach(admission => {
-        const date = admission.timestamp.split('T')[0];
+      patientAdmissions?.forEach((admission) => {
+        const date = admission.timestamp.split("T")[0];
         dailyCounts[date] = (dailyCounts[date] || 0) + 1;
       });
 
       // Format for chart
-      return dates.map(date => ({
+      return dates.map((date) => ({
         date: formatDateForDisplay(date),
-        count: dailyCounts[date] || 0
+        count: dailyCounts[date] || 0,
       }));
-
     } catch (error) {
-      console.error('Error fetching admission trends:', error);
+      console.error("Error fetching admission trends:", error);
       return [];
     }
   };
 
   // Calculate pie chart segments for gender distribution
   const calculatePieChartSegments = (genderDistribution) => {
-    const total = genderDistribution.reduce((sum, gender) => sum + gender.percentage, 0);
+    const total = genderDistribution.reduce(
+      (sum, gender) => sum + gender.percentage,
+      0,
+    );
     let accumulatedPercentage = 0;
 
     return genderDistribution.map((gender, index) => {
@@ -123,7 +138,7 @@ export default function Dashboard() {
         count: gender.count,
         percentage: gender.percentage,
         start: accumulatedPercentage,
-        end: accumulatedPercentage + (gender.percentage / total * 360)
+        end: accumulatedPercentage + (gender.percentage / total) * 360,
       };
       accumulatedPercentage = segment.end;
       return segment;
@@ -133,44 +148,109 @@ export default function Dashboard() {
   // Fetch staff counts from all_staff table
   const fetchStaffCounts = async () => {
     try {
-      // Fetch doctors count
-      const { count: doctorCount, error: doctorError } = await supabase
-        .from('doctors')
-        .select('*', { count: 'exact', head: true })
+      // Fetch everything in parallel to maximize speed
+      const [docRes, nurseRes, rmoRes, otRes] = await Promise.all([
+        supabase.from("doctors").select("*", { count: "exact", head: true }),
+        supabase.from("all_staff").select("*", { count: "exact", head: true }).eq("designation", "Staff Nurse"),
+        supabase.from("all_staff").select("*", { count: "exact", head: true }).eq("designation", "RMO"),
+        supabase.from("all_staff").select("*", { count: "exact", head: true }).eq("designation", "OT STAFF")
+      ]);
 
+      const doctorCount = docRes.count || 0;
+      const nurseCount = nurseRes.count || 0;
+      const rmoCount = rmoRes.count || 0;
+      const otStaffCount = otRes.count || 0;
+      const doctorError = docRes.error;
+      const nurseError = nurseRes.error;
+      const rmoError = rmoRes.error;
+      const otStaffError = otRes.error;
 
-      // Fetch nurses count
-      const { count: nurseCount, error: nurseError } = await supabase
-        .from('all_staff')
-        .select('*', { count: 'exact', head: true })
-        .eq('designation', 'Staff Nurse');
+      // 1. Calculate top performing nurses based on task completion (Last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const startDateStr = thirtyDaysAgo.toISOString().split("T")[0];
 
-      // Fetch RMO count
-      const { count: rmoCount, error: rmoError } = await supabase
-        .from('all_staff')
-        .select('*', { count: 'exact', head: true })
-        .eq('designation', 'RMO');
+      const { data: taskPerformance, error: taskPerfError } = await supabase
+        .from("nurse_assign_task")
+        .select("assign_nurse, planned1, actual1")
+        .gte("start_date", startDateStr);
 
-      // Fetch OT staff count
-      const { count: otStaffCount, error: otStaffError } = await supabase
-        .from('all_staff')
-        .select('*', { count: 'exact', head: true })
-        .eq('designation', 'OT STAFF');
+      let topNurseNames = [];
+      if (!taskPerfError && taskPerformance) {
+        const nurseStatsMap = {};
+        taskPerformance.forEach((task) => {
+          const name = task.assign_nurse?.trim();
+          if (name) {
+            if (!nurseStatsMap[name])
+              nurseStatsMap[name] = { total: 0, done: 0 };
+            nurseStatsMap[name].total++;
+            if (task.planned1 && task.actual1) nurseStatsMap[name].done++;
+          }
+        });
+
+        topNurseNames = Object.entries(nurseStatsMap)
+          .map(([name, stats]) => ({
+            name,
+            score: Math.round((stats.done / stats.total) * 100),
+            done: stats.done,
+          }))
+          .sort((a, b) => b.score - a.score || b.done - a.done)
+          .slice(0, 2)
+          .map((n) => n.name);
+      }
+
+      // 2. Fetch full details for these specific nurses
+      let featuredNurses = [];
+      if (topNurseNames.length > 0) {
+        const { data: nursesData, error: nursesDataError } = await supabase
+          .from("all_staff")
+          .select("*")
+          .in("name", topNurseNames);
+
+        if (!nursesDataError && nursesData) {
+          // Preserve the performance rank order
+          featuredNurses = nursesData.sort(
+            (a, b) =>
+              topNurseNames.indexOf(a.name) - topNurseNames.indexOf(b.name),
+          );
+        }
+      }
+
+      // Fallback: If no task data, just show 2 nurses by designation
+      if (featuredNurses.length === 0) {
+        const { data: fallbackNurses } = await supabase
+          .from("all_staff")
+          .select("*")
+          .ilike("designation", "%Nurse%")
+          .limit(2);
+        featuredNurses = fallbackNurses || [];
+      }
 
       if (doctorError || nurseError || rmoError || otStaffError) {
-        console.error('Error fetching staff counts:', { doctorError, nurseError, rmoError, otStaffError });
-        return { doctorCount: 0, nurseCount: 0, rmoCount: 0, otStaffCount: 0 };
+        console.error("Error fetching staff counts:", {
+          doctorError,
+          nurseError,
+          rmoError,
+          otStaffError,
+        });
+        return {
+          doctorCount: 0,
+          nurseCount: 0,
+          rmoCount: 0,
+          otStaffCount: 0,
+          featuredNurses: [],
+        };
       }
 
       return {
         doctorCount: doctorCount || 0,
         nurseCount: nurseCount || 0,
         rmoCount: rmoCount || 0,
-        otStaffCount: otStaffCount || 0
+        otStaffCount: otStaffCount || 0,
+        featuredNurses: featuredNurses || [],
       };
-
     } catch (error) {
-      console.error('Error in fetchStaffCounts:', error);
+      console.error("Error in fetchStaffCounts:", error);
       return { doctorCount: 0, nurseCount: 0, rmoCount: 0, otStaffCount: 0 };
     }
   };
@@ -180,78 +260,56 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // Fetch patient_admission count
-      const { count: patientAdmissionCount, error: patientError } = await supabase
-        .from('patient_admission')
-        .select('*', { count: 'exact', head: true });
+      // Consolidate queries and fetch in parallel for maximum performance
+      const [patientRes, ipdRes, staffCounts, admissionTrends] = await Promise.all([
+        supabase.from("patient_admission").select("gender, timestamp"),
+        supabase.from("ipd_admissions").select("ward_type, department, planned1, actual1"),
+        fetchStaffCounts(),
+        getAdmissionTrends()
+      ]);
 
-      // Fetch ipd_admissions count
-      const { count: ipdAdmissionCount, error: ipdError } = await supabase
-        .from('ipd_admissions')
-        .select('*', { count: 'exact', head: true });
-
-      // Fetch ward distribution (from ipd_admissions)
-      const { data: wardData, error: wardError } = await supabase
-        .from('ipd_admissions')
-        .select('ward_type')
-        .not('ward_type', 'is', null);
-
-      // Fetch department distribution (from ipd_admissions)
-      const { data: departmentData, error: departmentError } = await supabase
-        .from('ipd_admissions')
-        .select('department')
-        .not('department', 'is', null);
-
-      // Fetch gender distribution (from patient_admission)
-      const { data: genderData, error: genderError } = await supabase
-        .from('patient_admission')
-        .select('gender')
-        .not('gender', 'is', null);
-
-      // Fetch planned1 and actual1 for active/discharged patients (from ipd_admissions)
-      const { data: ipdStatusData, error: ipdStatusError } = await supabase
-        .from('ipd_admissions')
-        .select('planned1, actual1');
-
-      // Fetch staff counts
-      const staffCounts = await fetchStaffCounts();
-
-      if (
-        patientError || ipdError || wardError ||
-        departmentError || genderError || ipdStatusError
-      ) {
-        console.error('Error fetching dashboard data:', {
-          patientError, ipdError, wardError, departmentError, genderError, ipdStatusError
-        });
+      if (patientRes.error || ipdRes.error) {
+        console.error("Error fetching dashboard data:", { patientError: patientRes.error, ipdError: ipdRes.error });
         return;
       }
 
+      const patientAdmissionCount = patientRes.data?.length || 0;
+      const ipdAdmissionCount = ipdRes.data?.length || 0;
+      
+      const wardData = ipdRes.data?.filter(i => i.ward_type);
+      const departmentData = ipdRes.data?.filter(i => i.department);
+      const genderData = patientRes.data?.filter(p => p.gender);
+      const ipdStatusData = ipdRes.data;
+
       // Process ward distribution
-      const wardDistribution = processDistributionData(wardData, 'ward_type');
+      const wardDistribution = processDistributionData(wardData, "ward_type");
 
       // Process department distribution
-      const departmentDistribution = processDistributionData(departmentData, 'department');
+      const departmentDistribution = processDistributionData(
+        departmentData,
+        "department",
+      );
 
       // Process gender distribution
-      const genderDistribution = processDistributionData(genderData, 'gender');
+      const genderDistribution = processDistributionData(genderData, "gender");
 
       // Process active/discharged patients based on planned1 and actual1
-      const activePatients = ipdStatusData?.filter(patient =>
-        patient.planned1 && !patient.actual1
-      ).length || 0;
+      const activePatients =
+        ipdStatusData?.filter((patient) => patient.planned1 && !patient.actual1)
+          .length || 0;
 
-      const dischargedPatients = ipdStatusData?.filter(patient =>
-        patient.planned1 && patient.actual1
-      ).length || 0;
+      const dischargedPatients =
+        ipdStatusData?.filter((patient) => patient.planned1 && patient.actual1)
+          .length || 0;
 
-      // Get admission trends (last 7 days)
-      const admissionTrends = await getAdmissionTrends();
 
       setStats({
         patientAdmissionCount: patientAdmissionCount || 0,
         ipdAdmissionCount: ipdAdmissionCount || 0,
         wardDistribution: wardDistribution.sort((a, b) => b.count - a.count),
-        departmentDistribution: departmentDistribution.sort((a, b) => b.count - a.count),
+        departmentDistribution: departmentDistribution.sort(
+          (a, b) => b.count - a.count,
+        ),
         genderDistribution,
         admissionTrends,
         activePatients,
@@ -259,19 +317,19 @@ export default function Dashboard() {
         doctorCount: staffCounts.doctorCount,
         nurseCount: staffCounts.nurseCount,
         rmoCount: staffCounts.rmoCount,
-        otStaffCount: staffCounts.otStaffCount
+        otStaffCount: staffCounts.otStaffCount,
+        featuredNurses: staffCounts.featuredNurses,
       });
-
     } catch (error) {
-      console.error('Error in fetchDashboardData:', error);
+      console.error("Error in fetchDashboardData:", error);
     } finally {
       setLoading(false);
     }
   };
 
   // Real-time sync: refresh dashboard when admissions change
-  useRealtimeTable('patient_admission', fetchDashboardData);
-  useRealtimeTable('ipd_admissions', fetchDashboardData);
+  useRealtimeTable("patient_admission", fetchDashboardData);
+  useRealtimeTable("ipd_admissions", fetchDashboardData);
 
   useEffect(() => {
     fetchDashboardData();
@@ -292,32 +350,81 @@ export default function Dashboard() {
   const pieSegments = calculatePieChartSegments(stats.genderDistribution);
 
   return (
-    <div className="p-3 md:p-6 space-y-3 md:space-y-6">
+    <div className="p-3  md:p-6 md:pt-0 space-y-3 md:space-y-6">
       {/* Main Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-6">
         {[
-          { label: 'Total Patients', count: stats.patientAdmissionCount, icon: <Users size={14} />, color: 'blue', desc: 'Admission Log' },
-          { label: 'IPD Patients', count: stats.ipdAdmissionCount, icon: <UserCheck size={14} />, color: 'green', desc: 'IPD Log' },
-          { label: 'Active', count: stats.activePatients, icon: <Activity size={14} />, color: 'purple', progress: calculatePercentage(stats.activePatients, stats.ipdAdmissionCount) },
-          { label: 'Discharged', count: stats.dischargedPatients, icon: <Home size={14} />, color: 'orange', progress: calculatePercentage(stats.dischargedPatients, stats.ipdAdmissionCount) }
+          {
+            label: "Total Patients",
+            count: stats.patientAdmissionCount,
+            icon: <Users size={14} />,
+            color: "blue",
+            desc: "Admission Log",
+          },
+          {
+            label: "IPD Patients",
+            count: stats.ipdAdmissionCount,
+            icon: <UserCheck size={14} />,
+            color: "green",
+            desc: "IPD Log",
+          },
+          {
+            label: "Active",
+            count: stats.activePatients,
+            icon: <Activity size={14} />,
+            color: "purple",
+            progress: calculatePercentage(
+              stats.activePatients,
+              stats.ipdAdmissionCount,
+            ),
+          },
+          {
+            label: "Discharged",
+            count: stats.dischargedPatients,
+            icon: <Home size={14} />,
+            color: "orange",
+            progress: calculatePercentage(
+              stats.dischargedPatients,
+              stats.ipdAdmissionCount,
+            ),
+          },
         ].map((item) => (
-          <div key={item.label} className="bg-white rounded-lg border border-gray-100 p-2 md:p-6 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 md:gap-4">
-              <div className={`flex items-center justify-center bg-${item.color}-50 p-2 md:p-3 rounded-lg md:rounded-full flex-shrink-0`}>
-                {React.cloneElement(item.icon, { size: 16, className: `text-${item.color}-600 md:w-6 md:h-6` })}
+          <div
+            key={item.label}
+            className="group bg-white/70 backdrop-blur-md rounded-2xl border border-gray-100 p-4 md:p-6 shadow-sm hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] hover:-translate-y-1 transition-all duration-300"
+          >
+            <div className="flex items-center gap-4">
+              <div
+                className={`flex items-center justify-center bg-${item.color}-50/50 p-3 rounded-2xl group-hover:scale-110 transition-transform duration-300`}
+              >
+                {React.cloneElement(item.icon, {
+                  size: 20,
+                  className: `text-${item.color}-600 md:w-6 md:h-6`,
+                })}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[9px] md:text-sm font-black text-gray-400 uppercase tracking-tighter truncate leading-none">{item.label}</p>
-                <p className="text-[15px] md:text-3xl font-black text-gray-900 mt-1 leading-none">{item.count.toLocaleString()}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest leading-none">
+                    {item.label}
+                  </p>
+                </div>
+                <p className="text-xl md:text-3xl font-black text-gray-900 mt-2 leading-none tracking-tighter">
+                  {item.count.toLocaleString()}
+                </p>
                 {item.progress !== undefined ? (
-                  <div className="w-full bg-gray-50 rounded-full h-1 mt-2 border border-gray-100">
+                  <div className="w-full bg-gray-100/50 rounded-full h-1.5 mt-3 overflow-hidden">
                     <div
-                      className={`h-1 rounded-full shadow-[0_0_8px_rgba(22,163,74,0.4)] ${item.color === 'green' || item.color === 'purple' ? 'bg-green-600' : 'bg-blue-600'}`}
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${item.color === "green" || item.color === "purple" ? "bg-gradient-to-r from-emerald-500 to-green-600" : "bg-gradient-to-r from-blue-500 to-indigo-600"}`}
                       style={{ width: `${item.progress}%` }}
                     ></div>
                   </div>
                 ) : (
-                  <p className="hidden md:block text-[10px] text-gray-400 mt-2 font-bold italic">{item.desc}</p>
+                  <div className="flex items-center gap-1 mt-3">
+                    <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse"></span>
+                    <p className="text-[9px] text-green-600 font-bold uppercase tracking-tighter">
+                      Live Updates
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -325,14 +432,116 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Featured Nurses Section - Premium Design */}
+      {stats.featuredNurses.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-6 bg-green-600 rounded-full"></div>
+              <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
+                Nursing Leadership
+              </h3>
+            </div>
+            <p className="text-xs text-green-600 font-black flex items-center gap-1 cursor-pointer hover:opacity-70 transition-opacity">
+              SHIFT ROSTER <ArrowUpRight size={14} />
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            {stats.featuredNurses.map((nurse, i) => {
+              const photoUrl =
+                nurse.photo ||
+                nurse.image ||
+                nurse.profile_image ||
+                nurse.photo_url;
+              return (
+                <div
+                  key={i}
+                  className="group bg-gradient-to-br from-white to-gray-50/30 backdrop-blur-xl rounded-[2rem] border border-gray-100 p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)] hover:shadow-[0_30px_60px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-500 relative overflow-hidden"
+                >
+                  {/* Decorative Background Element */}
+                  <div className="absolute -top-12 -right-12 w-40 h-40 bg-green-500/5 rounded-full blur-3xl group-hover:bg-green-500/10 transition-colors duration-700"></div>
+
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
+                    <div className="relative flex-shrink-0">
+                      <div className="w-24 h-24 rounded-[2rem] overflow-hidden rotate-2 group-hover:rotate-0 transition-all duration-500 border-4 border-white shadow-2xl bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center">
+                        {photoUrl ? (
+                          <img
+                            src={photoUrl}
+                            alt={nurse.name}
+                            className="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-500"
+                          />
+                        ) : (
+                          <span className="text-3xl font-black text-green-600 drop-shadow-sm">
+                            {nurse.name?.[0]?.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 bg-white p-1.5 rounded-full shadow-xl border border-gray-50">
+                        <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse border-2 border-white"></div>
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 flex-1 text-center sm:text-left">
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
+                        <span className="px-3 py-1 bg-green-50 text-[10px] font-black text-green-700 rounded-full uppercase tracking-widest border border-green-100/50">
+                          Active Duty
+                        </span>
+                        <span className="px-3 py-1 bg-blue-50 text-[10px] font-black text-blue-700 rounded-full uppercase tracking-widest border border-blue-100/50">
+                          Ward Specialist
+                        </span>
+                      </div>
+                      <h4 className="text-xl md:text-2xl font-black text-gray-900 opacity-100 group-hover:text-green-600 transition-colors leading-tight mb-1">
+                        {nurse.name}
+                      </h4>
+                      <p className="text-[11px] font-bold text-gray-400 opacity-70 uppercase tracking-[0.2em]">
+                        {nurse.designation || "Nursing Officer"}
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-4 mt-6 pt-5 border-t border-gray-100/50">
+                        <div className="flex flex-col opacity-70">
+                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">
+                            Shift
+                          </span>
+                          <span className="text-xs font-black text-gray-600 uppercase">
+                            Morning (A)
+                          </span>
+                        </div>
+                        <div className="flex flex-col border-l border-gray-100/50 pl-4 opacity-70">
+                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">
+                            Location
+                          </span>
+                          <span className="text-xs font-black text-gray-600 uppercase">
+                            General Ward
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subtle Interactive Arrow */}
+                  <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300">
+                    <ArrowUpRight className="text-green-600 w-5 h-5" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
         {/* Ward Distribution Chart */}
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 md:p-6">
           <div className="flex items-center justify-between mb-3 md:mb-6">
             <div>
-              <h3 className="text-sm md:text-lg font-black text-gray-900 uppercase tracking-tighter">Ward View</h3>
-              <p className="text-[10px] md:text-sm text-gray-400 font-bold italic">Patient spread</p>
+              <h3 className="text-sm md:text-lg font-black text-gray-900 uppercase tracking-tighter">
+                Ward View
+              </h3>
+              <p className="text-[10px] md:text-sm text-gray-400 font-bold italic">
+                Patient spread
+              </p>
             </div>
             <div className="bg-green-50/50 p-1.5 rounded-lg">
               <Building className="w-4 h-4 md:w-5 md:h-5 text-green-600" />
@@ -344,9 +553,14 @@ export default function Dashboard() {
               {stats.wardDistribution.map((ward, index) => (
                 <div key={ward.name} className="space-y-1 md:space-y-2">
                   <div className="flex justify-between text-[11px] md:text-sm leading-none">
-                    <span className="font-bold text-gray-700 truncate mr-2">{ward.name}</span>
+                    <span className="font-bold text-gray-700 truncate mr-2">
+                      {ward.name}
+                    </span>
                     <span className="font-black text-gray-900 flex-shrink-0">
-                      {ward.count} <span className="text-[9px] md:text-[11px] text-gray-400 ml-1">{ward.percentage}%</span>
+                      {ward.count}{" "}
+                      <span className="text-[9px] md:text-[11px] text-gray-400 ml-1">
+                        {ward.percentage}%
+                      </span>
                     </span>
                   </div>
                   <div className="w-full bg-gray-50 rounded-full h-1.5 md:h-3 border border-gray-100">
@@ -354,7 +568,7 @@ export default function Dashboard() {
                       className="h-1.5 md:h-3 rounded-full transition-all duration-500"
                       style={{
                         width: `${ward.percentage}%`,
-                        backgroundColor: getChartColor(index)
+                        backgroundColor: getChartColor(index),
                       }}
                     ></div>
                   </div>
@@ -364,7 +578,9 @@ export default function Dashboard() {
           ) : (
             <div className="text-center py-6">
               <Building className="w-8 h-8 md:w-12 md:h-12 mx-auto text-gray-200 mb-2" />
-              <p className="text-gray-400 font-bold text-[10px]">No ward records</p>
+              <p className="text-gray-400 font-bold text-[10px]">
+                No ward records
+              </p>
             </div>
           )}
         </div>
@@ -373,8 +589,12 @@ export default function Dashboard() {
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 md:p-6">
           <div className="flex items-center justify-between mb-3 md:mb-6">
             <div>
-              <h3 className="text-sm md:text-lg font-black text-gray-900 uppercase tracking-tighter">Dept View</h3>
-              <p className="text-[10px] md:text-sm text-gray-400 font-bold italic">Case distribution</p>
+              <h3 className="text-sm md:text-lg font-black text-gray-900 uppercase tracking-tighter">
+                Dept View
+              </h3>
+              <p className="text-[10px] md:text-sm text-gray-400 font-bold italic">
+                Case distribution
+              </p>
             </div>
             <div className="bg-blue-50/50 p-1.5 rounded-lg">
               <Users className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
@@ -386,9 +606,14 @@ export default function Dashboard() {
               {stats.departmentDistribution.slice(0, 5).map((dept, index) => (
                 <div key={dept.name} className="space-y-1 md:space-y-2">
                   <div className="flex justify-between text-[11px] md:text-sm leading-none">
-                    <span className="font-bold text-gray-700 truncate mr-2">{dept.name}</span>
+                    <span className="font-bold text-gray-700 truncate mr-2">
+                      {dept.name}
+                    </span>
                     <span className="font-black text-gray-900 flex-shrink-0">
-                      {dept.count} <span className="text-[9px] md:text-[11px] text-gray-400 ml-1">{dept.percentage}%</span>
+                      {dept.count}{" "}
+                      <span className="text-[9px] md:text-[11px] text-gray-400 ml-1">
+                        {dept.percentage}%
+                      </span>
                     </span>
                   </div>
                   <div className="w-full bg-gray-50 rounded-full h-1.5 md:h-3 border border-gray-100">
@@ -396,7 +621,7 @@ export default function Dashboard() {
                       className="h-1.5 md:h-3 rounded-full transition-all duration-500"
                       style={{
                         width: `${dept.percentage}%`,
-                        backgroundColor: getChartColor(index + 2)
+                        backgroundColor: getChartColor(index + 2),
                       }}
                     ></div>
                   </div>
@@ -413,7 +638,9 @@ export default function Dashboard() {
           ) : (
             <div className="text-center py-6">
               <Users className="w-8 h-8 md:w-12 md:h-12 mx-auto text-gray-200 mb-2" />
-              <p className="text-gray-400 font-bold text-[10px]">No department data</p>
+              <p className="text-gray-400 font-bold text-[10px]">
+                No department data
+              </p>
             </div>
           )}
         </div>
@@ -427,30 +654,62 @@ export default function Dashboard() {
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
           <div className="min-w-0">
-            <h3 className="text-sm md:text-xl font-black uppercase tracking-tighter">Team Overview</h3>
-            <p className="opacity-70 text-[9px] md:text-sm mt-0.5 font-bold italic truncate">Hospital Strength Across Roles</p>
+            <h3 className="text-sm md:text-xl font-black uppercase tracking-tighter">
+              Team Overview
+            </h3>
+            <p className="opacity-70 text-[9px] md:text-sm mt-0.5 font-bold italic truncate">
+              Hospital Strength Across Roles
+            </p>
           </div>
           <div className="bg-white/10 backdrop-blur-md rounded border border-white/20 p-2 md:p-4 text-center md:text-right min-w-[70px]">
             <p className="text-lg md:text-3xl font-black leading-none">
-              {stats.doctorCount + stats.nurseCount + stats.rmoCount + stats.otStaffCount}
+              {stats.doctorCount +
+                stats.nurseCount +
+                stats.rmoCount +
+                stats.otStaffCount}
             </p>
-            <p className="text-[8px] md:text-xs font-black uppercase tracking-widest opacity-60 mt-1">Total</p>
+            <p className="text-[8px] md:text-xs font-black uppercase tracking-widest opacity-60 mt-1">
+              Total
+            </p>
           </div>
         </div>
 
         <div className="grid grid-cols-4 gap-2 md:gap-4 mt-4 relative z-10">
           {[
-            { label: 'Doc', count: stats.doctorCount, icon: <Stethoscope size={10} /> },
-            { label: 'Nur', count: stats.nurseCount, icon: <UserPlus size={10} /> },
-            { label: 'RMO', count: stats.rmoCount, icon: <UserCog size={10} /> },
-            { label: 'OT', count: stats.otStaffCount, icon: <Activity size={10} /> }
+            {
+              label: "Doc",
+              count: stats.doctorCount,
+              icon: <Stethoscope size={10} />,
+            },
+            {
+              label: "Nur",
+              count: stats.nurseCount,
+              icon: <UserPlus size={10} />,
+            },
+            {
+              label: "RMO",
+              count: stats.rmoCount,
+              icon: <UserCog size={10} />,
+            },
+            {
+              label: "OT",
+              count: stats.otStaffCount,
+              icon: <Activity size={10} />,
+            },
           ].map((item) => (
-            <div key={item.label} className="bg-white/5 hover:bg-white/10 transition-colors rounded p-1.5 md:p-3 border border-white/5 flex flex-col items-center">
+            <div
+              key={item.label}
+              className="bg-white/5 hover:bg-white/10 transition-colors rounded p-1.5 md:p-3 border border-white/5 flex flex-col items-center"
+            >
               <div className="flex items-center gap-1 mb-0.5 opacity-60">
                 {item.icon}
-                <p className="text-[8px] md:text-xs font-black uppercase tracking-tighter">{item.label}</p>
+                <p className="text-[8px] md:text-xs font-black uppercase tracking-tighter">
+                  {item.label}
+                </p>
               </div>
-              <p className="text-[14px] md:text-2xl font-black leading-none">{item.count}</p>
+              <p className="text-[14px] md:text-2xl font-black leading-none">
+                {item.count}
+              </p>
             </div>
           ))}
         </div>
