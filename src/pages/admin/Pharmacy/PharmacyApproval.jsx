@@ -167,6 +167,7 @@ const PharmacyApproval = () => {
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
   const [statusChanges, setStatusChanges] = useState({});
+  const [manualLoading, setLoading] = useState(false);
   const { showNotification } = useNotification();
 
   // Filter States
@@ -217,7 +218,7 @@ const PharmacyApproval = () => {
     return [...new Set(all)].sort();
   }, [pendingIndents, historyIndents]);
 
-  const loading = isLoadingPending || isLoadingHistory;
+  const loading = isLoadingPending || isLoadingHistory || manualLoading;
 
   // --- Mutations ---
 
