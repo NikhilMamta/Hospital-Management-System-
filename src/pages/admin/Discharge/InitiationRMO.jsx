@@ -319,7 +319,7 @@ const InitiationByRMO = () => {
           </div>
 
           <button
-            onClick={loadData}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['discharge'] })}
             className="px-2.5 py-1.5 text-xs text-green-600 bg-green-50 rounded-lg hover:bg-green-100 md:px-3 md:text-sm"
           >
             Refresh
