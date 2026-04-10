@@ -45,7 +45,7 @@ export const getPendingPatients = async () => {
 export const getHistoryPatients = async () => {
   const { data, error } = await supabase
     .from('discharge')
-    .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned1, actual1, delay1, remark, discharge_number, rmo_status, rmo_name, summary_report_image, summary_report_image_name, rmo_initiation_date')
+    .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned1, actual1, delay1, remark, discharge_number, rmo_status, rmo_name, summary_report_image, summary_report_image_name')
     .not('planned1', 'is', null)
     .not('actual1', 'is', null)
     .not('rmo_name', 'is', null)
@@ -81,7 +81,7 @@ export const getHistoryPatients = async () => {
     rmo_name: patient.rmo_name,
     summary_report_image: patient.summary_report_image,
     summary_report_image_name: patient.summary_report_image_name,
-    initiation_date: patient.rmo_initiation_date
+    initiation_date: patient.actual1
   }));
 };
 

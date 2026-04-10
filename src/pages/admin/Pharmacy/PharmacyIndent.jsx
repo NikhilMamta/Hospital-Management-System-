@@ -13,7 +13,7 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
 import { 
@@ -44,14 +44,45 @@ const PharmacyIndents = () => {
   const [admissionSearch, setAdmissionSearch] = useState("");
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
   const dropdownRef = useRef(null);
+  const observerTarget = useRef(null);
 
   // --- Queries ---
 
   // Main Indents Query
-  const { data: indents = [], isLoading: isLoadingIndents } = useQuery({
+  const { 
+    data: infiniteIndents, 
+    fetchNextPage, 
+    hasNextPage, 
+    isFetchingNextPage, 
+    isLoading: isLoadingIndents 
+  } = useInfiniteQuery({
     queryKey: ['pharmacy', 'indents'],
     queryFn: getPharmacyIndents,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === 50 ? allPages.length : undefined;
+    },
   });
+
+  const indents = infiniteIndents?.pages.flat() || [];
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 1.0 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Active Admissions Query
   const { data: admissionPatients = [] } = useQuery({
@@ -61,7 +92,7 @@ const PharmacyIndents = () => {
 
   // OT Days Query (depends on indents)
   const { data: otDaysMap = {} } = useQuery({
-    queryKey: ['ot', 'days', indents.map(i => i.ipd_number).join(',')],
+    queryKey: ['ot', 'days', indents.length, indents[0]?.id],
     queryFn: () => getOtCompletionDays(indents.map(i => i.ipd_number).filter(Boolean)),
     enabled: indents.length > 0,
   });
@@ -85,7 +116,9 @@ const PharmacyIndents = () => {
     onSuccess: (savedRow) => {
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "indents"] });
 
-      const medicinesParsed = JSON.parse(savedRow.medicines || "[]");
+      const medicinesRaw = savedRow.medicines;
+      const medicinesParsed = typeof medicinesRaw === 'string' ? JSON.parse(medicinesRaw || "[]") : (medicinesRaw || []);
+      
       const totalMedicines = medicinesParsed.reduce(
         (sum, med) => sum + parseInt(med.quantity || 0),
         0,
@@ -375,11 +408,14 @@ const PharmacyIndents = () => {
     }
 
     const selectedPatient = admissionPatients.find((p) => p.admission_no === formData.admissionNumber);
+    if (!selectedPatient) return showNotification("Unable to find patient admission records. Please re-select.", "error");
+
+    const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
     
     const pharmacyData = {
-      timestamp: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+      timestamp: now,
       admission_number: formData.admissionNumber,
-      ipd_number: selectedPatient?.ipd_number || "",
+      ipd_number: selectedPatient.ipd_number || "",
       staff_name: formData.staffName,
       consultant_name: formData.consultantName,
       patient_name: formData.patientName,
@@ -395,7 +431,7 @@ const PharmacyIndents = () => {
       investigations: JSON.stringify(investigations),
       investigation_advice: JSON.stringify(investigationAdvice),
       status: "pending",
-      planned1: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+      planned1: now,
     };
 
     if (editMode && selectedIndent) {
@@ -427,9 +463,10 @@ const PharmacyIndents = () => {
 
   const parseJsonField = (field) => {
     try {
-      return field ? JSON.parse(field) : {};
+      if (!field) return {};
+      return typeof field === "string" ? JSON.parse(field) : field;
     } catch (error) {
-      console.error("Error parsing JSON field:", error);
+      console.error("Error parsing JSON field:", error, "Field:", field);
       return {};
     }
   };
@@ -465,6 +502,7 @@ const PharmacyIndents = () => {
 
     setRequestTypes(parseJsonField(indent.request_types));
     setMedicines(parseJsonField(indent.medicines));
+    setInvestigations(parseJsonField(indent.investigations));
     setInvestigationAdvice(parseJsonField(indent.investigation_advice));
     setEditMode(true);
     setShowModal(true);
@@ -737,6 +775,18 @@ const PharmacyIndents = () => {
                 </tbody>
               </table>
             </div>
+            {/* Loading Indicator / Scroll Sentinel */}
+            <div ref={observerTarget} className="py-4 text-center">
+              {isFetchingNextPage && (
+                <div className="flex flex-col items-center">
+                  <div className="w-6 h-6 border-b-2 border-green-600 rounded-full animate-spin"></div>
+                  <p className="text-xs text-gray-500 mt-2">Loading more indents...</p>
+                </div>
+              )}
+              {!hasNextPage && indents.length > 0 && (
+                <p className="text-xs text-gray-400">All indents loaded</p>
+              )}
+            </div>
           </div>
 
           {/* Mobile Card View */}
@@ -885,6 +935,8 @@ const PharmacyIndents = () => {
                 </p>
               </div>
             )}
+            {/* Mobile Scroll Sentinel */}
+            <div className="py-2 h-4" /> 
           </div>
         </div>
       </div>
@@ -956,7 +1008,6 @@ const PharmacyIndents = () => {
                               <div
                                 key={patient.admission_no}
                                 onMouseDown={() => {
-                                  setSelectedPatient(patient);
                                   setAdmissionSearch(
                                     `${patient.admission_no} - ${patient.patient_name}`,
                                   );

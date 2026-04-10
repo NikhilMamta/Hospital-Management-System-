@@ -3,11 +3,13 @@ import supabase from '../SupabaseClient';
 /**
  * Fetches pharmacy indents.
  */
-export const getPharmacyIndents = async () => {
+export const getPharmacyIndents = async ({ pageParam = 0 }) => {
+  const pageSize = 50;
   const { data, error } = await supabase
     .from("pharmacy")
     .select("*")
-    .order("timestamp", { ascending: false });
+    .order("timestamp", { ascending: false })
+    .range(pageParam * pageSize, (pageParam + 1) * pageSize - 1);
 
   if (error) throw error;
   return data || [];
