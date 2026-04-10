@@ -23,7 +23,6 @@ import {
   getMedicines, 
   getInvestigations, 
   getCategories,
-  getNextIndentNumber,
   createPharmacyIndent,
   updatePharmacyIndent,
   deletePharmacyIndent
@@ -83,9 +82,22 @@ const PharmacyIndents = () => {
 
   const createMutation = useMutation({
     mutationFn: createPharmacyIndent,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'indents'] });
-      setSuccessData(data);
+    onSuccess: (savedRow) => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "indents"] });
+
+      const medicinesParsed = JSON.parse(savedRow.medicines || "[]");
+      const totalMedicines = medicinesParsed.reduce(
+        (sum, med) => sum + parseInt(med.quantity || 0),
+        0,
+      );
+
+      setSuccessData({
+        indentNumber: savedRow.indent_no,
+        patientName: savedRow.patient_name,
+        admissionNo: savedRow.admission_number,
+        totalMedicines,
+      });
+
       setSuccessModal(true);
       setShowModal(false);
       resetForm();
@@ -338,36 +350,7 @@ const PharmacyIndents = () => {
     }
   };
 
-  // generate a sequential indent number, starting at 15000 for new records
-  const generateIndentNumber = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("pharmacy")
-        .select("indent_no")
-        .order("timestamp", { ascending: false })
-        .limit(1);
 
-      if (error) {
-        console.error("Error fetching last indent number:", error);
-        return "IND-15000";
-      }
-
-      if (data && data.length > 0) {
-        const last = data[0].indent_no;
-        if (last && last.startsWith("IND-")) {
-          const num = parseInt(last.replace("IND-", ""), 10);
-          if (!isNaN(num)) {
-            const next = num >= 15000 ? num + 1 : 15000;
-            return `IND-${next}`;
-          }
-        }
-      }
-      return "IND-15000";
-    } catch (err) {
-      console.error("Exception generating indent number:", err);
-      return "IND-15000";
-    }
-  };
 
   const handleSubmit = async () => {
     if (!formData.admissionNumber) return showNotification("Please select Admission Number", "error");

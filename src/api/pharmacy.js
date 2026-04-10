@@ -116,29 +116,7 @@ export const getCategories = async () => {
   return data || [];
 };
 
-/**
- * Generates the next indent number.
- */
-export const getNextIndentNumber = async () => {
-  const { data, error } = await supabase
-    .from("pharmacy")
-    .select("indent_no")
-    .order("timestamp", { ascending: false })
-    .limit(1);
 
-  if (error) throw error;
-
-  if (data && data.length > 0) {
-    const last = data[0].indent_no;
-    if (last && last.startsWith("IND-")) {
-      const num = parseInt(last.replace("IND-", ""), 10);
-      if (!isNaN(num)) {
-        return `IND-${num >= 15000 ? num + 1 : 15000}`;
-      }
-    }
-  }
-  return "IND-15000";
-};
 
 /**
  * Creates a new pharmacy indent.

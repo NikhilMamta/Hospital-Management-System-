@@ -124,7 +124,7 @@ const DepartmentalIndent = () => {
       medicines: JSON.stringify(medicines),
       status: "pending",
       planned1: getIndianTimestamp(),
-      ...(editMode ? { indent_no: selectedIndent.indentNumber } : {})
+
     };
     mutation.mutate(payload);
   };
