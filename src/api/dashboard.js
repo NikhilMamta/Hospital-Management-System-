@@ -50,55 +50,7 @@ export const getDashboardStats = async () => {
   const activePatients = ipdRes.data?.filter(p => p.planned1 && !p.actual1).length || 0;
   const dischargedPatients = ipdRes.data?.filter(p => p.planned1 && p.actual1).length || 0;
 
-  // 5. Fetch and calculate performing nurses
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const startDateStr = thirtyDaysAgo.toISOString().split("T")[0];
-
-  const { data: taskPerformance } = await supabase
-    .from("nurse_assign_task")
-    .select("assign_nurse, planned1, actual1")
-    .gte("start_date", startDateStr);
-
-  let topNurseNames = [];
-  if (taskPerformance) {
-    const statsMap = {};
-    taskPerformance.forEach(task => {
-      const name = task.assign_nurse?.trim();
-      if (!name) return;
-      if (!statsMap[name]) statsMap[name] = { total: 0, done: 0 };
-      statsMap[name].total++;
-      if (task.planned1 && task.actual1) statsMap[name].done++;
-    });
-
-    topNurseNames = Object.entries(statsMap)
-      .map(([name, stats]) => ({
-        name,
-        score: Math.round((stats.done / stats.total) * 100),
-        done: stats.done
-      }))
-      .sort((a, b) => b.score - a.score || b.done - a.done)
-      .slice(0, 2)
-      .map(n => n.name);
-  }
-
-  let featuredNurses = [];
-  if (topNurseNames.length > 0) {
-    const { data: nursesData } = await supabase
-      .from("all_staff")
-      .select("*")
-      .in("name", topNurseNames);
-    if (nursesData) {
-      featuredNurses = nursesData.sort((a, b) => topNurseNames.indexOf(a.name) - topNurseNames.indexOf(b.name));
-    }
-  }
-
-  if (featuredNurses.length === 0) {
-    const { data } = await supabase.from("all_staff").select("*").ilike("designation", "%Nurse%").limit(2);
-    featuredNurses = data || [];
-  }
-
-  // 6. Admission Trends
+  // 5. Admission Trends
   const dates = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
@@ -133,7 +85,6 @@ export const getDashboardStats = async () => {
     doctorCount,
     nurseCount,
     rmoCount,
-    otStaffCount,
-    featuredNurses
+    otStaffCount
   };
 };

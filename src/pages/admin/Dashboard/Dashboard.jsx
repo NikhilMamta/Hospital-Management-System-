@@ -10,7 +10,6 @@ import {
   Stethoscope,
   UserPlus,
   ClipboardCheck,
-  ArrowUpRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboardStats } from "../../../api/dashboard";
@@ -26,7 +25,7 @@ export default function Dashboard() {
   // Real-time synchronization
   useRealtimeQuery("patient_admission", ['dashboard']);
   useRealtimeQuery("ipd_admissions", ['dashboard']);
-  useRealtimeQuery("nurse_assign_task", ['dashboard']);
+
 
   // Calculate percentage for progress bars
   const calculatePercentage = (value, total) => {
@@ -166,103 +165,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Featured Nurses Section - Premium Design */}
-      {stats.featuredNurses.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-6 bg-green-600 rounded-full"></div>
-              <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
-                Nursing Leadership
-              </h3>
-            </div>
-            <p className="text-xs text-green-600 font-black flex items-center gap-1 cursor-pointer hover:opacity-70 transition-opacity">
-              SHIFT ROSTER <ArrowUpRight size={14} />
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-            {stats.featuredNurses.map((nurse, i) => {
-              const photoUrl =
-                nurse.photo ||
-                nurse.image ||
-                nurse.profile_image ||
-                nurse.photo_url;
-              return (
-                <div
-                  key={i}
-                  className="group bg-gradient-to-br from-white to-gray-50/30 backdrop-blur-xl rounded-[2rem] border border-gray-100 p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)] hover:shadow-[0_30px_60px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-500 relative overflow-hidden"
-                >
-                  {/* Decorative Background Element */}
-                  <div className="absolute -top-12 -right-12 w-40 h-40 bg-green-500/5 rounded-full blur-3xl group-hover:bg-green-500/10 transition-colors duration-700"></div>
-
-                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-24 h-24 rounded-[2rem] overflow-hidden rotate-2 group-hover:rotate-0 transition-all duration-500 border-4 border-white shadow-2xl bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center">
-                        {photoUrl ? (
-                          <img
-                            src={photoUrl}
-                            alt={nurse.name}
-                            className="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-500"
-                          />
-                        ) : (
-                          <span className="text-3xl font-black text-green-600 drop-shadow-sm">
-                            {nurse.name?.[0]?.toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <div className="absolute -bottom-2 -right-2 bg-white p-1.5 rounded-full shadow-xl border border-gray-50">
-                        <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse border-2 border-white"></div>
-                      </div>
-                    </div>
-
-                    <div className="min-w-0 flex-1 text-center sm:text-left">
-                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
-                        <span className="px-3 py-1 bg-green-50 text-[10px] font-black text-green-700 rounded-full uppercase tracking-widest border border-green-100/50">
-                          Active Duty
-                        </span>
-                        <span className="px-3 py-1 bg-blue-50 text-[10px] font-black text-blue-700 rounded-full uppercase tracking-widest border border-blue-100/50">
-                          Ward Specialist
-                        </span>
-                      </div>
-                      <h4 className="text-xl md:text-2xl font-black text-gray-900 opacity-100 group-hover:text-green-600 transition-colors leading-tight mb-1">
-                        {nurse.name}
-                      </h4>
-                      <p className="text-[11px] font-bold text-gray-400 opacity-70 uppercase tracking-[0.2em]">
-                        {nurse.designation || "Nursing Officer"}
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-4 mt-6 pt-5 border-t border-gray-100/50">
-                        <div className="flex flex-col opacity-70">
-                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">
-                            Shift
-                          </span>
-                          <span className="text-xs font-black text-gray-600 uppercase">
-                            Morning (A)
-                          </span>
-                        </div>
-                        <div className="flex flex-col border-l border-gray-100/50 pl-4 opacity-70">
-                          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">
-                            Location
-                          </span>
-                          <span className="text-xs font-black text-gray-600 uppercase">
-                            General Ward
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Subtle Interactive Arrow */}
-                  <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300">
-                    <ArrowUpRight className="text-green-600 w-5 h-5" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
