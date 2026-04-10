@@ -1,153 +1,167 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, X, Clock, CheckCircle, Upload, Image as ImageIcon, Search } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import supabase from '../../../SupabaseClient';
-import { getPendingPatients, getHistoryPatients, updateRMOInitiation } from '../../../api/discharge';
-import useRealtimeQuery from '../../../hooks/useRealtimeQuery';
+import React, { useState, useEffect } from "react";
+import {
+  FileText,
+  X,
+  Clock,
+  CheckCircle,
+  Upload,
+  Image as ImageIcon,
+  Search,
+} from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import supabase from "../../../SupabaseClient";
+import {
+  getPendingPatients,
+  getHistoryPatients,
+  updateRMOInitiation,
+} from "../../../api/discharge";
+import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
+//
 const InitiationByRMO = () => {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState("pending");
   const [searchTerm, setSearchTerm] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
   const [showModal, setShowModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [modalError, setModalError] = useState('');
-  
+  const [modalError, setModalError] = useState("");
+
   const [formData, setFormData] = useState(() => {
-    const storedUser = localStorage.getItem('mis_user');
-    let initialName = '';
+    const storedUser = localStorage.getItem("mis_user");
+    let initialName = "";
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
-        initialName = user.name || '';
+        initialName = user.name || "";
       } catch (error) {
-        console.error('Error parsing mis_user from localStorage:', error);
+        console.error("Error parsing mis_user from localStorage:", error);
       }
     }
     return {
-      status: '',
+      status: "",
       rmoName: initialName,
       summaryReportImage: null,
-      summaryReportImageName: ''
+      summaryReportImageName: "",
     };
   });
 
-  const statusOptions = [
-    'Completed',
-    'Pending Documentation'
-  ];
+  const statusOptions = ["Completed", "Pending Documentation"];
 
   // Queries
   const { data: pendingPatients = [], isLoading: isLoadingPending } = useQuery({
-    queryKey: ['discharge', 'pending'],
+    queryKey: ["discharge", "pending"],
     queryFn: getPendingPatients,
-    enabled: activeTab === 'pending'
+    enabled: activeTab === "pending",
   });
 
   const { data: historyPatients = [], isLoading: isLoadingHistory } = useQuery({
-    queryKey: ['discharge', 'history'],
+    queryKey: ["discharge", "history"],
     queryFn: getHistoryPatients,
-    enabled: activeTab === 'history'
+    enabled: activeTab === "history",
   });
 
-  const isLoading = activeTab === 'pending' ? isLoadingPending : isLoadingHistory;
+  const isLoading =
+    activeTab === "pending" ? isLoadingPending : isLoadingHistory;
 
   // Real-time synchronization
-  useRealtimeQuery('discharge', ['discharge']);
+  useRealtimeQuery("discharge", ["discharge"]);
 
   // Mutation
   const mutation = useMutation({
     mutationFn: updateRMOInitiation,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['discharge'] });
+      queryClient.invalidateQueries({ queryKey: ["discharge"] });
       setShowModal(false);
       setSelectedPatient(null);
       resetForm();
     },
     onError: (error) => {
-      setModalError(error.message || 'Failed to save. Please try again.');
-    }
+      setModalError(error.message || "Failed to save. Please try again.");
+    },
   });
 
   const handleInitiation = (patient) => {
     setSelectedPatient(patient);
-    const storedUser = localStorage.getItem('mis_user');
-    let currentUserName = '';
+    const storedUser = localStorage.getItem("mis_user");
+    let currentUserName = "";
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
-        currentUserName = user.name || '';
+        currentUserName = user.name || "";
       } catch (error) {
-        console.error('Error parsing user data in handleInitiation:', error);
+        console.error("Error parsing user data in handleInitiation:", error);
       }
     }
 
     setFormData({
-      status: patient.rmo_status || '',
+      status: patient.rmo_status || "",
       rmoName: patient.rmo_name || currentUserName,
       summaryReportImage: patient.summary_report_image || null,
-      summaryReportImageName: patient.summary_report_image_name || ''
+      summaryReportImageName: patient.summary_report_image_name || "",
     });
     setShowModal(true);
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-        setModalError('Please upload a valid image or PDF file');
+      if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+        setModalError("Please upload a valid image or PDF file");
         return;
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        setModalError('File size should be less than 5MB');
+        setModalError("File size should be less than 5MB");
         return;
       }
 
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           summaryReportImage: reader.result,
-          summaryReportImageName: file.name
+          summaryReportImageName: file.name,
         }));
-        setModalError('');
+        setModalError("");
       };
       reader.readAsDataURL(file);
     }
   };
 
   const removeImage = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       summaryReportImage: null,
-      summaryReportImageName: ''
+      summaryReportImageName: "",
     }));
   };
 
   const handleSubmit = async () => {
     if (!formData.status || !formData.rmoName) {
-      setModalError('Please fill all required fields marked with *');
+      setModalError("Please fill all required fields marked with *");
       return;
     }
 
     try {
       let imageUrl = null;
 
-      if (formData.summaryReportImage && typeof formData.summaryReportImage === 'string' &&
-        (formData.summaryReportImage.startsWith('data:image') || formData.summaryReportImage.startsWith('data:application/pdf'))) {
-
-        const [meta, base64Data] = formData.summaryReportImage.split(',');
-        const mimeType = meta.split(':')[1].split(';')[0];
+      if (
+        formData.summaryReportImage &&
+        typeof formData.summaryReportImage === "string" &&
+        (formData.summaryReportImage.startsWith("data:image") ||
+          formData.summaryReportImage.startsWith("data:application/pdf"))
+      ) {
+        const [meta, base64Data] = formData.summaryReportImage.split(",");
+        const mimeType = meta.split(":")[1].split(";")[0];
         const binaryData = atob(base64Data);
         const arrayBuffer = new ArrayBuffer(binaryData.length);
         const uint8Array = new Uint8Array(arrayBuffer);
@@ -157,25 +171,25 @@ const InitiationByRMO = () => {
         }
 
         const blob = new Blob([uint8Array], { type: mimeType });
-        const fileExt = mimeType === 'application/pdf' ? 'pdf' : 'jpg';
+        const fileExt = mimeType === "application/pdf" ? "pdf" : "jpg";
         const fileName = `summary_report_${selectedPatient.admissionNo}_${Date.now()}.${fileExt}`;
         const filePath = `summary-reports/${fileName}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('summary_report_image')
+          .from("summary_report_image")
           .upload(filePath, blob, {
             contentType: mimeType,
-            upsert: true
+            upsert: true,
           });
 
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage
-          .from('summary_report_image')
+          .from("summary_report_image")
           .getPublicUrl(filePath);
 
         imageUrl = urlData.publicUrl;
-      } else if (typeof formData.summaryReportImage === 'string') {
+      } else if (typeof formData.summaryReportImage === "string") {
         imageUrl = formData.summaryReportImage;
       }
 
@@ -186,11 +200,13 @@ const InitiationByRMO = () => {
         summary_report_image_name: formData.summaryReportImageName,
       };
 
-      if (formData.status !== 'Pending Documentation') {
-        const currentTime = new Date().toLocaleString("en-CA", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        }).replace(',', '');
+      if (formData.status !== "Pending Documentation") {
+        const currentTime = new Date()
+          .toLocaleString("en-CA", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          })
+          .replace(",", "");
 
         updateData.actual1 = currentTime;
         updateData.planned2 = currentTime;
@@ -200,15 +216,14 @@ const InitiationByRMO = () => {
       }
 
       mutation.mutate({ id: selectedPatient.id, updateData });
-
     } catch (error) {
-      console.error('Error saving initiation:', error);
-      setModalError(error.message || 'Failed to save. Please try again.');
+      console.error("Error saving initiation:", error);
+      setModalError(error.message || "Failed to save. Please try again.");
     }
   };
 
   const calculateDelay = (plannedDate, actualDate) => {
-    if (!plannedDate) return 'No planned date';
+    if (!plannedDate) return "No planned date";
     const planned = new Date(plannedDate);
     const actual = actualDate ? new Date(actualDate) : new Date();
     const diffMs = actual - planned;
@@ -220,28 +235,28 @@ const InitiationByRMO = () => {
       const minsEarly = Math.abs(diffMinutes);
       return `Early by ${hoursEarly}h ${minsEarly}m`;
     }
-    if (diffHours === 0 && diffMinutes <= 5) return 'On time';
+    if (diffHours === 0 && diffMinutes <= 5) return "On time";
     return `Delayed by ${diffHours}h ${diffMinutes}m`;
   };
 
   const resetForm = () => {
-    const storedUser = localStorage.getItem('mis_user');
-    let userName = '';
+    const storedUser = localStorage.getItem("mis_user");
+    let userName = "";
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
-        userName = user.name || '';
+        userName = user.name || "";
       } catch (error) {
-        console.error('Error parsing user data in resetForm:', error);
+        console.error("Error parsing user data in resetForm:", error);
       }
     }
     setFormData({
-      status: '',
+      status: "",
       rmoName: userName,
       summaryReportImage: null,
-      summaryReportImageName: ''
+      summaryReportImageName: "",
     });
-    setModalError('');
+    setModalError("");
   };
 
   const [viewImageModal, setViewImageModal] = useState(false);
@@ -306,7 +321,7 @@ const InitiationByRMO = () => {
               Loading...
             </div>
           )}
-          
+
           <div className="relative w-full sm:w-64">
             <Search className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 left-3 top-1/2" />
             <input
@@ -319,7 +334,9 @@ const InitiationByRMO = () => {
           </div>
 
           <button
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['discharge'] })}
+            onClick={() =>
+              queryClient.invalidateQueries({ queryKey: ["discharge"] })
+            }
             className="px-2.5 py-1.5 text-xs text-green-600 bg-green-50 rounded-lg hover:bg-green-100 md:px-3 md:text-sm"
           >
             Refresh
@@ -330,11 +347,12 @@ const InitiationByRMO = () => {
       {/* Tabs */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 flex gap-2">
         <button
-          onClick={() => setActiveTab('pending')}
-          className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'pending'
-            ? 'text-green-600 border-b-2 border-green-600'
-            : 'text-gray-600 hover:text-gray-900'
-            }`}
+          onClick={() => setActiveTab("pending")}
+          className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${
+            activeTab === "pending"
+              ? "text-green-600 border-b-2 border-green-600"
+              : "text-gray-600 hover:text-gray-900"
+          }`}
         >
           <div className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
@@ -347,11 +365,12 @@ const InitiationByRMO = () => {
           </div>
         </button>
         <button
-          onClick={() => setActiveTab('history')}
-          className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'history'
-            ? 'text-green-600 border-b-2 border-green-600'
-            : 'text-gray-600 hover:text-gray-900'
-            }`}
+          onClick={() => setActiveTab("history")}
+          className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${
+            activeTab === "history"
+              ? "text-green-600 border-b-2 border-green-600"
+              : "text-gray-600 hover:text-gray-900"
+          }`}
         >
           <div className="flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
@@ -366,20 +385,37 @@ const InitiationByRMO = () => {
       </div>
 
       {/* Pending Section */}
-      {activeTab === 'pending' && (
-        <div id="scroll-container" className="overflow-y-auto max-h-[calc(100vh-250px)]">
+      {activeTab === "pending" && (
+        <div
+          id="scroll-container"
+          className="overflow-y-auto max-h-[calc(100vh-250px)]"
+        >
           {/* Desktop Table */}
           <div className="hidden bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-green-600 text-white">
                 <tr>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Action</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Admission No</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Patient Name</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Department</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Consultant</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Staff Name</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Planned Discharge</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Action
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Admission No
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Patient Name
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Department
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Consultant
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Staff Name
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Planned Discharge
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -405,7 +441,7 @@ const InitiationByRMO = () => {
                         {patient.department}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        {patient.consultantName || 'N/A'}
+                        {patient.consultantName || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                         {patient.staffName}
@@ -417,10 +453,17 @@ const InitiationByRMO = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
+                    <td
+                      colSpan="7"
+                      className="px-4 py-8 text-center text-gray-500"
+                    >
                       <Clock className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                      <p className="text-lg font-medium text-gray-900">🎉 All discharges initiated</p>
-                      <p className="text-sm">No pending patients match your criteria</p>
+                      <p className="text-lg font-medium text-gray-900">
+                        🎉 All discharges initiated
+                      </p>
+                      <p className="text-sm">
+                        No pending patients match your criteria
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -435,7 +478,10 @@ const InitiationByRMO = () => {
             </div>
             {visiblePending.length > 0 ? (
               visiblePending.map((patient) => (
-                <div key={patient.id} className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                <div
+                  key={patient.id}
+                  className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition"
+                >
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <div className="flex items-center gap-2 mb-0.5">
@@ -465,19 +511,27 @@ const InitiationByRMO = () => {
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Department:</span>
-                      <span className="font-medium text-gray-900">{patient.department}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.department}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Consultant:</span>
-                      <span className="font-medium text-gray-900">{patient.consultantName || 'N/A'}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.consultantName || "N/A"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Staff Name:</span>
-                      <span className="font-medium text-gray-900">{patient.staffName}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.staffName}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Planned Discharge:</span>
-                      <span className="font-medium text-gray-900">{patient.dischargeDate} {patient.dischargeTime}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.dischargeDate} {patient.dischargeTime}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -485,8 +539,12 @@ const InitiationByRMO = () => {
             ) : (
               <div className="col-span-full p-6 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
                 <Clock className="mx-auto mb-2 w-10 h-10 text-gray-300" />
-                <p className="text-sm font-medium text-gray-900">🎉 All discharges initiated</p>
-                <p className="text-xs text-gray-600 mt-0.5">No pending patients found</p>
+                <p className="text-sm font-medium text-gray-900">
+                  🎉 All discharges initiated
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  No pending patients found
+                </p>
               </div>
             )}
             {visiblePending.length < filteredPending.length && (
@@ -499,23 +557,46 @@ const InitiationByRMO = () => {
       )}
 
       {/* History Section */}
-      {activeTab === 'history' && (
-        <div id="scroll-container" className="overflow-y-auto max-h-[calc(100vh-250px)]">
+      {activeTab === "history" && (
+        <div
+          id="scroll-container"
+          className="overflow-y-auto max-h-[calc(100vh-250px)]"
+        >
           {/* Desktop Table */}
           <div className="hidden bg-white rounded-lg border border-gray-200 shadow-sm lg:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-green-600 text-white">
                 <tr>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Admission No</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Patient Name</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Department</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Consultant</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Staff Name</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Planned Discharge</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Actual Discharge</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">RMO Name</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Status</th>
-                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">Summary Report</th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Admission No
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Patient Name
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Department
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Consultant
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Staff Name
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Planned Discharge
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Actual Discharge
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    RMO Name
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium tracking-wider text-left uppercase">
+                    Summary Report
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -532,7 +613,7 @@ const InitiationByRMO = () => {
                         {patient.department}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        {patient.consultantName || 'N/A'}
+                        {patient.consultantName || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
                         {patient.staffName}
@@ -544,18 +625,25 @@ const InitiationByRMO = () => {
                         {patient.actualDate} {patient.actualTime}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        {patient.rmo_name || 'N/A'}
+                        {patient.rmo_name || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${patient.rmo_status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                          {patient.rmo_status || 'N/A'}
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            patient.rmo_status === "Completed"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {patient.rmo_status || "N/A"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
                         {patient.summary_report_image ? (
                           <button
-                            onClick={() => openImageViewer(patient.summary_report_image)}
+                            onClick={() =>
+                              openImageViewer(patient.summary_report_image)
+                            }
                             className="flex items-center gap-1 px-2 py-1 text-xs text-green-600 bg-green-50 rounded hover:bg-green-100"
                           >
                             <FileText className="w-3 h-3" />
@@ -569,10 +657,17 @@ const InitiationByRMO = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
+                    <td
+                      colSpan="10"
+                      className="px-4 py-8 text-center text-gray-500"
+                    >
                       <CheckCircle className="mx-auto mb-2 w-12 h-12 text-gray-300" />
-                      <p className="text-lg font-medium text-gray-900">No history records</p>
-                      <p className="text-sm">Initiated patients will appear here</p>
+                      <p className="text-lg font-medium text-gray-900">
+                        No history records
+                      </p>
+                      <p className="text-sm">
+                        Initiated patients will appear here
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -581,13 +676,19 @@ const InitiationByRMO = () => {
           </div>
 
           {/* Mobile Cards */}
-          <div id="scroll-container-history" className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
+          <div
+            id="scroll-container-history"
+            className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden"
+          >
             <div className="text-center text-[10px] text-gray-300 mb-2 md:hidden">
               ↓ Pull to refresh
             </div>
             {visibleHistory.length > 0 ? (
               visibleHistory.map((patient) => (
-                <div key={patient.id} className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+                <div
+                  key={patient.id}
+                  className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition"
+                >
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <div className="text-xs font-medium text-green-600 mb-0.5">
@@ -598,40 +699,56 @@ const InitiationByRMO = () => {
                       </h3>
                     </div>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                      {patient.rmo_status || 'N/A'}
+                      {patient.rmo_status || "N/A"}
                     </span>
                   </div>
 
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Department:</span>
-                      <span className="font-medium text-gray-900">{patient.department}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.department}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Consultant:</span>
-                      <span className="font-medium text-gray-900">{patient.consultantName || 'N/A'}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.consultantName || "N/A"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Staff Name:</span>
-                      <span className="font-medium text-gray-900">{patient.staffName}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.staffName}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Planned Discharge:</span>
-                      <span className="font-medium text-gray-900">{patient.dischargeDate} {patient.dischargeTime}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.dischargeDate} {patient.dischargeTime}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Actual Discharge:</span>
-                      <span className="font-medium text-gray-900">{patient.actualDate} {patient.actualTime}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.actualDate} {patient.actualTime}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">RMO Name:</span>
-                      <span className="font-medium text-gray-900">{patient.rmo_name || 'N/A'}</span>
+                      <span className="font-medium text-gray-900">
+                        {patient.rmo_name || "N/A"}
+                      </span>
                     </div>
                     <div className="pt-1.5 mt-1.5 border-t border-gray-200 flex justify-between items-center">
-                      <span className="text-gray-600 font-medium">Summary Report:</span>
+                      <span className="text-gray-600 font-medium">
+                        Summary Report:
+                      </span>
                       {patient.summary_report_image ? (
                         <button
-                          onClick={() => openImageViewer(patient.summary_report_image)}
+                          onClick={() =>
+                            openImageViewer(patient.summary_report_image)
+                          }
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
                         >
                           <FileText className="w-3.5 h-3.5" />
@@ -647,8 +764,12 @@ const InitiationByRMO = () => {
             ) : (
               <div className="col-span-full p-6 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
                 <CheckCircle className="mx-auto mb-2 w-10 h-10 text-gray-300" />
-                <p className="text-sm font-medium text-gray-900">No history records</p>
-                <p className="text-xs text-gray-600 mt-0.5">No initiated patients found</p>
+                <p className="text-sm font-medium text-gray-900">
+                  No history records
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  No initiated patients found
+                </p>
               </div>
             )}
             {visibleHistory.length < filteredHistory.length && (
@@ -684,27 +805,40 @@ const InitiationByRMO = () => {
               <div className="space-y-4">
                 {/* Pre-filled Information */}
                 <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Patient Information</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                    Patient Information
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-gray-600">Patient Name:</span>
-                      <p className="font-medium text-gray-900">{selectedPatient.patientName}</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedPatient.patientName}
+                      </p>
                     </div>
                     <div>
                       <span className="text-gray-600">Department:</span>
-                      <p className="font-medium text-gray-900">{selectedPatient.department}</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedPatient.department}
+                      </p>
                     </div>
                     <div>
                       <span className="text-gray-600">Consultant:</span>
-                      <p className="font-medium text-gray-900">{selectedPatient.consultantName || 'N/A'}</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedPatient.consultantName || "N/A"}
+                      </p>
                     </div>
                     <div>
                       <span className="text-gray-600">Staff Name:</span>
-                      <p className="font-medium text-gray-900">{selectedPatient.staffName}</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedPatient.staffName}
+                      </p>
                     </div>
                     <div className="md:col-span-2">
                       <span className="text-gray-600">Planned Discharge:</span>
-                      <p className="font-medium text-gray-900">{selectedPatient.dischargeDate} {selectedPatient.dischargeTime}</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedPatient.dischargeDate}{" "}
+                        {selectedPatient.dischargeTime}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -723,7 +857,9 @@ const InitiationByRMO = () => {
                   >
                     <option value="">Select Status</option>
                     {statusOptions.map((status) => (
-                      <option key={status} value={status}>{status}</option>
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -763,8 +899,12 @@ const InitiationByRMO = () => {
                         className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors"
                       >
                         <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                        <span className="text-sm text-gray-600">Click to upload report (Optional)</span>
-                        <span className="text-xs text-gray-500 mt-1">PNG, JPG, PDF (Max 5MB)</span>
+                        <span className="text-sm text-gray-600">
+                          Click to upload report (Optional)
+                        </span>
+                        <span className="text-xs text-gray-500 mt-1">
+                          PNG, JPG, PDF (Max 5MB)
+                        </span>
                       </label>
                     </div>
                   ) : (
@@ -777,10 +917,17 @@ const InitiationByRMO = () => {
                         <X className="w-4 h-4" />
                       </button>
 
-                      {formData.summaryReportImage.startsWith('data:application/pdf') || formData.summaryReportImage.toLowerCase().endsWith('.pdf') ? (
+                      {formData.summaryReportImage.startsWith(
+                        "data:application/pdf",
+                      ) ||
+                      formData.summaryReportImage
+                        .toLowerCase()
+                        .endsWith(".pdf") ? (
                         <div className="flex flex-col items-center justify-center h-48 bg-gray-100 rounded">
                           <FileText className="w-12 h-12 text-red-500 mb-2" />
-                          <span className="text-sm text-gray-600">PDF Document Selected</span>
+                          <span className="text-sm text-gray-600">
+                            PDF Document Selected
+                          </span>
                         </div>
                       ) : (
                         <img
@@ -821,7 +968,9 @@ const InitiationByRMO = () => {
                   onClick={handleSubmit}
                   className="px-4 py-2 w-full font-medium text-white bg-green-600 rounded-lg transition-colors hover:bg-green-700 sm:w-auto"
                 >
-                  {selectedPatient.rmo_name ? 'Update Initiation' : 'Save Initiation'}
+                  {selectedPatient.rmo_name
+                    ? "Update Initiation"
+                    : "Save Initiation"}
                 </button>
               </div>
             </div>
@@ -834,11 +983,13 @@ const InitiationByRMO = () => {
         <div className="fixed inset-0 z-50 flex justify-center items-center p-4 bg-black bg-opacity-75 backdrop-blur-sm">
           <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-lg shadow-xl flex flex-col">
             <div className="sticky top-0 flex justify-between items-center p-4 border-b border-gray-200 bg-white rounded-t-lg z-10 shink-0">
-              <h2 className="text-lg font-semibold text-gray-900">Summary Report</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Summary Report
+              </h2>
               <div className="flex gap-2">
-                {viewingImage.toLowerCase().includes('.pdf') && (
+                {viewingImage.toLowerCase().includes(".pdf") && (
                   <button
-                    onClick={() => window.open(viewingImage, '_blank')}
+                    onClick={() => window.open(viewingImage, "_blank")}
                     className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
                   >
                     Open in New Tab
@@ -853,7 +1004,7 @@ const InitiationByRMO = () => {
               </div>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
-              {viewingImage.toLowerCase().includes('.pdf') ? (
+              {viewingImage.toLowerCase().includes(".pdf") ? (
                 <iframe
                   src={viewingImage}
                   className="w-full h-[70vh] rounded border border-gray-200"
