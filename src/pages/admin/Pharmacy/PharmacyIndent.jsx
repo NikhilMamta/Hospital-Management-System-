@@ -974,10 +974,9 @@ const PharmacyIndents = () => {
                               </div>
                             ))}
 
-                          {activePatientsData.filter((p) =>
-                            p.admission_no
-                              ?.toLowerCase()
-                              .includes(admissionSearch.toLowerCase()),
+                          {admissionPatients.filter((p) =>
+                            p.admission_no?.toLowerCase().includes(admissionSearch.toLowerCase()) ||
+                            p.patient_name?.toLowerCase().includes(admissionSearch.toLowerCase())
                           ).length === 0 && (
                             <div className="px-4 py-1 text-sm text-center text-gray-500">
                               No matching admission found
