@@ -22,7 +22,7 @@ import {
   getMedicines,
   getInvestigations,
   updateIndentStatus,
-  uploadSlipToStorage
+  uploadSlipToStorage,
 } from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import {
@@ -167,35 +167,62 @@ const PharmacyApproval = () => {
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
   const [statusChanges, setStatusChanges] = useState({});
-  const [manualLoading, setLoading] = useState(false);
   const { showNotification } = useNotification();
 
   // Filter States
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
+  const [isSaving, setIsSaving] = useState(false);
 
   // --- Queries ---
 
-  const { data: rawPending = { patient: [], departmental: [] }, isLoading: isLoadingPending } = useQuery({
-    queryKey: ['pharmacy', 'approval', 'pending'],
-    queryFn: getPendingIndents
+  const {
+    data: rawPending = { patient: [], departmental: [] },
+    isLoading: isLoadingPending,
+  } = useQuery({
+    queryKey: ["pharmacy", "approval", "pending"],
+    queryFn: getPendingIndents,
   });
 
-  const { data: rawHistory = { patient: [], departmental: [] }, isLoading: isLoadingHistory } = useQuery({
-    queryKey: ['pharmacy', 'approval', 'history'],
-    queryFn: getHistoryIndents
+  const {
+    data: rawHistory = { patient: [], departmental: [] },
+    isLoading: isLoadingHistory,
+  } = useQuery({
+    queryKey: ["pharmacy", "approval", "history"],
+    queryFn: getHistoryIndents,
   });
 
-  const { data: medicines = [] } = useQuery({ queryKey: ['pharmacy', 'medicines'], queryFn: getMedicines });
-  const { data: investigations = { Pathology: [], 'X-ray': [], 'CT-scan': [], USG: [] } } = useQuery({ 
-    queryKey: ['pharmacy', 'investigations'], 
-    queryFn: getInvestigations 
+  const { data: medicines = [] } = useQuery({
+    queryKey: ["pharmacy", "medicines"],
+    queryFn: getMedicines,
   });
+  const {
+    data: investigations = {
+      Pathology: [],
+      "X-ray": [],
+      "CT-scan": [],
+      USG: [],
+    },
+  } = useQuery({
+    queryKey: ["pharmacy", "investigations"],
+    queryFn: getInvestigations,
+  });
+
+  const pathologyTests = investigations?.Pathology || [];
+  const xrayTests = investigations?.["X-ray"] || [];
+  const ctScanTests = investigations?.["CT-scan"] || [];
+  const usgTests = investigations?.USG || [];
 
   // Real-time
-  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'approval', 'pending']);
-  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'approval', 'history']);
+  useRealtimeQuery(
+    ["pharmacy", "departmental_pharmacy_indent"],
+    ["pharmacy", "approval", "pending"],
+  );
+  useRealtimeQuery(
+    ["pharmacy", "departmental_pharmacy_indent"],
+    ["pharmacy", "approval", "history"],
+  );
 
   // --- Derived Data ---
 
@@ -214,11 +241,13 @@ const PharmacyApproval = () => {
   }, [rawHistory]);
 
   const patientNames = useMemo(() => {
-    const all = [...pendingIndents, ...historyIndents].map(r => r.displayTitle || r.patientName).filter(Boolean);
+    const all = [...pendingIndents, ...historyIndents]
+      .map((r) => r.displayTitle || r.patientName)
+      .filter(Boolean);
     return [...new Set(all)].sort();
   }, [pendingIndents, historyIndents]);
 
-  const loading = isLoadingPending || isLoadingHistory || manualLoading;
+  const loading = isLoadingPending || isLoadingHistory || isSaving;
 
   // --- Mutations ---
 
@@ -229,17 +258,30 @@ const PharmacyApproval = () => {
         if (!indent) continue;
 
         const updateData = {
-          actual1: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
-          planned2: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
+          actual1: new Date()
+            .toLocaleString("en-CA", {
+              timeZone: "Asia/Kolkata",
+              hour12: false,
+            })
+            .replace(",", ""),
+          planned2: new Date()
+            .toLocaleString("en-CA", {
+              timeZone: "Asia/Kolkata",
+              hour12: false,
+            })
+            .replace(",", ""),
         };
 
         if (status === "Approved") {
           const user = JSON.parse(localStorage.getItem("mis_user"));
           updateData.approved_by = user?.name || "Unknown";
-          
+
           const slipImageBase64 = generateSlipImage(indent);
           if (slipImageBase64) {
-            const url = await uploadSlipToStorage(slipImageBase64, indentNumber);
+            const url = await uploadSlipToStorage(
+              slipImageBase64,
+              indentNumber,
+            );
             if (url) updateData.slip_image = url;
           }
         }
@@ -248,24 +290,29 @@ const PharmacyApproval = () => {
           table: indent.sourceTable,
           id: indent.sourceId,
           status,
-          updateData
+          updateData,
         });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pharmacy', 'approval'] });
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "approval"] });
       setStatusChanges({});
       showNotification("Status changes saved successfully", "success");
     },
-    onError: (error) => showNotification(`Error saving changes: ${error.message}`, "error")
+    onError: (error) =>
+      showNotification(`Error saving changes: ${error.message}`, "error"),
   });
 
   const handleStatusChange = (indentId, indentNumber, status) => {
-    setStatusChanges((prev) => ({ ...prev, [indentId]: { status, indentNumber } }));
+    setStatusChanges((prev) => ({
+      ...prev,
+      [indentId]: { status, indentNumber },
+    }));
   };
 
   const handleSaveStatusChanges = () => {
-    if (Object.keys(statusChanges).length === 0) return showNotification("No changes to save", "warning");
+    if (Object.keys(statusChanges).length === 0)
+      return showNotification("No changes to save", "warning");
     saveStatusMutation.mutate(statusChanges);
   };
 
@@ -325,8 +372,10 @@ const PharmacyApproval = () => {
     ctx.fillStyle = "#FF0000";
     ctx.font = "12px Arial";
     let requestTypesList = [];
-    if (indent.requestTypes?.medicineSlip) requestTypesList.push("Medicine Slip");
-    if (indent.requestTypes?.investigation) requestTypesList.push("Investigation");
+    if (indent.requestTypes?.medicineSlip)
+      requestTypesList.push("Medicine Slip");
+    if (indent.requestTypes?.investigation)
+      requestTypesList.push("Investigation");
     ctx.fillText(requestTypesList.join(", "), 620, y + 17);
 
     const title =
@@ -339,12 +388,9 @@ const PharmacyApproval = () => {
       indent.indentType === "departmental"
         ? indent.requestedBy || "-"
         : indent.age?.toString() || "-";
-    const tertiaryLabel =
-      indent.indentType === "departmental" ? "" : "Gender:";
+    const tertiaryLabel = indent.indentType === "departmental" ? "" : "Gender:";
     const tertiaryValue =
-      indent.indentType === "departmental"
-        ? ""
-        : indent.gender || "-";
+      indent.indentType === "departmental" ? "" : indent.gender || "-";
 
     // Row 2: Patient Name/Ward, Age-or-requester, Gender-or-room
     y += 25;
@@ -380,9 +426,7 @@ const PharmacyApproval = () => {
     );
     ctx.font = "12px Arial";
     ctx.fillText(
-      indent.indentType === "departmental"
-        ? ""
-        : indent.uhidNumber || "-",
+      indent.indentType === "departmental" ? "" : indent.uhidNumber || "-",
       95,
       y + 17,
     );
@@ -420,15 +464,17 @@ const PharmacyApproval = () => {
     );
     ctx.font = "12px Arial";
     ctx.fillText(
-      indent.indentType === "departmental"
-        ? ""
-        : indent.consultantName || "-",
+      indent.indentType === "departmental" ? "" : indent.consultantName || "-",
       135,
       y + 17,
     );
 
     ctx.font = "bold 12px Arial";
-    ctx.fillText(indent.indentType === "departmental" ? "Staff:" : "Nursing Staff:", 380, y + 17);
+    ctx.fillText(
+      indent.indentType === "departmental" ? "Staff:" : "Nursing Staff:",
+      380,
+      y + 17,
+    );
     ctx.font = "12px Arial";
     ctx.fillText(indent.staffName || "-", 470, y + 17);
 
@@ -751,7 +797,7 @@ const PharmacyApproval = () => {
 
   const handleSaveEdit = async () => {
     if (editFormData.indentType !== "departmental" && !editFormData.diagnosis) {
-      showPopup("Please enter Diagnosis", "warning");
+      showNotification("Please enter Diagnosis", "warning");
       return;
     }
 
@@ -759,7 +805,7 @@ const PharmacyApproval = () => {
       editFormData.requestTypes.medicineSlip &&
       editFormData.medicines.length === 0
     ) {
-      showPopup("Please add at least one medicine", "warning");
+      showNotification("Please add at least one medicine", "warning");
       return;
     }
 
@@ -767,12 +813,12 @@ const PharmacyApproval = () => {
       (med) => !med.name || !med.quantity,
     );
     if (editFormData.requestTypes.medicineSlip && incompleteMedicines) {
-      showPopup("Please fill all medicine details", "warning");
+      showNotification("Please fill all medicine details", "warning");
       return;
     }
 
     try {
-      setLoading(true);
+      setIsSaving(true);
 
       const updateData = {
         medicines: JSON.stringify(editFormData.medicines),
@@ -793,18 +839,18 @@ const PharmacyApproval = () => {
       if (error) throw error;
 
       // Refresh data
-      await loadData();
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "approval"] });
 
       setEditModal(false);
       setEditFormData(null);
       setSelectedIndent(null);
 
-      showPopup("Indent updated successfully!", "success");
+      showNotification("Indent updated successfully!", "success");
     } catch (error) {
       console.error("Error updating indent:", error);
-      showPopup(`Failed to update indent: ${error.message}`, "error");
+      showNotification(`Failed to update indent: ${error.message}`, "error");
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -827,10 +873,10 @@ const PharmacyApproval = () => {
       link.href = imageUrl;
       link.click();
 
-      showPopup("Slip downloaded successfully!", "success");
+      showNotification("Slip downloaded successfully!", "success");
     } catch (error) {
       console.error("Error downloading slip:", error);
-      showPopup("Failed to download slip", "error");
+      showNotification("Failed to download slip", "error");
     }
   };
 
