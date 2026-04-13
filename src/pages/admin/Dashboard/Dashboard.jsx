@@ -10,10 +10,16 @@ import {
   Stethoscope,
   UserPlus,
   ClipboardCheck,
+  Trophy,
+  MessageSquarePlus,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDashboardStats } from "../../../api/dashboard";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import CongratulationsFeed from "./CongratulationsFeed";
+import NewPostModal from "./NewPostModal";
+import { useAuth } from "../../../contexts/AuthContext";
+import { getCongratulationsPosts } from "../../../api/congratulations";
 
 export default function Dashboard() {
   // Fetch dashboard data
@@ -21,6 +27,19 @@ export default function Dashboard() {
     queryKey: ['dashboard', 'stats'],
     queryFn: getDashboardStats,
   });
+
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const isAdmin = user?.role === 'admin';
+
+  // Fetch congratulations posts
+  const { data: congratsPosts, isLoading: isLoadingCongrats } = useQuery({
+    queryKey: ['congratulations-posts'],
+    queryFn: getCongratulationsPosts,
+  });
+
+  const hasActiveCongrats = congratsPosts && congratsPosts.length > 0;
 
   // Real-time synchronization
   useRealtimeQuery("patient_admission", ['dashboard']);
@@ -165,8 +184,34 @@ export default function Dashboard() {
         ))}
       </div>
 
-
-      {/* Charts Section */}
+      {/* Wall of Praise Section - Conditionally visible */}
+      {(hasActiveCongrats || isAdmin) && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-6 bg-green-600 rounded-full"></div>
+              <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
+                Wall of Praise
+              </h3>
+            </div>
+            {isAdmin && (
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-green-500/20"
+              >
+                <MessageSquarePlus size={14} />
+                <span>New Post</span>
+              </button>
+            )}
+          </div>
+          
+          <CongratulationsFeed 
+            posts={congratsPosts} 
+            isLoading={isLoadingCongrats} 
+            isAdmin={isAdmin} 
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
         {/* Ward Distribution Chart */}
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 md:p-6">
@@ -350,6 +395,18 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* New Post Modal */}
+      {isAdmin && (
+        <NewPostModal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          userName={user?.name || "Admin"}
+          onSuccess={() => {
+            queryClient.invalidateQueries(['congratulations-posts']);
+          }}
+        />
+      )}
     </div>
   );
 }
