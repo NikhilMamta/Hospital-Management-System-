@@ -30,13 +30,15 @@ export default function Dashboard() {
 
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
+
+  // Modal state: null | 'nurse' | 'rmo'
+  const [modalPostType, setModalPostType] = React.useState(null);
   const isAdmin = user?.role === 'admin';
 
   // Fetch congratulations posts
   const { data: congratsPosts, isLoading: isLoadingCongrats } = useQuery({
     queryKey: ['congratulations-posts'],
-    queryFn: getCongratulationsPosts,
+    queryFn: () => getCongratulationsPosts(),
   });
 
   const hasActiveCongrats = congratsPosts && congratsPosts.length > 0;
@@ -187,7 +189,7 @@ export default function Dashboard() {
       {/* Wall of Praise Section - Conditionally visible */}
       {(hasActiveCongrats || isAdmin) && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-center justify-between px-1 flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <div className="w-1 h-6 bg-green-600 rounded-full"></div>
               <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
@@ -195,20 +197,31 @@ export default function Dashboard() {
               </h3>
             </div>
             {isAdmin && (
-              <button 
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-green-500/20"
-              >
-                <MessageSquarePlus size={14} />
-                <span>New Post</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Nurse Post Button */}
+                <button
+                  onClick={() => setModalPostType("nurse")}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-green-500/20"
+                >
+                  <UserPlus size={13} />
+                  <span>Nurse Post</span>
+                </button>
+                {/* RMO Post Button */}
+                <button
+                  onClick={() => setModalPostType("rmo")}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-indigo-500/20"
+                >
+                  <UserCog size={13} />
+                  <span>RMO Post</span>
+                </button>
+              </div>
             )}
           </div>
-          
-          <CongratulationsFeed 
-            posts={congratsPosts} 
-            isLoading={isLoadingCongrats} 
-            isAdmin={isAdmin} 
+
+          <CongratulationsFeed
+            posts={congratsPosts}
+            isLoading={isLoadingCongrats}
+            isAdmin={isAdmin}
           />
         </div>
       )}
@@ -398,10 +411,11 @@ export default function Dashboard() {
 
       {/* New Post Modal */}
       {isAdmin && (
-        <NewPostModal 
-          isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)} 
+        <NewPostModal
+          isOpen={modalPostType !== null}
+          onClose={() => setModalPostType(null)}
           userName={user?.name || "Admin"}
+          defaultPostType={modalPostType || "nurse"}
           onSuccess={() => {
             queryClient.invalidateQueries(['congratulations-posts']);
           }}

@@ -1,179 +1,324 @@
 import React from "react";
-import { Trophy, Clock, Quote, Sparkles, Heart, Trash2 } from "lucide-react";
+import { Star, Trash2, Award, Stethoscope, UserPlus } from "lucide-react";
 import { deleteCongratulationsPost } from "../../../api/congratulations";
 import { useQueryClient } from "@tanstack/react-query";
+import logo from "../../../Image/logo.png";
 
+// ─── Theme configs ────────────────────────────────────────────────────────────
+const THEMES = {
+  nurse: {
+    gradientFrom: "#059669",
+    gradientTo: "#047857",
+    accentLight: "#d1fae5",
+    accentMid: "#6ee7b7",
+    accentBorder: "#34d399",
+    badgeBg: "bg-emerald-100",
+    badgeText: "text-emerald-700",
+    badgeLabel: "NURSE",
+    roleIcon: <UserPlus size={11} />,
+    avatarRing: "ring-emerald-400",
+    avatarBg: "bg-emerald-50",
+    avatarText: "text-emerald-400",
+    footerLine: "bg-emerald-200",
+    shimmer: "from-emerald-500/10 via-transparent to-transparent",
+    defaultDesignation: "Staff Nurse",
+    starColor: "#10b981",
+  },
+  rmo: {
+    gradientFrom: "#4f46e5",
+    gradientTo: "#3730a3",
+    accentLight: "#e0e7ff",
+    accentMid: "#a5b4fc",
+    accentBorder: "#818cf8",
+    badgeBg: "bg-indigo-100",
+    badgeText: "text-indigo-700",
+    badgeLabel: "RMO",
+    roleIcon: <Stethoscope size={11} />,
+    avatarRing: "ring-indigo-400",
+    avatarBg: "bg-indigo-50",
+    avatarText: "text-indigo-400",
+    footerLine: "bg-indigo-200",
+    shimmer: "from-indigo-500/10 via-transparent to-transparent",
+    defaultDesignation: "Resident Medical Officer",
+    starColor: "#6366f1",
+  },
+};
+
+// ─── Single Card ─────────────────────────────────────────────────────────────
+function CelebrationCard({ post, isAdmin, onDelete }) {
+  if (!post) return null;
+
+  const postType = post.post_type === "rmo" ? "rmo" : "nurse";
+  const theme = THEMES[postType];
+  const initials = post.nurse_name
+    ? post.nurse_name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "?";
+
+  return (
+    <div className="relative group flex-1 min-w-0 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 border border-white/60 hover:-translate-y-1">
+      {/* ── Header gradient band ── */}
+      <div
+        className="relative px-5 pt-5 pb-10 flex flex-col items-center gap-1 overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${theme.gradientFrom}, ${theme.gradientTo})`,
+        }}
+      >
+        {/* Shimmer overlay */}
+        <div
+          className={`absolute inset-0 bg-gradient-to-br ${theme.shimmer} pointer-events-none`}
+        />
+
+        {/* Hospital logo + title */}
+        <img
+          src={logo}
+          alt="Logo"
+          className="h-9 object-contain opacity-90 mb-1"
+        />
+        <p className="text-[8px] font-black text-white/70 tracking-[0.22em] uppercase text-center">
+          THE PRIDE OF MAMTA CAREGIVERS
+        </p>
+        <p
+          className="text-white/90 mt-0.5 leading-none"
+          style={{ fontFamily: "'Great Vibes', cursive", fontSize: "1.7rem" }}
+        >
+          Appreciation
+        </p>
+
+        {/* Role badge */}
+        <div
+          className={`absolute top-3 right-3 flex items-center gap-1 ${theme.badgeBg} ${theme.badgeText} rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest shadow-sm`}
+        >
+          {theme.roleIcon}
+          {theme.badgeLabel}
+        </div>
+
+        {/* Star top-left */}
+        <Star
+          className="absolute top-3 left-3 drop-shadow"
+          size={18}
+          style={{ color: "#FFD700", fill: "#FFD700" }}
+        />
+      </div>
+
+      {/* ── Photo bubble — overlapping the header ── */}
+      <div className="flex justify-center -mt-10 relative z-10 px-5">
+        <div
+          className={`w-20 h-20 rounded-full ring-4 ${theme.avatarRing} shadow-xl overflow-hidden bg-white flex-shrink-0`}
+        >
+          {post.photo_url ? (
+            <img
+              src={post.photo_url}
+              alt={post.nurse_name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div
+              className={`w-full h-full flex items-center justify-center ${theme.avatarBg} ${theme.avatarText} text-2xl font-black`}
+            >
+              {initials}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="bg-white px-5 pb-5 pt-3 flex flex-col items-center text-center">
+        {/* Name */}
+        <h2
+          className="text-base font-black text-gray-900 tracking-tight leading-tight mt-1"
+          style={{ fontFamily: "'Montserrat', sans-serif" }}
+        >
+          {post.nurse_name}
+        </h2>
+
+        {/* Designation pill */}
+        <span
+          className={`inline-block mt-1.5 mb-3 px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${theme.badgeBg} ${theme.badgeText}`}
+        >
+          {post.designation || theme.defaultDesignation}
+        </span>
+
+        {/* Divider */}
+        <div
+          className="w-10 h-0.5 rounded-full mb-3"
+          style={{
+            background: `linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo})`,
+          }}
+        />
+
+        {/* Message */}
+        <div className="relative w-full">
+          {/* Big decorative quote */}
+          <span
+            className="absolute -top-2 -left-1 text-5xl leading-none select-none pointer-events-none font-serif"
+            style={{ color: theme.accentLight }}
+          >
+            &#8220;
+          </span>
+          <p
+            className="text-[11px] md:text-xs font-semibold text-gray-600 leading-relaxed italic relative z-10 px-3"
+            style={{ fontFamily: "'Montserrat', sans-serif" }}
+          >
+            {post.message}
+          </p>
+          <span
+            className="absolute -bottom-3 -right-1 text-5xl leading-none select-none pointer-events-none font-serif"
+            style={{ color: theme.accentLight }}
+          >
+            &#8221;
+          </span>
+        </div>
+
+        {/* Footer signature */}
+        <div className="mt-6 w-full flex flex-col items-center">
+          <div className={`h-px w-20 ${theme.footerLine} mb-2`} />
+          <p
+            className="text-base text-gray-800"
+            style={{ fontFamily: "'Great Vibes', cursive" }}
+          >
+            Dr. Kanak Ramnani
+          </p>
+          <p className="text-[7px] font-black text-gray-400 uppercase tracking-[0.18em] mt-0.5">
+            Director, Mamta Superspeciality Hospital
+          </p>
+        </div>
+
+        {/* Award icon watermark */}
+        <Award
+          size={80}
+          className="absolute bottom-4 right-4 opacity-[0.03] pointer-events-none"
+          style={{ color: theme.gradientFrom }}
+        />
+      </div>
+
+      {/* Delete overlay */}
+      {isAdmin && (
+        <button
+          onClick={() => onDelete(post)}
+          title="Remove post"
+          className="absolute top-3 left-3 p-1.5 bg-white/20 hover:bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow backdrop-blur-sm z-20"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function CardSkeleton() {
+  return (
+    <div className="flex-1 min-w-0 rounded-2xl overflow-hidden shadow border border-gray-100 animate-pulse">
+      <div className="h-28 bg-gray-200" />
+      <div className="flex justify-center -mt-8">
+        <div className="w-16 h-16 rounded-full bg-gray-300 ring-4 ring-white" />
+      </div>
+      <div className="bg-white p-5 pt-3 flex flex-col items-center gap-2">
+        <div className="h-4 w-28 bg-gray-200 rounded-full" />
+        <div className="h-3 w-20 bg-gray-100 rounded-full" />
+        <div className="h-0.5 w-10 bg-gray-100 rounded-full" />
+        <div className="h-3 w-full bg-gray-100 rounded-full" />
+        <div className="h-3 w-4/5 bg-gray-100 rounded-full" />
+        <div className="h-3 w-3/5 bg-gray-100 rounded-full" />
+        <div className="mt-4 h-3 w-24 bg-gray-200 rounded-full" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Feed ────────────────────────────────────────────────────────────────
 export default function CongratulationsFeed({ posts, isLoading, isAdmin }) {
   const queryClient = useQueryClient();
 
-  // Show only the latest post
-  const latestPost = posts && posts.length > 0 ? posts[0] : null;
+  const latestNursePost =
+    posts?.find((p) => p.post_type === "nurse" || !p.post_type) || null;
+  const latestRmoPost = posts?.find((p) => p.post_type === "rmo") || null;
+  const latestPost = posts?.[0] || null;
 
-  // SMART TIMER: Local expiry without DB polling
   React.useEffect(() => {
     if (!latestPost) return;
-
     const createdAt = new Date(latestPost.created_at).getTime();
-    const expiryTime = createdAt + 24 * 60 * 60 * 1000; // Created + 24 hours
+    const expiryTime = createdAt + 24 * 60 * 60 * 1000;
     const now = Date.now();
     const msUntilExpiry = expiryTime - now;
 
     if (msUntilExpiry > 0) {
-      // Set a one-time timer to refresh the UI only when this specific post expires
       const timer = setTimeout(() => {
-        queryClient.invalidateQueries(['congratulations-posts']);
-      }, msUntilExpiry + 1000); // Add a 1s buffer
-
+        queryClient.invalidateQueries(["congratulations-posts"]);
+      }, msUntilExpiry + 1000);
       return () => clearTimeout(timer);
     } else {
-      // If the post is already expired but somehow showed up, invalidate it
-      queryClient.invalidateQueries(['congratulations-posts']);
+      queryClient.invalidateQueries(["congratulations-posts"]);
     }
   }, [latestPost, queryClient]);
 
-  const handleDelete = async () => {
-    if (!latestPost || !window.confirm("Are you sure you want to remove this celebration?")) return;
-
+  const handleDelete = async (post) => {
+    if (!post || !window.confirm("Remove this celebration post?")) return;
     try {
-      await deleteCongratulationsPost(latestPost.id);
-      queryClient.invalidateQueries(['congratulations-posts']);
-    } catch (error) {
-      console.error("Error deleting post:", error);
+      await deleteCongratulationsPost(post.id);
+      queryClient.invalidateQueries(["congratulations-posts"]);
+    } catch (err) {
+      console.error(err);
       alert("Failed to delete post.");
     }
   };
 
   if (isLoading) {
     return (
-      <div className="w-full h-64 bg-gray-50 animate-pulse rounded-[3rem]"></div>
-    );
-  }
-
-  if (!latestPost) {
-    // Only admins see the empty state to prompt them to post
-    if (!isAdmin) return null;
-
-    return (
-      <div className="bg-white/50 backdrop-blur-md rounded-[2.5rem] border border-gray-100 p-12 flex flex-col items-center justify-center text-center">
-        <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
-          <Trophy className="text-gray-200" size={40} />
-        </div>
-        <p className="text-lg font-black text-gray-400 uppercase tracking-widest leading-none">Wall of Praise is Empty</p>
-        <p className="text-xs text-gray-300 font-bold uppercase tracking-tight mt-2">Nominate a nurse to see the celebration here!</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CardSkeleton />
+        <CardSkeleton />
       </div>
     );
   }
 
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now - date) / 60000);
-    
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    return date.toLocaleDateString();
-  };
+  const hasNurse = !!latestNursePost;
+  const hasRmo = !!latestRmoPost;
+
+  if (!hasNurse && !hasRmo) {
+    if (!isAdmin) return null;
+    return (
+      <div className="bg-white/60 backdrop-blur-md rounded-2xl border border-gray-100 p-10 flex flex-col items-center justify-center text-center gap-3 shadow-sm">
+        <div className="w-14 h-14 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center">
+          <Star className="text-gray-200" size={28} />
+        </div>
+        <p className="text-sm font-black text-gray-400 uppercase tracking-widest">
+          Wall of Praise is Empty
+        </p>
+        <p className="text-xs text-gray-400">
+          Create a post for a Nurse or RMO to get started.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative group">
-      {/* Background Decorative Elements */}
-      <div className="absolute -top-6 -right-6 w-32 h-32 bg-green-500/10 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-700"></div>
-
-      <div className="relative z-10 bg-gradient-to-br from-white via-white to-green-50/30 backdrop-blur-2xl rounded-[3rem] border border-gray-100 p-8 md:p-12 shadow-[0_40px_100px_rgba(0,0,0,0.06)] hover:shadow-[0_50px_120px_rgba(0,0,0,0.1)] transition-all duration-700">
-        
-        {/* Floating Trophy Icon */}
-        <div className="absolute top-8 right-8 md:top-12 md:right-12 text-green-500/20 group-hover:text-green-500 transition-all duration-700 rotate-12 group-hover:rotate-0 scale-150">
-          <Trophy size={80} />
-        </div>
-
-        <div className="flex flex-col md:flex-row items-center md:items-start gap-10">
-          {/* Large Image Presentation */}
-          <div className="relative flex-shrink-0">
-            <div className="w-40 h-40 md:w-56 md:h-56 rounded-[3rem] overflow-hidden border-8 border-white shadow-2xl bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center rotate-3 group-hover:rotate-0 transition-all duration-500">
-              {latestPost.photo_url ? (
-                <img 
-                  src={latestPost.photo_url} 
-                  alt={latestPost.nurse_name} 
-                  className="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-700" 
-                />
-              ) : (
-                <span className="text-7xl font-black text-green-600 drop-shadow-md">{latestPost.nurse_name[0]}</span>
-              )}
-            </div>
-            {/* Sparkle Decoration */}
-            <div className="absolute -bottom-4 -right-4 bg-white p-3 rounded-2xl shadow-xl border border-gray-50 animate-bounce">
-              <Sparkles className="text-yellow-500 w-6 h-6" />
-            </div>
-          </div>
-
-          {/* Text Content */}
-          <div className="flex-1 text-center md:text-left pt-2">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-4">
-              <span className="px-4 py-1.5 bg-green-50 text-[10px] font-black text-green-600 rounded-full uppercase tracking-[0.2em] border border-green-100 flex items-center gap-2">
-                <Sparkles size={10} /> Star of the Moment
-              </span>
-              <div className="flex items-center gap-1.5 text-gray-400">
-                <Clock size={12} className="text-green-500" />
-                <span className="text-[10px] font-black uppercase tracking-widest leading-none">{formatTime(latestPost.created_at)}</span>
-              </div>
-            </div>
-
-            <h2 className="text-4xl md:text-6xl font-black text-gray-900 tracking-tighter leading-none mb-6 group-hover:text-green-600 transition-colors">
-              {latestPost.nurse_name}
-            </h2>
-
-            <div className="relative max-w-2xl">
-              <div className="absolute -left-6 -top-6 text-green-500/10 scale-150">
-                <Quote size={60} />
-              </div>
-              <p className="text-xl md:text-2xl font-bold text-gray-600 leading-relaxed italic relative z-10 pl-2">
-                {latestPost.message}
-              </p>
-            </div>
-
-            <div className="mt-10 flex flex-wrap items-center justify-center md:justify-start gap-6">
-              <div className="flex items-center gap-3 px-6 py-3 bg-white/50 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-xs shadow-sm">
-                      <Heart size={12} className="text-white fill-current" />
-                    </div>
-                  ))}
-                </div>
-                <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Admired by the team</span>
-              </div>
-              
-              <div className="text-[10px] font-black text-gray-300 uppercase tracking-widest border-l border-gray-100 pl-6 h-12 flex items-center">
-                Celebration ID: {latestPost.id.slice(0, 8)}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Bar Info */}
-        <div className="mt-12 pt-8 border-t border-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-             <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-black text-xs">A</div>
-             <p className="text-sm font-bold text-gray-400">Recognized by <span className="text-gray-900 font-black">{latestPost.created_by}</span></p>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            {isAdmin && (
-              <button 
-                onClick={handleDelete}
-                className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-95 border border-red-100"
-                title="Remove Celebration"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-            <button className="px-8 py-3 bg-gray-900 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-green-600 transition-all active:scale-95 shadow-xl shadow-black/10">
-              Send Congratulations
-            </button>
-          </div>
-        </div>
-      </div>
+    <div
+      className={`grid gap-4 ${
+        hasNurse && hasRmo
+          ? "grid-cols-1 sm:grid-cols-2"
+          : "grid-cols-1 max-w-sm mx-auto w-full"
+      }`}
+    >
+      {hasNurse && (
+        <CelebrationCard
+          post={latestNursePost}
+          isAdmin={isAdmin}
+          onDelete={handleDelete}
+        />
+      )}
+      {hasRmo && (
+        <CelebrationCard
+          post={latestRmoPost}
+          isAdmin={isAdmin}
+          onDelete={handleDelete}
+        />
+      )}
     </div>
   );
 }
