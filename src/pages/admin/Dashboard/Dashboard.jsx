@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   UserCheck,
@@ -12,12 +12,30 @@ import {
   ClipboardCheck,
   Trophy,
   MessageSquarePlus,
+  Search,
+  Plus,
+  TrendingUp,
+  Clock,
+  ArrowUpRight,
+  MessageSquare,
+  Heart,
+  Share2,
+  MoreHorizontal,
+  User,
+  Award,
+  Star,
+  ThumbsUp,
+  Trash2,
+  Send,
+  Camera,
+  Store,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDashboardStats } from "../../../api/dashboard";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import CongratulationsFeed from "./CongratulationsFeed";
 import NewPostModal from "./NewPostModal";
+import StoreOutModal from "./StoreOutModal";
 import { useAuth } from "../../../contexts/AuthContext";
 import { getCongratulationsPosts } from "../../../api/congratulations";
 
@@ -31,8 +49,9 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  // Modal state: null | 'nurse' | 'rmo'
-  const [modalPostType, setModalPostType] = React.useState(null);
+  const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
+  const [isStoreOutModalOpen, setIsStoreOutModalOpen] = useState(false);
+  const [activePostType, setActivePostType] = useState('nurse');
   const isAdmin = user?.role === 'admin';
 
   // Fetch congratulations posts
@@ -47,6 +66,9 @@ export default function Dashboard() {
   useRealtimeQuery("patient_admission", ['dashboard']);
   useRealtimeQuery("ipd_admissions", ['dashboard']);
 
+  const handlePostSuccess = () => {
+    queryClient.invalidateQueries(['congratulations-posts']);
+  };
 
   // Calculate percentage for progress bars
   const calculatePercentage = (value, total) => {
@@ -186,45 +208,64 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Wall of Praise Section - Conditionally visible */}
-      {(hasActiveCongrats || isAdmin) && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1 flex-wrap gap-3">
+      {/* Actions & Wall of Praise Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1 flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <div className="w-1 h-6 bg-green-600 rounded-full"></div>
               <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
                 Wall of Praise
               </h3>
             </div>
-            {isAdmin && (
-              <div className="flex items-center gap-2">
-                {/* Nurse Post Button */}
-                <button
-                  onClick={() => setModalPostType("nurse")}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-green-500/20"
-                >
-                  <UserPlus size={13} />
-                  <span>Nurse Post</span>
-                </button>
-                {/* RMO Post Button */}
-                <button
-                  onClick={() => setModalPostType("rmo")}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-indigo-500/20"
-                >
-                  <UserCog size={13} />
-                  <span>RMO Post</span>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsStoreOutModalOpen(true)}
+                className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-teal-500/20"
+              >
+                <Store size={13} />
+                <span>Store Out</span>
+              </button>
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setActivePostType("nurse");
+                      setIsNewPostModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-green-500/20"
+                  >
+                    <UserPlus size={13} />
+                    <span>Nurse Post</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActivePostType("rmo");
+                      setIsNewPostModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-indigo-500/20"
+                  >
+                    <UserCog size={13} />
+                    <span>RMO Post</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          <CongratulationsFeed
-            posts={congratsPosts}
-            isLoading={isLoadingCongrats}
-            isAdmin={isAdmin}
-          />
+          {hasActiveCongrats ? (
+            <CongratulationsFeed
+              posts={congratsPosts}
+              isLoading={isLoadingCongrats}
+              isAdmin={isAdmin}
+            />
+          ) : (
+            isAdmin && (
+              <div className="bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-200 p-12 text-center">
+                <p className="text-gray-400 font-bold text-sm">No praise posts yet. Admins can create one using the buttons above.</p>
+              </div>
+            )
+          )}
         </div>
-      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
         {/* Ward Distribution Chart */}
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 md:p-6">
@@ -409,18 +450,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* New Post Modal */}
-      {isAdmin && (
-        <NewPostModal
-          isOpen={modalPostType !== null}
-          onClose={() => setModalPostType(null)}
-          userName={user?.name || "Admin"}
-          defaultPostType={modalPostType || "nurse"}
-          onSuccess={() => {
-            queryClient.invalidateQueries(['congratulations-posts']);
-          }}
-        />
-      )}
+      {/* Modals */}
+      <NewPostModal
+        isOpen={isNewPostModalOpen}
+        onClose={() => setIsNewPostModalOpen(false)}
+        onSuccess={handlePostSuccess}
+        userName={user?.name || user?.username || user?.user_name || "Admin"}
+        defaultPostType={activePostType}
+      />
+
+      <StoreOutModal
+        isOpen={isStoreOutModalOpen}
+        onClose={() => setIsStoreOutModalOpen(false)}
+        userName={user?.name || user?.username || user?.user_name || "Admin"}
+      />
     </div>
   );
 }
