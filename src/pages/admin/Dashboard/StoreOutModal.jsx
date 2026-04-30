@@ -469,8 +469,9 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
                           e.target.value,
                         )
                       }
-                      className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-teal-500/20 appearance-none"
+                      className="w-full bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-xs font-bold outline-none cursor-not-allowed appearance-none opacity-70"
                       required
+                      disabled
                     >
                       <option value="">Select Group</option>
                       {categories.map((g) => (
