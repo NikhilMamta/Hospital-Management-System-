@@ -299,7 +299,6 @@ const AssignTask = () => {
             patientName: "Unknown Patient",
             patientLocation: `${bed.ward} - ${bed.room}`,
             wardType: bed.ward,
-            room: bed.room,
           };
         });
 

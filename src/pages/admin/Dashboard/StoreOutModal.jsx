@@ -14,7 +14,11 @@ import {
 } from "lucide-react";
 import { useNotification } from "../../../contexts/NotificationContext";
 import { getMedicines } from "../../../api/pharmacy";
-import { getStoreMasters, createStoreOut } from "../../../api/store";
+import {
+  getStoreMasters,
+  createStoreOut,
+  getNextStoreOutIndentNo,
+} from "../../../api/store";
 import Select from "react-select";
 
 const INDENT_TYPES = ["Store Out", "Store In", "Internal Transfer"];
@@ -166,11 +170,19 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
     setIsSubmitting(true);
     try {
       const planned7 = new Date().toISOString();
+      const storeOutIndentNo = await getNextStoreOutIndentNo();
+      const hasMultipleMedicines = formData.medicines.length > 1;
 
       // Mapping form data to the Edge Function payload structure
       // If the form has multiple medicines, we'll send one request per medicine
-      const requests = formData.medicines.map((med) => {
+      const requests = formData.medicines.map((med, index) => {
+        const issueNo = hasMultipleMedicines
+          ? `${storeOutIndentNo}/${index + 1}`
+          : storeOutIndentNo;
         const payload = {
+          issue_no: issueNo,
+          indent_number: issueNo,
+          product_name: med.product_name || null,
           issue_date: formData.issue_date || null,
           indenter_name: formData.indenter_name || null,
           indent_type: formData.indent_type || null,
