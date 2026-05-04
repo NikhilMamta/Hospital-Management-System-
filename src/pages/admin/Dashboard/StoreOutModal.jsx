@@ -180,7 +180,7 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
           ? `${storeOutIndentNo}/${index + 1}`
           : storeOutIndentNo;
         const payload = {
-          issue_no: issueNo,
+          // issue_no: issueNo,
           indent_number: issueNo,
           product_name: med.product_name || null,
           issue_date: formData.issue_date || null,
@@ -193,6 +193,7 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
           qty: med.quantity || null,
           unit: med.uom || null,
           category: med.group_of_head || null,
+          status: "Pending",
           planned_7: planned7, // Always included
         };
         return createStoreOut(payload);
