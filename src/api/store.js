@@ -8,8 +8,8 @@ const STORE_SUPABASE_URL = "https://kfdtcqjkesvdfzncfbns.supabase.co";
 const EDGE_FUNCTION_URL =
   `${STORE_SUPABASE_URL}/functions/v1/bright-task`;
 
-const STORE_OUT_PREFIX = "IS-";
-const STORE_OUT_PADDING = 3;
+const STORE_OUT_PREFIX = "SO-";
+const STORE_OUT_PADDING = 4;
 
 /**
  * Fetches the next base store out indent number.
@@ -33,7 +33,7 @@ export const getNextStoreOutIndentNo = async () => {
   const data = await response.json();
 
   const lastNumber = (data || []).reduce((max, row) => {
-    const match = String(row.issue_no || "").match(/^IS-(\d+)(?:\/\d+)?$/);
+    const match = String(row.issue_no || "").match(/^SO-(\d+)(?:\/\d+)?$/);
     if (!match) return max;
     return Math.max(max, Number(match[1]));
   }, 0);
