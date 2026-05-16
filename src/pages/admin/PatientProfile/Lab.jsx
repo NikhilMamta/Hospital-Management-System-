@@ -11,6 +11,7 @@ import {
 import { useOutletContext } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
+import { useAuth } from "../../../contexts/AuthContext";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -49,6 +50,7 @@ export default function Lab() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
   const { showNotification } = useNotification();
+  const { user } = useAuth();
 
   // Form data (same structure as LabAdvice)
   const [formData, setFormData] = useState({
@@ -113,6 +115,7 @@ export default function Lab() {
           adviceId: `LAB-${lab.id}`,
           admissionNo: lab.admission_no || ipdNumber,
           adviceNo: lab.lab_no || `LAB-${lab.id}`,
+          created_by_nurse: lab.created_by_nurse,
           patientName: lab.patient_name || data.personalInfo.name,
           phone: lab.phone_no || "",
           reason: lab.reason_for_visit || "",
@@ -417,6 +420,7 @@ export default function Lab() {
         admission_no: admissionNo,
         ipd_number: patientData.ipd,
         patient_name: patientData.name,
+        created_by_nurse: user?.name || "System",
         phone_no: phoneNo,
         father_husband_name: patientData.fatherHusbandName || "",
         age: patientData.age,
@@ -864,6 +868,9 @@ export default function Lab() {
                       PATIENT
                     </th>
                     <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
+                      NURSE
+                    </th>
+                    <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
                       PHONE
                     </th>
                     <th className="px-4 py-3 font-bold text-gray-700 uppercase text-xs">
@@ -917,6 +924,11 @@ export default function Lab() {
                         </div>
                         <div className="text-xs text-gray-500">
                           Age: {task.age}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-gray-700">
+                          {task.created_by_nurse || "N/A"}
                         </div>
                       </td>
                       <td className="px-4 py-3">

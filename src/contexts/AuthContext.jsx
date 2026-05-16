@@ -303,6 +303,22 @@ export const ALL_PAGES = [
     parent: "pharmacy",
     description: "Manage pharmacy inventory",
   },
+  {
+    key: "pharmacy-store-out-tracker",
+    label: "Store Out Tracker",
+    path: "/admin/pharmacy/store-out-tracker",
+    type: "item",
+    parent: "pharmacy",
+    description: "Track store out requests",
+  },
+  {
+    key: "pharmacy-track-store-out",
+    label: "Track Store Out",
+    path: "/admin/pharmacy/track-store-out",
+    type: "item",
+    parent: "pharmacy",
+    description: "Private tracking of store out requests",
+  },
 
   // Discharge dropdown
   {

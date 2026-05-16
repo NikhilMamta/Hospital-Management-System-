@@ -124,3 +124,117 @@ export const createStoreOut = async (payload) => {
     throw error;
   }
 };
+
+/**
+ * Fetches all store out requests from the external Supabase project.
+ */
+export const getStoreOutRequests = async () => {
+  const FETCH_URL = `${STORE_SUPABASE_URL}/rest/v1/store_out_request?select=*&order=timestamp.desc`;
+
+  const response = await fetch(FETCH_URL, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch store out requests: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+};
+
+/**
+ * Fetches the status of a specific store out request for a specific user.
+ */
+export const getStoreOutStatus = async (indentNumber, username) => {
+  const REQUEST_URL = `${STORE_SUPABASE_URL}/rest/v1/store_out_request?indent_number=eq.${encodeURIComponent(indentNumber)}&requested_by=eq.${encodeURIComponent(username)}&select=*`;
+
+  const response = await fetch(REQUEST_URL, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch request status: ${response.status} - ${errorText}`);
+  }
+
+  const requestData = await response.json();
+  
+  if (!requestData || requestData.length === 0) {
+    return null; // Not found or not authorized
+  }
+
+  const request = requestData[0];
+
+  // Now fetch from store_out_approval if it exists
+  const APPROVAL_URL = `${STORE_SUPABASE_URL}/rest/v1/store_out_approval?indent_number=eq.${encodeURIComponent(indentNumber)}&select=*`;
+
+  const approvalResponse = await fetch(APPROVAL_URL, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+
+  let approvalData = null;
+  if (approvalResponse.ok) {
+    const arr = await approvalResponse.json();
+    if (arr && arr.length > 0) {
+      approvalData = arr[0];
+    }
+  }
+
+  return {
+    request,
+    approval: approvalData
+  };
+};
+
+/**
+ * Fetches all store out requests for a specific user.
+ */
+export const getUserStoreOutRequests = async (username) => {
+  const FETCH_URL = `${STORE_SUPABASE_URL}/rest/v1/store_out_request?requested_by=eq.${encodeURIComponent(username)}&select=*&order=timestamp.desc`;
+
+  const response = await fetch(FETCH_URL, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch user store out requests: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+};
+
+/**
+ * Fetches the approval status for a specific indent number.
+ */
+export const getStoreOutApproval = async (indentNumber) => {
+  const APPROVAL_URL = `${STORE_SUPABASE_URL}/rest/v1/store_out_approval?indent_number=eq.${encodeURIComponent(indentNumber)}&select=*`;
+
+  const response = await fetch(APPROVAL_URL, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch approval status: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data && data.length > 0 ? data[0] : null;
+};

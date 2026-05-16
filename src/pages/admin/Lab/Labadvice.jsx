@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, X, Eye, FileText, CheckCircle, Search } from "lucide-react";
 import supabase from "../../../SupabaseClient"; // Adjust import path
 import { useNotification } from "../../../contexts/NotificationContext";
+import { useAuth } from "../../../contexts/AuthContext";
 
 const LabAdvice = () => {
   const [activeTab, setActiveTab] = useState("pending");
@@ -12,6 +13,7 @@ const LabAdvice = () => {
   const [viewingRecord, setViewingRecord] = useState(null);
   const [modalError, setModalError] = useState("");
   const { showNotification } = useNotification();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [availableTests, setAvailableTests] = useState([]);
   const [successMessage, setSuccessMessage] = useState("");
@@ -242,6 +244,7 @@ const LabAdvice = () => {
         completedDate: record.timestamp,
         ipd_number: record.ipd_number,
         timestamp: record.timestamp,
+        created_by_nurse: record.created_by_nurse,
       }));
 
       return transformedData;
@@ -382,6 +385,7 @@ const LabAdvice = () => {
         lab_no: labNumber,
         admission_no: selectedPatient.admission_no,
         patient_name: selectedPatient.patientName,
+        created_by_nurse: user?.name || "System",
         phone_no: selectedPatient.phoneNumber,
         father_husband_name: selectedPatient.fatherHusband,
         age: selectedPatient.age,
@@ -733,6 +737,9 @@ const LabAdvice = () => {
                         Timestamp
                       </th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
+                        Nurse
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                         Admission No
                       </th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
@@ -790,6 +797,9 @@ const LabAdvice = () => {
                                   },
                                 )
                               : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.created_by_nurse || "N/A"}
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-purple-600 whitespace-nowrap">
                             {record.admission_no}

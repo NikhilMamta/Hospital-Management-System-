@@ -56,6 +56,8 @@ import ScoreDashboard from "./pages/admin/nurseStation/ScoreDashboard";
 import PatientCareDashboard from "./pages/admin/nurseStation/PatientCareDashboard";
 import TaskDelegation from "./pages/admin/nurseStation/TaskDelegation";
 import ShiftHandover from "./pages/admin/ShiftHandover";
+import StoreOutTracker from "./pages/admin/StoreOutTracker";
+import TrackStoreOut from "./pages/admin/TrackStoreOut";
 
 // RMO Components
 import RMOAssignTask from "./pages/admin/rmo/RMOAssignTask";
@@ -512,6 +514,24 @@ function App() {
             element={
               <ProtectedRoute requiredPage="pharmacy-store">
                 <PharmacyStore />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="pharmacy/store-out-tracker"
+            element={
+              <ProtectedRoute requiredPage="dashboard">
+                <StoreOutTracker />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="pharmacy/track-store-out"
+            element={
+              <ProtectedRoute requiredPage="dashboard">
+                <TrackStoreOut />
               </ProtectedRoute>
             }
           />

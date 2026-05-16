@@ -77,6 +77,7 @@ const Payment = () => {
       planned1: record.planned1,
       actual1: record.actual1,
       planned3: record.planned1,
+      createdByNurse: record.created_by_nurse,
     });
 
     // Incrementally update state from a single realtime event
@@ -173,6 +174,7 @@ const Payment = () => {
         paymentId: record.id,
         admissionNo: record.admission_no,
         planned3: record.planned1,
+        createdByNurse: record.created_by_nurse,
       }));
 
       setPendingPayments(formattedPending);
@@ -212,6 +214,7 @@ const Payment = () => {
         admissionNo: record.admission_no,
         planned1: record.planned1,
         actual1: record.actual1,
+        createdByNurse: record.created_by_nurse,
       }));
 
       setHistoryPayments(formattedHistory);
@@ -653,6 +656,9 @@ const Payment = () => {
                         Patient Name
                       </th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
+                        Nurse
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                         Planned
                       </th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase min-w-[200px]">
@@ -695,6 +701,9 @@ const Payment = () => {
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.patientName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.createdByNurse || "N/A"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.planned1
@@ -804,6 +813,9 @@ const Payment = () => {
                         Patient Name
                       </th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
+                        Nurse
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                         Planned
                       </th>
                       <th className="px-4 py-3 text-xs font-medium text-left text-gray-500 uppercase">
@@ -841,6 +853,9 @@ const Payment = () => {
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.patientName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                            {record.createdByNurse || "N/A"}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.planned1
