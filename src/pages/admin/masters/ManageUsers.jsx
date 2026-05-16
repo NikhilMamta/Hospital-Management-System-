@@ -468,20 +468,22 @@ const ManageUsers = () => {
 
         // Also update the all_staff table if there's a matching record
         try {
-          const { error: staffError } = await supabase
-            .from("all_staff")
-            .update({
-              name: formData.name.trim(),
-              email: formData.email,
-              phone_number: formData.phone_no,
-              department: formData.department,
-              designation: formData.role.toLowerCase().trim(),
-            })
-            .eq("email", editingUser.email);
+          if (editingUser.email) {
+            const { error: staffError } = await supabase
+              .from("all_staff")
+              .update({
+                name: formData.name.trim(),
+                email: formData.email,
+                phone_number: formData.phone_no,
+                department: formData.department,
+                designation: formData.role.toLowerCase().trim(),
+              })
+              .eq("email", editingUser.email);
 
-          // Don't throw error if no matching record in all_staff (user might not be in all_staff)
-          if (staffError && !staffError.message.includes("No rows found")) {
-            console.warn("Could not update all_staff table:", staffError);
+            // Don't throw error if no matching record in all_staff (user might not be in all_staff)
+            if (staffError && !staffError.message.includes("No rows found")) {
+              console.warn("Could not update all_staff table:", staffError);
+            }
           }
         } catch (staffUpdateError) {
           console.warn("Could not update all_staff table:", staffUpdateError);

@@ -218,7 +218,7 @@ const UserProfile = () => {
           .update({
             name: formData.name,
           })
-          .eq("id", user.id);
+          .eq("email", user.email);
 
         // Don't throw error if no matching record in all_staff (user might not be in all_staff)
         if (staffError && !staffError.message.includes("No rows found")) {
