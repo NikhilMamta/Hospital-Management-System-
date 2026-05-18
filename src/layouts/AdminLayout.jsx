@@ -60,6 +60,18 @@ const iconComponents = {
   Trash2,
 };
 
+const getSection = (key) => {
+  const clinicalKeys = [
+    "admission", "ipd", "ot", "nurse-station", "shift-handover", 
+    "task-delegation", "rmo", "lab", "pharmacy", "discharge"
+  ];
+  const managementKeys = ["masters"];
+  
+  if (clinicalKeys.includes(key)) return "CLINICAL";
+  if (managementKeys.includes(key)) return "MANAGEMENT";
+  return "MAIN";
+};
+
 const AdminLayout = () => {
   const {
     user,
@@ -274,23 +286,36 @@ const AdminLayout = () => {
         {/* Added pb-12 for footer space */}
         {/* Sidebar */}
         <aside
-          className={`w-64 lg:w-16 lg:hover:w-64 bg-white border-r border-gray-200 fixed top-16 bottom-12 left-0 z-40 transform transition-all duration-300 ease-in-out lg:translate-x-0 shadow-lg lg:shadow-none group ${
+          className={`w-[240px] lg:w-[72px] lg:hover:w-[240px] bg-slate-50 border-r border-slate-200 fixed top-16 bottom-12 left-0 z-40 transform transition-all duration-300 ease-in-out lg:translate-x-0 shadow-lg lg:shadow-none group ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <div className="h-full overflow-y-auto">
+          <style>{`
+            .no-scrollbar::-webkit-scrollbar {
+              display: none;
+            }
+            .no-scrollbar {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+            }
+          `}</style>
+          <div className="h-full overflow-y-auto no-scrollbar">
             <nav className="p-4 space-y-1">
-              {sidebarItems.map((item) => {
+              {sidebarItems.map((item, index) => {
+                const section = getSection(item.key);
+                const prevItem = index > 0 ? sidebarItems[index - 1] : null;
+                const showHeader = !prevItem || getSection(prevItem.key) !== section;
+                
+                let content = null;
+                
                 if (item.type === "single") {
-                  // Render single page link
-                  return (
+                  content = (
                     <Link
-                      key={item.key}
                       to={item.path}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium lg:justify-center lg:group-hover:justify-start ${
                         isActive(item.path)
-                          ? "bg-green-50 text-green-600 border-r-4 border-green-600"
-                          : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                          ? "bg-green-50 text-green-600 font-medium"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                       }`}
                       onClick={closeSidebar}
                     >
@@ -299,21 +324,20 @@ const AdminLayout = () => {
                     </Link>
                   );
                 } else if (item.type === "group") {
-                  // Render group with dropdown
                   const children = getGroupChildren(item.key);
                   const isExpanded = expandedGroups[item.key];
                   const isActiveGroup = children.some((child) =>
                     isActive(child.path),
                   );
 
-                  return (
-                    <div key={item.key} className="space-y-1">
+                  content = (
+                    <div className="space-y-1">
                       <button
                         onClick={() => toggleGroup(item.key)}
                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium lg:justify-center lg:group-hover:justify-start ${
                           isActiveGroup
-                            ? "bg-green-50 text-green-600"
-                            : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                            ? "bg-green-50 text-green-600 font-medium"
+                            : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -334,16 +358,14 @@ const AdminLayout = () => {
                         } lg:hidden lg:group-hover:block`}
                       >
                         <div className="ml-4 pl-2 border-l-2 border-gray-200 space-y-1 pb-1">
-                          {" "}
-                          {/* Added pb-1 for bottom padding */}
                           {children.map((child) => (
                             <Link
                               key={child.key}
                               to={child.path}
                               className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 text-xs font-medium ${
                                 isActive(child.path)
-                                  ? "bg-green-50 text-green-600"
-                                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                  ? "bg-green-50 text-green-600 font-medium"
+                                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                               }`}
                               onClick={closeSidebar}
                             >
@@ -356,13 +378,24 @@ const AdminLayout = () => {
                     </div>
                   );
                 }
-                return null;
+                
+                return (
+                  <div key={item.key} className="space-y-1">
+                    {showHeader && (
+                      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 pt-4 pb-1 first:pt-0 lg:hidden lg:group-hover:block">
+                        {section}
+                      </div>
+                    )}
+                    {content}
+                  </div>
+                );
               })}
             </nav>
+            
           </div>
         </aside>
         {/* Main content */}
-        <main className="flex-1 ml-0 lg:ml-16 overflow-auto">
+        <main className="flex-1 ml-0 lg:ml-[72px] overflow-auto">
           {/* Tabs Bar */}
           <div className="hidden lg:block bg-white border-b border-gray-200 sticky top-0 z-10 overflow-x-auto">
             <div className="flex items-center text-sm gap-1 px-2 pt-1">
