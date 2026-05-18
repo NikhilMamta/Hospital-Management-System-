@@ -61,7 +61,7 @@ const iconComponents = {
 };
 
 const AdminLayout = () => {
-  const { user, logout, getAccessibleSidebarItems, getAccessibleGroupRoutes } =
+  const { user, logout, getAccessibleSidebarItems, getAccessibleGroupRoutes, hasPageAccess } =
     useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -221,7 +221,7 @@ const AdminLayout = () => {
         </div>
       </header>
 
-      <div className="flex flex-1 pt-16 pb-12">
+      <div className="flex flex-1 pt-16 pb-28 lg:pb-12">
         {" "}
         {/* Added pb-12 for footer space */}
         {/* Sidebar */}
@@ -323,6 +323,42 @@ const AdminLayout = () => {
 
       {/* Fixed Footer */}
       <Footer />
+
+      {/* Bottom Nav for Mobile */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex justify-around items-center h-16 shadow-lg">
+        <Link
+          to="/admin/dashboard"
+          className={`flex flex-col items-center gap-1 text-xs font-medium ${
+            isActive("/admin/dashboard") ? "text-green-600" : "text-gray-600"
+          }`}
+          onClick={closeSidebar}
+        >
+          <LayoutDashboard size={20} />
+          <span>Dashboard</span>
+        </Link>
+        <Link
+          to="/admin/patient-profile"
+          className={`flex flex-col items-center gap-1 text-xs font-medium ${
+            isActive("/admin/patient-profile") ? "text-green-600" : "text-gray-600"
+          }`}
+          onClick={closeSidebar}
+        >
+          <User size={20} />
+          <span>Profile</span>
+        </Link>
+        {hasPageAccess("pharmacy-track-store-out") && (
+          <Link
+            to="/admin/pharmacy/track-store-out"
+            className={`flex flex-col items-center gap-1 text-xs font-medium ${
+              isActive("/admin/pharmacy/track-store-out") ? "text-green-600" : "text-gray-600"
+            }`}
+            onClick={closeSidebar}
+          >
+            <Pill size={20} />
+            <span>Track Out</span>
+          </Link>
+        )}
+      </nav>
 
       {/* Overlay */}
       {sidebarOpen && (

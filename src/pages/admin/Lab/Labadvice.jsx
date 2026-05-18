@@ -798,8 +798,10 @@ const LabAdvice = () => {
                                 )
                               : "-"}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                            {record.created_by_nurse || "N/A"}
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${record.created_by_nurse ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-700"}`}>
+                              {record.created_by_nurse || "N/A"}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-purple-600 whitespace-nowrap">
                             {record.admission_no}
@@ -913,6 +915,12 @@ const LabAdvice = () => {
                     </div>
 
                     <div className="text-xs space-y-1">
+                      <div>
+                        <span className="text-gray-600">Nurse:</span>{" "}
+                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${record.created_by_nurse ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-700"}`}>
+                          {record.created_by_nurse || "N/A"}
+                        </span>
+                      </div>
                       <div>
                         <span className="text-gray-600">Reason:</span>{" "}
                         {record.reasonForVisit}
