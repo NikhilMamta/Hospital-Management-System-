@@ -63,7 +63,7 @@ const iconComponents = {
 const getSection = (key) => {
   const clinicalKeys = [
     "admission", "ipd", "ot", "nurse-station", "shift-handover", 
-    "task-delegation", "rmo", "lab", "pharmacy", "discharge"
+    "rmo", "lab", "pharmacy", "discharge"
   ];
   const managementKeys = ["masters"];
   
