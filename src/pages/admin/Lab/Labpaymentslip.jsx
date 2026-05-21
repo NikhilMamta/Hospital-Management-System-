@@ -702,8 +702,10 @@ const Payment = () => {
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.patientName}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                            {record.createdByNurse || "N/A"}
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${record.createdByNurse ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-700"}`}>
+                              {record.createdByNurse || "N/A"}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.planned1
@@ -786,9 +788,11 @@ const Payment = () => {
                       Process
                     </button>
                   </div>
-                  <div className="text-xs text-gray-600">
-                    Adm: {record.admissionNo} | {record.wardType} |{" "}
-                    {record.room}
+                  <div className="text-xs text-gray-600 flex justify-between items-center">
+                    <span>Adm: {record.admissionNo} | {record.wardType} | {record.room}</span>
+                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${record.createdByNurse ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-700"}`}>
+                      {record.createdByNurse || "N/A"}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -854,8 +858,10 @@ const Payment = () => {
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.patientName}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                            {record.createdByNurse || "N/A"}
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${record.createdByNurse ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-700"}`}>
+                              {record.createdByNurse || "N/A"}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                             {record.planned1
@@ -952,8 +958,11 @@ const Payment = () => {
                       <Eye className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="text-xs text-gray-600">
-                    Status: {record.paymentStatus === "Yes" ? "Paid" : "Unpaid"}
+                  <div className="text-xs text-gray-600 flex justify-between items-center">
+                    <span>Status: {record.paymentStatus === "Yes" ? "Paid" : "Unpaid"}</span>
+                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${record.createdByNurse ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-700"}`}>
+                      {record.createdByNurse || "N/A"}
+                    </span>
                   </div>
                 </div>
               ))}

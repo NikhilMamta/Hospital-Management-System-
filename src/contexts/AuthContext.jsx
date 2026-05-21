@@ -135,15 +135,7 @@ export const ALL_PAGES = [
     description: "Manage patient delegation and shift handovers (Admin Only)",
   },
 
-  // Task Delegation standalone page (not nested under Nurse Station)
-  {
-    key: "task-delegation",
-    label: "Task Delegation",
-    path: "/admin/task-delegation",
-    icon: "Users",
-    type: "single",
-    description: "Delegate nursing tasks across staff and shifts",
-  },
+
 
   // RMO dropdown
   {

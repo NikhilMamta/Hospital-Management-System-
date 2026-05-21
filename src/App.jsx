@@ -54,7 +54,7 @@ import AssignTask from "./pages/admin/nurseStation/AssignTask";
 
 import ScoreDashboard from "./pages/admin/nurseStation/ScoreDashboard";
 import PatientCareDashboard from "./pages/admin/nurseStation/PatientCareDashboard";
-import TaskDelegation from "./pages/admin/nurseStation/TaskDelegation";
+
 import ShiftHandover from "./pages/admin/ShiftHandover";
 import StoreOutTracker from "./pages/admin/StoreOutTracker";
 import TrackStoreOut from "./pages/admin/TrackStoreOut";
@@ -345,14 +345,7 @@ function App() {
             }
           />
 
-          <Route
-            path="task-delegation"
-            element={
-              <ProtectedRoute requiredPage="task-delegation">
-                <TaskDelegation />
-              </ProtectedRoute>
-            }
-          />
+
           <Route
             path="shift-handover"
             element={
