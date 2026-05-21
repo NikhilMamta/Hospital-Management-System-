@@ -27,7 +27,9 @@ createRoot(document.getElementById('root')).render(
           <App />
         </AuthProvider>
       </BrowserRouter>
-      <ReactQueryDevtools initialIsOpen={false} buttonPosition="top-left" />
+      {import.meta.env.DEV && (
+        <ReactQueryDevtools initialIsOpen={false} buttonPosition="top-left" />
+      )}
     </QueryClientProvider>
   </StrictMode>
 );
