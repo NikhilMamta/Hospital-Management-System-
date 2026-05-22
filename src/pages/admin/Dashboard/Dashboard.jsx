@@ -29,6 +29,7 @@ import {
   Send,
   Camera,
   Store,
+  Bed,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDashboardStats } from "../../../api/dashboard";
@@ -65,6 +66,7 @@ export default function Dashboard() {
   // Real-time synchronization
   useRealtimeQuery("patient_admission", ['dashboard']);
   useRealtimeQuery("ipd_admissions", ['dashboard']);
+  useRealtimeQuery("all_floor_bed", ['dashboard']);
 
   const handlePostSuccess = () => {
     queryClient.invalidateQueries(['congratulations-posts']);
@@ -206,6 +208,153 @@ export default function Dashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Bed Statistics Section */}
+      <div className="bg-white/70 backdrop-blur-md rounded-2xl border border-gray-100 p-4 md:p-6 shadow-sm hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] hover:-translate-y-0.5 transition-all duration-300">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-6 bg-emerald-600 rounded-full"></div>
+            <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
+              Bed Status & Ward Availability
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
+              Real-time Bed Tracking
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+          {/* Circular progress / overview gauge */}
+          <div className="bg-gradient-to-br from-gray-50/50 to-gray-100/30 rounded-2xl p-4 md:p-6 border border-gray-100/50 flex flex-col items-center justify-center text-center">
+            <div className="relative w-36 h-36 flex items-center justify-center">
+              {/* Outer SVG Ring */}
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  className="stroke-gray-100"
+                  strokeWidth="8"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  className={`transition-all duration-1000 ease-out ${
+                    (stats.bedStats?.occupancyRate || 0) > 80 
+                      ? "stroke-rose-500" 
+                      : (stats.bedStats?.occupancyRate || 0) > 50 
+                      ? "stroke-amber-500" 
+                      : "stroke-emerald-500"
+                  }`}
+                  strokeWidth="8"
+                  fill="transparent"
+                  strokeDasharray="251.2"
+                  strokeDashoffset={251.2 - (251.2 * (stats.bedStats?.occupancyRate || 0)) / 100}
+                  strokeLinecap="round"
+                />
+              </svg>
+              {/* Center Content */}
+              <div className="absolute flex flex-col items-center">
+                <span className="text-3xl font-black text-gray-900 tracking-tight leading-none">
+                  {stats.bedStats?.occupancyRate}%
+                </span>
+                <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest mt-1">
+                  Occupancy
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full grid grid-cols-3 gap-1 xs:gap-2 mt-6 pt-4 border-t border-gray-200/60">
+              <div className="text-center min-w-0">
+                <p className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-wider truncate">Total</p>
+                <p className="text-base sm:text-lg font-black text-gray-800 tracking-tight mt-0.5">{stats.bedStats?.totalBeds || 0}</p>
+              </div>
+              <div className="text-center min-w-0 border-x border-gray-200/60">
+                <p className="text-[9px] sm:text-[10px] font-black text-rose-500 uppercase tracking-wider truncate">Occupied</p>
+                <p className="text-base sm:text-lg font-black text-rose-600 tracking-tight mt-0.5">{stats.bedStats?.occupiedBeds || 0}</p>
+              </div>
+              <div className="text-center min-w-0">
+                <p className="text-[9px] sm:text-[10px] font-black text-emerald-500 uppercase tracking-wider truncate">Available</p>
+                <p className="text-base sm:text-lg font-black text-emerald-600 tracking-tight mt-0.5">{stats.bedStats?.availableBeds || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Ward-wise Availability */}
+          <div className="md:col-span-2 bg-gradient-to-br from-white to-gray-50/20 rounded-2xl p-4 md:p-6 border border-gray-100/80 flex flex-col justify-between">
+            <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 leading-none">
+              Ward-wise Allocation
+            </h4>
+            
+            {stats.bedStats?.wardBedStats && stats.bedStats.wardBedStats.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {stats.bedStats.wardBedStats.map((ward) => {
+                  // Determine status color based on availability rate
+                  let statusColor = "bg-rose-50 text-rose-700 border-rose-200";
+                  let statusText = "Full";
+                  if (ward.availabilityRate > 50) {
+                    statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                    statusText = "High";
+                  } else if (ward.availabilityRate > 15) {
+                    statusColor = "bg-amber-50 text-amber-700 border-amber-200";
+                    statusText = "Medium";
+                  } else if (ward.total > 0) {
+                    statusColor = "bg-rose-50 text-rose-700 border-rose-200";
+                    statusText = "Critical";
+                  }
+
+                  return (
+                    <div 
+                      key={ward.name}
+                      className="bg-white rounded-xl border border-gray-100 p-3 hover:border-emerald-500/30 hover:shadow-sm transition-all duration-300 flex flex-col justify-between"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="min-w-0">
+                          <p className="font-extrabold text-gray-800 text-xs sm:text-sm truncate uppercase tracking-tight">
+                            {ward.name}
+                          </p>
+                          <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                            {ward.available} of {ward.total} available
+                          </p>
+                        </div>
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${statusColor}`}>
+                          {statusText}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 mt-2">
+                        <div className="flex justify-between text-[9px] font-black text-gray-400 uppercase tracking-tighter">
+                          <span>Occupied ({ward.occupied})</span>
+                          <span>Available ({ward.available})</span>
+                        </div>
+                        <div className="w-full bg-emerald-500 rounded-full h-2 overflow-hidden flex">
+                          <div 
+                            className="bg-gradient-to-r from-rose-500 to-amber-500 h-full transition-all duration-500"
+                            style={{ width: `${ward.occupancyRate}%` }}
+                          ></div>
+                          <div 
+                            className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-full flex-1 transition-all duration-500"
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Bed className="w-10 h-10 text-gray-200 mb-2" />
+                <p className="text-gray-400 font-bold text-xs">No ward bed records found</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Actions & Wall of Praise Section */}
