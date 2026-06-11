@@ -7,12 +7,19 @@ import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import './index.css';
 
-// Create a client
+// Create a client with production-optimised defaults.
+// - staleTime: 2 min  — data is considered fresh for 2 minutes after fetch.
+//   Real-time hooks (useRealtimeTable / useRealtimeQuery) call
+//   queryClient.invalidateQueries() the moment the DB changes, so
+//   window-focus refetches are 100% redundant.
+// - gcTime: 10 min    — inactive cache entries held for 10 minutes so
+//   navigating back to a page is instant.
+// - refetchOnWindowFocus: false — prevented here; real-time handles it.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60, // 1 minute
-      gcTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 2 * 60 * 1000,   // 2 minutes
+      gcTime:    10 * 60 * 1000,  // 10 minutes
       retry: 1,
       refetchOnWindowFocus: false,
     },

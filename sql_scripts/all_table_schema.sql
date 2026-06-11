@@ -1,135 +1,42 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
-CREATE TABLE public.all_floor_bed (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+CREATE TABLE public.users (
   timestamp timestamp with time zone NOT NULL DEFAULT now(),
-  serial_no text,
-  floor text,
-  ward text,
-  room text,
-  bed text,
-  status text,
-  CONSTRAINT all_floor_bed_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.all_staff (
-  timestamp timestamp with time zone NOT NULL DEFAULT now(),
-  name text,
-  phone_number text,
+  user_name text,
+  password text,
+  role text,
+  phone_no text,
   email text,
-  designation text,
-  department text,
-  id bigint NOT NULL DEFAULT nextval('all_staff_id_seq'::regclass),
-  CONSTRAINT all_staff_pkey PRIMARY KEY (id)
+  pages text,
+  name text,
+  profile_image text,
+  id bigint NOT NULL DEFAULT nextval('users_id_seq'::regclass),
+  CONSTRAINT users_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.category (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  name text NOT NULL,
-  created_at timestamp without time zone DEFAULT now(),
-  CONSTRAINT category_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.departmental_pharmacy_indent (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  indent_no text NOT NULL UNIQUE,
-  timestamp timestamp with time zone DEFAULT now(),
-  requested_by text NOT NULL,
-  request_source text DEFAULT 'departmental'::text,
-  floor text,
-  ward text,
-  room text,
-  ward_location text,
-  category text,
-  remarks text,
-  request_types jsonb,
-  medicines jsonb,
-  investigations jsonb,
-  investigation_advice jsonb,
-  status text DEFAULT 'pending'::text,
-  planned1 timestamp with time zone,
-  actual1 timestamp with time zone,
-  planned2 timestamp with time zone,
-  actual2 timestamp with time zone,
-  approved_by text,
-  approved_at timestamp with time zone,
-  rejected_at timestamp with time zone,
-  updated_at timestamp with time zone DEFAULT now(),
-  slip_image text,
-  slip_image_url text,
-  indent_scope text,
-  CONSTRAINT departmental_pharmacy_indent_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.discharge (
+CREATE TABLE public.patient_admission (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   timestamp timestamp without time zone NOT NULL,
-  discharge_number text,
-  admission_no text,
+  admission_no text UNIQUE,
   patient_name text,
+  phone_no text,
+  attender_name text,
+  attender_mobile_no text,
+  reason_for_visit text,
+  date_of_birth text,
+  age text,
+  gender text,
+  status text,
+  planned1 text,
+  actual1 text,
+  delay text,
   department text,
-  consultant_name text,
-  staff_name text,
-  remark text,
-  planned1 timestamp without time zone,
-  actual1 timestamp without time zone,
-  delay1 text,
-  rmo_status text,
-  rmo_name text,
-  summary_report_image text,
-  summary_report_image_name text,
   planned2 timestamp without time zone,
   actual2 timestamp without time zone,
   delay2 text,
-  work_file text,
-  planned3 timestamp without time zone,
-  actual3 timestamp without time zone,
-  delay3 text,
-  concern_dept text,
-  planned4 timestamp without time zone,
-  actual4 timestamp without time zone,
-  delay4 text,
-  concern_authority_work_file text,
-  planned5 timestamp without time zone,
-  actual5 timestamp without time zone,
-  delay5 text,
-  bill_status text,
-  bill_image text,
-  category text,
-  CONSTRAINT discharge_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.doctors (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp with time zone NOT NULL DEFAULT now(),
-  name text,
-  phone_number text,
-  email text,
-  designation text,
-  department text,
-  CONSTRAINT doctors_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.dressing (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp without time zone NOT NULL,
-  admission_number text,
   ipd_number text,
-  patient_name text,
-  task_no text,
-  patient_location text,
-  ward_type text,
-  room text,
-  bed_no text,
-  planned1 timestamp without time zone,
-  actual1 timestamp without time zone,
-  remarks text,
-  status text,
   submitted_by text,
-  CONSTRAINT dressing_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.investigation (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp with time zone NOT NULL DEFAULT now(),
-  type text,
-  name text,
-  price text,
-  CONSTRAINT investigation_pkey PRIMARY KEY (id)
+  CONSTRAINT patient_admission_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ipd_admissions (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -234,121 +141,13 @@ CREATE TABLE public.lab (
   actual4 timestamp without time zone,
   receive_sample text,
   planned4 timestamp without time zone,
+  created_by_nurse text,
   CONSTRAINT lab_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.leave (
-  id integer NOT NULL DEFAULT nextval('leave_id_seq'::regclass),
-  staff_name text NOT NULL,
-  staff_type text NOT NULL CHECK (staff_type = ANY (ARRAY['nurse'::text, 'rmo'::text, 'ot'::text])),
-  leave_date date NOT NULL DEFAULT CURRENT_DATE,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT leave_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.master (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  department text,
-  nurse_task text,
-  rmo_task text,
-  CONSTRAINT master_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.medicine (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp with time zone NOT NULL DEFAULT now(),
-  medicine_name text,
-  price text,
-  CONSTRAINT medicine_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.nurse_assign_task (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp without time zone NOT NULL,
-  task_no text,
-  Ipd_number text,
-  patient_name text,
-  patient_location text,
-  ward_type text,
-  room text,
-  bed_no text,
-  shift text,
-  assign_nurse text,
-  reminder text,
-  start_date date,
-  task text,
-  planned1 timestamp without time zone,
-  actual1 timestamp without time zone,
-  staff text,
-  ot_number text,
-  status text,
-  check_up text,
-  submitted_by text,
-  delegated_from text,
-  CONSTRAINT nurse_assign_task_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.ot_information (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp without time zone NOT NULL,
-  ot_number text,
-  ipd_number text,
-  patient_name text,
-  patient_location text,
-  ward_type text,
-  room text,
-  bed_no text,
-  planned1 timestamp without time zone,
-  actual1 timestamp without time zone,
-  ot_date date,
-  ot_time text,
-  ot_description text,
-  doctor text,
-  rmo text,
-  planned2 timestamp without time zone,
-  actual2 timestamp without time zone,
-  ot_staff text,
-  status text,
-  remark text,
-  actual3 timestamp without time zone,
-  assign_nurse text,
-  submitted_by text,
-  CONSTRAINT ot_information_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.patient_admission (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  timestamp timestamp without time zone NOT NULL,
-  admission_no text UNIQUE,
-  patient_name text,
-  phone_no text,
-  attender_name text,
-  attender_mobile_no text,
-  reason_for_visit text,
-  date_of_birth text,
-  age text,
-  gender text,
-  status text,
-  planned1 text,
-  actual1 text,
-  delay text,
-  department text,
-  planned2 timestamp without time zone,
-  actual2 timestamp without time zone,
-  delay2 text,
-  ipd_number text,
-  submitted_by text,
-  CONSTRAINT patient_admission_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.patient_deletion_log (
-  id bigint NOT NULL DEFAULT nextval('patient_deletion_log_id_seq'::regclass),
-  ipd_number text,
-  admission_no text,
-  patient_name text,
-  deleted_by text NOT NULL,
-  deleted_at timestamp with time zone DEFAULT now(),
-  deletion_summary jsonb,
-  CONSTRAINT patient_deletion_log_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.pharmacy (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   timestamp timestamp without time zone NOT NULL,
-  indent_no text UNIQUE,
+  indent_no text,
   admission_number text,
   ipd_number text,
   staff_name text,
@@ -375,6 +174,122 @@ CREATE TABLE public.pharmacy (
   actual2 timestamp without time zone,
   delay2 text,
   CONSTRAINT pharmacy_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.all_staff (
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  name text,
+  phone_number text,
+  email text,
+  designation text,
+  department text,
+  id bigint NOT NULL DEFAULT nextval('all_staff_id_seq'::regclass),
+  CONSTRAINT all_staff_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.doctors (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  name text,
+  phone_number text,
+  email text,
+  designation text,
+  department text,
+  CONSTRAINT doctors_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.medicine (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  medicine_name text,
+  price text,
+  CONSTRAINT medicine_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.all_floor_bed (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  serial_no text,
+  floor text,
+  ward text,
+  room text,
+  bed text,
+  status text,
+  CONSTRAINT all_floor_bed_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.investigation (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  type text,
+  name text,
+  price text,
+  CONSTRAINT investigation_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.master (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  department text,
+  nurse_task text,
+  rmo_task text,
+  CONSTRAINT master_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.discharge (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp without time zone NOT NULL,
+  discharge_number text,
+  admission_no text,
+  patient_name text,
+  department text,
+  consultant_name text,
+  staff_name text,
+  remark text,
+  planned1 timestamp without time zone,
+  actual1 timestamp without time zone,
+  delay1 text,
+  rmo_status text,
+  rmo_name text,
+  summary_report_image text,
+  summary_report_image_name text,
+  planned2 timestamp without time zone,
+  actual2 timestamp without time zone,
+  delay2 text,
+  work_file text,
+  planned3 timestamp without time zone,
+  actual3 timestamp without time zone,
+  delay3 text,
+  concern_dept text,
+  planned4 timestamp without time zone,
+  actual4 timestamp without time zone,
+  delay4 text,
+  concern_authority_work_file text,
+  planned5 timestamp without time zone,
+  actual5 timestamp without time zone,
+  delay5 text,
+  bill_status text,
+  bill_image text,
+  category text,
+  CONSTRAINT discharge_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.nurse_assign_task (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp without time zone NOT NULL,
+  task_no text,
+  Ipd_number text,
+  patient_name text,
+  patient_location text,
+  ward_type text,
+  room text,
+  bed_no text,
+  shift text,
+  assign_nurse text,
+  reminder text,
+  start_date date,
+  task text,
+  planned1 timestamp without time zone,
+  actual1 timestamp without time zone,
+  staff text,
+  ot_number text,
+  status text,
+  check_up text,
+  submitted_by text,
+  delegated_from text,
+  CONSTRAINT nurse_assign_task_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.pre_defined_task (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -406,6 +321,62 @@ CREATE TABLE public.rmo_assign_task (
   submitted_by text,
   CONSTRAINT rmo_assign_task_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.surgical_data (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  ipd_number text,
+  patient_name text,
+  surgery_time text,
+  surgery_date date,
+  planned1 timestamp without time zone,
+  actual1 timestamp without time zone,
+  CONSTRAINT surgical_data_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ot_information (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp without time zone NOT NULL,
+  ot_number text,
+  ipd_number text,
+  patient_name text,
+  patient_location text,
+  ward_type text,
+  room text,
+  bed_no text,
+  planned1 timestamp without time zone,
+  actual1 timestamp without time zone,
+  ot_date date,
+  ot_time text,
+  ot_description text,
+  doctor text,
+  rmo text,
+  planned2 timestamp without time zone,
+  actual2 timestamp without time zone,
+  ot_staff text,
+  status text,
+  remark text,
+  actual3 timestamp without time zone,
+  assign_nurse text,
+  submitted_by text,
+  CONSTRAINT ot_information_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.dressing (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  timestamp timestamp without time zone NOT NULL,
+  admission_number text,
+  ipd_number text,
+  patient_name text,
+  task_no text,
+  patient_location text,
+  ward_type text,
+  room text,
+  bed_no text,
+  planned1 timestamp without time zone,
+  actual1 timestamp without time zone,
+  remarks text,
+  status text,
+  submitted_by text,
+  CONSTRAINT dressing_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.roster (
   id integer NOT NULL DEFAULT nextval('roster_id_seq'::regclass),
   timestamp timestamp with time zone DEFAULT now(),
@@ -422,16 +393,13 @@ CREATE TABLE public.roster (
   general_ward_5th_floor text,
   CONSTRAINT roster_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.surgical_data (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  ipd_number text,
-  patient_name text,
-  surgery_time text,
-  surgery_date date,
-  planned1 timestamp without time zone,
-  actual1 timestamp without time zone,
-  CONSTRAINT surgical_data_pkey PRIMARY KEY (id)
+CREATE TABLE public.leave (
+  id integer NOT NULL DEFAULT nextval('leave_id_seq'::regclass),
+  staff_name text NOT NULL,
+  staff_type text NOT NULL CHECK (staff_type = ANY (ARRAY['nurse'::text, 'rmo'::text, 'ot'::text])),
+  leave_date date NOT NULL DEFAULT CURRENT_DATE,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT leave_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.trigger_debug_log (
   id integer NOT NULL DEFAULT nextval('trigger_debug_log_id_seq'::regclass),
@@ -439,22 +407,66 @@ CREATE TABLE public.trigger_debug_log (
   created_at timestamp without time zone DEFAULT now(),
   CONSTRAINT trigger_debug_log_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.users (
-  timestamp timestamp with time zone NOT NULL DEFAULT now(),
-  user_name text,
-  password text,
-  role text,
-  phone_no text,
-  email text,
-  pages text,
-  name text,
-  profile_image text,
-  id bigint NOT NULL DEFAULT nextval('users_id_seq'::regclass),
-  CONSTRAINT users_pkey PRIMARY KEY (id)
+CREATE TABLE public.category (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT category_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.patient_deletion_log (
+  id bigint NOT NULL DEFAULT nextval('patient_deletion_log_id_seq'::regclass),
+  ipd_number text,
+  admission_no text,
+  patient_name text,
+  deleted_by text NOT NULL,
+  deleted_at timestamp with time zone DEFAULT now(),
+  deletion_summary jsonb,
+  CONSTRAINT patient_deletion_log_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ward_config (
   id integer NOT NULL DEFAULT nextval('ward_config_id_seq'::regclass),
   ward_name text UNIQUE,
   roster_column text,
   CONSTRAINT ward_config_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.departmental_pharmacy_indent (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  indent_no text NOT NULL UNIQUE,
+  timestamp timestamp with time zone DEFAULT now(),
+  requested_by text NOT NULL,
+  request_source text DEFAULT 'departmental'::text,
+  floor text,
+  ward text,
+  room text,
+  ward_location text,
+  category text,
+  remarks text,
+  request_types jsonb,
+  medicines jsonb,
+  investigations jsonb,
+  investigation_advice jsonb,
+  status text DEFAULT 'pending'::text,
+  planned1 timestamp with time zone,
+  actual1 timestamp with time zone,
+  planned2 timestamp with time zone,
+  actual2 timestamp with time zone,
+  approved_by text,
+  approved_at timestamp with time zone,
+  rejected_at timestamp with time zone,
+  updated_at timestamp with time zone DEFAULT now(),
+  slip_image text,
+  slip_image_url text,
+  indent_scope text,
+  CONSTRAINT departmental_pharmacy_indent_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.congratulations_posts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  nurse_name text NOT NULL,
+  message text NOT NULL,
+  photo_url text,
+  created_by text DEFAULT 'Admin'::text,
+  is_active boolean DEFAULT true,
+  post_type text,
+  CONSTRAINT congratulations_posts_pkey PRIMARY KEY (id)
 );

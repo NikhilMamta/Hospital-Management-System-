@@ -1,4 +1,9 @@
 import supabase from "../SupabaseClient";
+import {
+  getCachedMedicines,
+  getCachedInvestigations,
+  getCachedCategories,
+} from '../lib/masterCache';
 
 /**
  * Fetches pharmacy indents.
@@ -82,52 +87,27 @@ export const getOtCompletionDays = async (ipdNumbers) => {
 
 /**
  * Fetches medicine list.
+ * Results are cached in memory for 30 minutes via masterCache.
+ * Call invalidateMasterCache() after any medicine create/update/delete.
  */
 export const getMedicines = async () => {
-  const { data, error } = await supabase
-    .from("medicine")
-    .select("medicine_name");
-  if (error) throw error;
-  return (data || []).map((m) => m.medicine_name).filter(Boolean);
+  return getCachedMedicines();
 };
 
 /**
  * Fetches investigation tests.
+ * Results are cached in memory for 30 minutes via masterCache.
  */
 export const getInvestigations = async () => {
-  const { data, error } = await supabase
-    .from("investigation")
-    .select("name, type")
-    .order("name");
-  if (error) throw error;
-
-  const tests = {
-    Pathology: [],
-    "X-ray": [],
-    "CT-scan": [],
-    USG: [],
-  };
-
-  data.forEach((item) => {
-    const type = item.type === "CT Scan" ? "CT-scan" : item.type;
-    if (tests[type]) {
-      tests[type].push(item.name);
-    }
-  });
-
-  return tests;
+  return getCachedInvestigations();
 };
 
 /**
  * Fetches categories.
+ * Results are cached in memory for 30 minutes via masterCache.
  */
 export const getCategories = async () => {
-  const { data, error } = await supabase
-    .from("category")
-    .select("name")
-    .order("name");
-  if (error) throw error;
-  return data || [];
+  return getCachedCategories();
 };
 
 /**
@@ -313,25 +293,19 @@ export const getWorkflowData = async () => {
 
 /**
  * Fetches masters needed for departmental indents.
+ * Medicine list is served from the 30-minute in-memory cache.
  */
 export const getDepartmentalMasters = async () => {
-  const [floorBedRes, medicineRes] = await Promise.all([
+  const [floorBedRes, medicines] = await Promise.all([
     supabase.from("all_floor_bed").select("floor, ward, room"),
-    supabase
-      .from("medicine")
-      .select("medicine_name")
-      .order("medicine_name")
-      .limit(5000),
+    getCachedMedicines(),
   ]);
 
   if (floorBedRes.error) throw floorBedRes.error;
-  if (medicineRes.error) throw medicineRes.error;
 
   return {
     locations: floorBedRes.data || [],
-    medicines: (medicineRes.data || [])
-      .map((m) => m.medicine_name)
-      .filter(Boolean),
+    medicines,
   };
 };
 

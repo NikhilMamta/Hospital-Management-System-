@@ -13,6 +13,7 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { invalidateMasterCache } from "../../../lib/masterCache";
 
 const Medicine = () => {
   const [medicines, setMedicines] = useState([]);
@@ -173,6 +174,9 @@ const Medicine = () => {
         showNotification("Medicine added successfully!", "success");
       }
 
+      // Clear master cache so pharmacy forms fetch fresh medicine list next time
+      invalidateMasterCache();
+
       fetchMedicines();
       closeModal();
     } catch (error) {
@@ -192,6 +196,8 @@ const Medicine = () => {
 
       if (error) throw error;
       showNotification("Medicine deleted successfully!", "success");
+      // Clear master cache so pharmacy forms reflect the removed medicine
+      invalidateMasterCache();
       fetchMedicines();
     } catch (error) {
       console.error("Error deleting medicine:", error);
