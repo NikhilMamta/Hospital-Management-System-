@@ -45,6 +45,9 @@ export default function Dashboard() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard', 'stats'],
     queryFn: getDashboardStats,
+    // 5-min staleTime: aligns with pg_cron materialized view refresh cadence.
+    // Real-time subscriptions below still invalidate instantly on DB changes.
+    staleTime: 5 * 60 * 1000,
   });
 
   const queryClient = useQueryClient();
@@ -59,6 +62,7 @@ export default function Dashboard() {
   const { data: congratsPosts, isLoading: isLoadingCongrats } = useQuery({
     queryKey: ['congratulations-posts'],
     queryFn: () => getCongratulationsPosts(),
+    staleTime: 5 * 60 * 1000, // 5 minutes — real-time subscription handles instant updates
   });
 
   const hasActiveCongrats = congratsPosts && congratsPosts.length > 0;
