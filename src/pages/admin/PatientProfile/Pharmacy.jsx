@@ -17,10 +17,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
 import supabase from "../../../SupabaseClient";
 import { sendIndentApprovalNotification } from "../../../utils/whatsappService";
-import { 
-  getPatientPharmacyIndents, 
-  getMedicines, 
-  getInvestigations, 
+import {
+  getPatientPharmacyIndents,
+  getMedicines,
+  getInvestigations,
   getCategories,
   createPharmacyIndent,
   updatePharmacyIndent,
@@ -66,22 +66,20 @@ const FormStepper = ({ currentStep }) => {
         <div key={step.id} className="flex flex-col items-center flex-1">
           <div
             className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium mb-1 transition-colors
-              ${
-                currentStep === step.id
-                  ? "bg-green-600 text-white"
-                  : currentStep > step.id
-                    ? "bg-green-100 text-green-600 border-2 border-green-600"
-                    : "bg-gray-100 text-gray-400"
+              ${currentStep === step.id
+                ? "bg-green-600 text-white"
+                : currentStep > step.id
+                  ? "bg-green-100 text-green-600 border-2 border-green-600"
+                  : "bg-gray-100 text-gray-400"
               }`}
           >
             {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
           </div>
           <span
-            className={`text-xs ${
-              currentStep === step.id
-                ? "text-green-600 font-medium"
-                : "text-gray-500"
-            }`}
+            className={`text-xs ${currentStep === step.id
+              ? "text-green-600 font-medium"
+              : "text-gray-500"
+              }`}
           >
             {step.name}
           </span>
@@ -125,9 +123,9 @@ export default function Pharmacy() {
   // Metadata Queries
   const { data: medicinesList = [] } = useQuery({ queryKey: ["pharmacy", "medicines"], queryFn: getMedicines });
   const { data: categories = [] } = useQuery({ queryKey: ["pharmacy", "categories"], queryFn: getCategories });
-  const { data: investigationTests = { Pathology: [], "X-ray": [], "CT-scan": [], USG: [] } } = useQuery({ 
-    queryKey: ["pharmacy", "investigations"], 
-    queryFn: getInvestigations 
+  const { data: investigationTests = { Pathology: [], "X-ray": [], "CT-scan": [], USG: [] } } = useQuery({
+    queryKey: ["pharmacy", "investigations"],
+    queryFn: getInvestigations
   });
 
   // Main Indents Query
@@ -600,7 +598,7 @@ export default function Pharmacy() {
 
       const currentRole = getCurrentUserRole();
       if (!editMode || currentRole === "nurse") {
-        sendIndentApprovalNotification(savedRow, medicines, requestTypes).catch(err => 
+        sendIndentApprovalNotification(savedRow, medicines, requestTypes).catch(err =>
           console.error("[WhatsApp] Notification error:", err)
         );
       }
@@ -632,7 +630,7 @@ export default function Pharmacy() {
     },
     onError: (error) => showNotification(`Error deleting indent: ${error.message}`, "error")
   });
-  
+
   const loading = isLoadingIndents || submitMutation.isPending || deleteMutation.isPending;
 
   const handleSubmit = () => {
@@ -644,7 +642,7 @@ export default function Pharmacy() {
 
   const handleDelete = (indent) => {
     if (isNurse) return;
-    
+
     if (isApprovedIndent(indent.status)) {
       showNotification("This indent has been approved and cannot be deleted.", "error");
       return;
@@ -897,13 +895,12 @@ export default function Pharmacy() {
                 {filteredIndents.map((indent) => (
                   <div
                     key={indent.indentNumber}
-                    className={`p-4 bg-white border rounded-lg shadow-sm transition-all hover:shadow-md ${
-                      indent.status === "Pending"
-                        ? "border-l-4 border-l-yellow-400"
-                        : indent.status === "Approved"
-                          ? "border-l-4 border-l-green-400"
-                          : "border-l-4 border-l-gray-300"
-                    }`}
+                    className={`p-4 bg-white border rounded-lg shadow-sm transition-all hover:shadow-md ${indent.status === "Pending"
+                      ? "border-l-4 border-l-yellow-400"
+                      : indent.status === "Approved"
+                        ? "border-l-4 border-l-green-400"
+                        : "border-l-4 border-l-gray-300"
+                      }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div>
@@ -1198,7 +1195,7 @@ export default function Pharmacy() {
           resetForm();
           setShowModal(true);
         }}
-        className="fixed z-40 flex items-center justify-center text-white transition-all bg-green-600 rounded-full shadow-lg bottom-6 right-6 w-14 h-14 md:hidden hover:bg-green-700 active:scale-95"
+        className="fixed z-40 flex items-center justify-center text-white transition-all bg-green-600 rounded-full shadow-lg bottom-20 right-6 w-14 h-14 md:hidden hover:bg-green-700 active:scale-95"
       >
         <Plus className="w-6 h-6" />
       </button>
@@ -1207,7 +1204,7 @@ export default function Pharmacy() {
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/30 md:flex md:items-center md:justify-center">
           {/* Mobile Bottom Sheet */}
-          <div className="fixed bottom-0 left-0 right-0 w-full max-h-[90vh] bg-white rounded-t-2xl animate-slide-up overflow-y-auto md:relative md:max-w-4xl md:rounded-lg md:animate-none">
+          <div className="bottom-0 left-0 right-0 mt-5 w-full  max-h-[83vh] bg-white rounded-2xl animate-slide-up overflow-y-auto md:relative md:max-w-4xl md:rounded-lg md:animate-none">
             {/* Modal Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 text-white bg-green-600 md:px-6 md:py-4">
               <h2 className="text-lg font-bold md:text-xl">
@@ -1359,11 +1356,10 @@ export default function Pharmacy() {
                         name="diagnosis"
                         value={formData.diagnosis}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                          errors.diagnosis
-                            ? "border-red-300 bg-red-50"
-                            : "border-gray-300"
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.diagnosis
+                          ? "border-red-300 bg-red-50"
+                          : "border-gray-300"
+                          }`}
                         placeholder="Enter diagnosis"
                       />
                       {errors.diagnosis && (
@@ -1392,11 +1388,10 @@ export default function Pharmacy() {
                     ].map((type) => (
                       <label
                         key={type.id}
-                        className={`flex items-center p-3 transition-colors border rounded-lg cursor-pointer ${
-                          requestTypes[type.id]
-                            ? "border-green-500 bg-green-50"
-                            : "border-gray-200 hover:bg-gray-50"
-                        }`}
+                        className={`flex items-center p-3 transition-colors border rounded-lg cursor-pointer ${requestTypes[type.id]
+                          ? "border-green-500 bg-green-50"
+                          : "border-gray-200 hover:bg-gray-50"
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -1607,11 +1602,10 @@ export default function Pharmacy() {
                             name="adviceCategory"
                             value={investigationAdvice.adviceCategory}
                             onChange={handleInvestigationAdviceChange}
-                            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                              errors.adviceCategory
-                                ? "border-red-300 bg-red-50"
-                                : "border-gray-300"
-                            }`}
+                            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.adviceCategory
+                              ? "border-red-300 bg-red-50"
+                              : "border-gray-300"
+                              }`}
                           >
                             <option value="">Select Category</option>
                             <option value="Pathology">Pathology</option>
@@ -1632,11 +1626,10 @@ export default function Pharmacy() {
                               selected)
                             </label>
                             <div
-                              className={`p-3 border rounded-lg max-h-48 overflow-y-auto ${
-                                errors.pathologyTests
-                                  ? "border-red-300 bg-red-50"
-                                  : "border-gray-300"
-                              }`}
+                              className={`p-3 border rounded-lg max-h-48 overflow-y-auto ${errors.pathologyTests
+                                ? "border-red-300 bg-red-50"
+                                : "border-gray-300"
+                                }`}
                             >
                               <div className="space-y-2">
                                 {(investigationTests.Pathology || []).map(
@@ -1682,11 +1675,10 @@ export default function Pharmacy() {
                                 name="radiologyType"
                                 value={investigationAdvice.radiologyType}
                                 onChange={handleInvestigationAdviceChange}
-                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                                  errors.radiologyType
-                                    ? "border-red-300 bg-red-50"
-                                    : "border-gray-300"
-                                }`}
+                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.radiologyType
+                                  ? "border-red-300 bg-red-50"
+                                  : "border-gray-300"
+                                  }`}
                               >
                                 <option value="">Select Type</option>
                                 <option value="X-ray">X-ray</option>
@@ -1708,11 +1700,10 @@ export default function Pharmacy() {
                                   selected)
                                 </label>
                                 <div
-                                  className={`p-3 border rounded-lg max-h-48 overflow-y-auto ${
-                                    errors.radiologyTests
-                                      ? "border-red-300 bg-red-50"
-                                      : "border-gray-300"
-                                  }`}
+                                  className={`p-3 border rounded-lg max-h-48 overflow-y-auto ${errors.radiologyTests
+                                    ? "border-red-300 bg-red-50"
+                                    : "border-gray-300"
+                                    }`}
                                 >
                                   <div className="space-y-2">
                                     {getRadiologyTests().map((test) => (
@@ -1854,35 +1845,10 @@ export default function Pharmacy() {
                           </div>
                           {investigationAdvice.adviceCategory ===
                             "Pathology" && (
-                            <div>
-                              <span>Tests:</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {investigationAdvice.pathologyTests.map(
-                                  (test) => (
-                                    <span
-                                      key={test}
-                                      className="px-2 py-1 text-xs bg-gray-100 rounded"
-                                    >
-                                      {test}
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          {investigationAdvice.adviceCategory ===
-                            "Radiology" && (
-                            <>
-                              <div className="flex justify-between">
-                                <span>Type:</span>
-                                <span className="font-medium">
-                                  {investigationAdvice.radiologyType}
-                                </span>
-                              </div>
                               <div>
                                 <span>Tests:</span>
                                 <div className="flex flex-wrap gap-1 mt-1">
-                                  {investigationAdvice.radiologyTests.map(
+                                  {investigationAdvice.pathologyTests.map(
                                     (test) => (
                                       <span
                                         key={test}
@@ -1894,8 +1860,33 @@ export default function Pharmacy() {
                                   )}
                                 </div>
                               </div>
-                            </>
-                          )}
+                            )}
+                          {investigationAdvice.adviceCategory ===
+                            "Radiology" && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span>Type:</span>
+                                  <span className="font-medium">
+                                    {investigationAdvice.radiologyType}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span>Tests:</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {investigationAdvice.radiologyTests.map(
+                                      (test) => (
+                                        <span
+                                          key={test}
+                                          className="px-2 py-1 text-xs bg-gray-100 rounded"
+                                        >
+                                          {test}
+                                        </span>
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            )}
                         </div>
                       </div>
                     )}
@@ -2167,15 +2158,14 @@ export default function Pharmacy() {
                         <div className="flex items-center justify-between pb-2 border-b border-green-200">
                           <span className="text-gray-600">Priority:</span>
                           <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              selectedIndent.investigationAdvice.priority ===
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${selectedIndent.investigationAdvice.priority ===
                               "High"
-                                ? "bg-red-100 text-red-700"
-                                : selectedIndent.investigationAdvice
-                                      .priority === "Medium"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-green-100 text-green-700"
-                            }`}
+                              ? "bg-red-100 text-red-700"
+                              : selectedIndent.investigationAdvice
+                                .priority === "Medium"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-green-100 text-green-700"
+                              }`}
                           >
                             {selectedIndent.investigationAdvice.priority}
                           </span>
@@ -2215,40 +2205,40 @@ export default function Pharmacy() {
 
                         {selectedIndent.investigationAdvice.adviceCategory ===
                           "Radiology" && (
-                          <>
-                            <div>
-                              <span className="block mb-1 text-gray-600">
-                                Radiology Type:
-                              </span>
-                              <div className="font-medium text-gray-900">
-                                {
-                                  selectedIndent.investigationAdvice
-                                    .radiologyType
-                                }
-                              </div>
-                            </div>
-                            {selectedIndent.investigationAdvice.radiologyTests
-                              ?.length > 0 && (
+                            <>
                               <div>
                                 <span className="block mb-1 text-gray-600">
-                                  Tests:
+                                  Radiology Type:
                                 </span>
-                                <div className="flex flex-wrap gap-2">
-                                  {selectedIndent.investigationAdvice.radiologyTests.map(
-                                    (test, index) => (
-                                      <span
-                                        key={index}
-                                        className="px-2 py-1 text-xs text-purple-700 bg-white border border-purple-200 rounded-full shadow-sm"
-                                      >
-                                        {test}
-                                      </span>
-                                    ),
-                                  )}
+                                <div className="font-medium text-gray-900">
+                                  {
+                                    selectedIndent.investigationAdvice
+                                      .radiologyType
+                                  }
                                 </div>
                               </div>
-                            )}
-                          </>
-                        )}
+                              {selectedIndent.investigationAdvice.radiologyTests
+                                ?.length > 0 && (
+                                  <div>
+                                    <span className="block mb-1 text-gray-600">
+                                      Tests:
+                                    </span>
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedIndent.investigationAdvice.radiologyTests.map(
+                                        (test, index) => (
+                                          <span
+                                            key={index}
+                                            className="px-2 py-1 text-xs text-purple-700 bg-white border border-purple-200 rounded-full shadow-sm"
+                                          >
+                                            {test}
+                                          </span>
+                                        ),
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                            </>
+                          )}
 
                         {selectedIndent.investigationAdvice.remarks && (
                           <div className="pt-2 mt-2 border-t border-green-200">
