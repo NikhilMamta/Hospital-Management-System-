@@ -1,13 +1,30 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FileText, X, Clock, CheckCircle, Image, Upload } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
 import { useNotification } from "../../../contexts/NotificationContext";
+import Pagination from "../../../components/Pagination";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+const HISTORY_PAGE_SIZE = 50;
+
+// Columns shown in the tables, cards and bill form (was select("*"))
+const BILL_COLUMNS =
+  "id, admission_no, patient_name, category, department, consultant_name, staff_name, planned5, actual5, delay5, rmo_status, rmo_name, summary_report_image, work_file, concern_dept, concern_authority_work_file, bill_status, bill_image";
+
+const pendingFilter = (query) =>
+  query.not("planned5", "is", null).is("actual5", null);
+const historyFilter = (query) =>
+  query.not("planned5", "is", null).not("actual5", "is", null);
 
 const DischargeBill = () => {
   const [activeTab, setActiveTab] = useState("pending");
   const [pendingRecords, setPendingRecords] = useState([]);
   const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  // Badge counts for both tabs (only the open tab's rows are loaded)
+  const [counts, setCounts] = useState({ pending: 0, history: 0 });
+  const loadRequestRef = useRef(0);
   const [showBillModal, setShowBillModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [billStatus, setBillStatus] = useState("");
@@ -19,82 +36,136 @@ const DischargeBill = () => {
   const [viewImageModal, setViewImageModal] = useState(false);
   const [viewingImage, setViewingImage] = useState(null);
 
+  const loadPendingRecords = async () => {
+    // Fetch pending records (planned5 is not null and actual5 is null).
+    // In 1,000-row chunks so the queue can never be cut silently.
+    const pendingData = await fetchAllRows((from, to) =>
+      pendingFilter(supabase.from("discharge").select(BILL_COLUMNS))
+        .order("planned5", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+
+    return pendingData.map((record) => ({
+      ...record,
+      planned5Date: record.planned5
+        ? new Date(record.planned5).toLocaleDateString("en-GB")
+        : "N/A",
+      planned5Time: record.planned5
+        ? new Date(record.planned5).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })
+        : "N/A",
+    }));
+  };
+
+  const loadHistoryRecords = async (page) => {
+    // Fetch history records (both planned5 and actual5 are not null), one page
+    // at a time: the whole list would be cut at 1,000 rows.
+    const from = page * HISTORY_PAGE_SIZE;
+    const {
+      data: historyData,
+      error: historyError,
+      count,
+    } = await historyFilter(
+      supabase.from("discharge").select(BILL_COLUMNS, { count: "exact" }),
+    )
+      .order("actual5", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + HISTORY_PAGE_SIZE - 1);
+
+    if (historyError) throw historyError;
+    const formattedHistory = (historyData || []).map((record) => ({
+      ...record,
+      planned5Date: record.planned5
+        ? new Date(record.planned5).toLocaleDateString("en-GB")
+        : "N/A",
+      planned5Time: record.planned5
+        ? new Date(record.planned5).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })
+        : "N/A",
+      actual5Date: record.actual5
+        ? new Date(record.actual5).toLocaleDateString("en-GB")
+        : "N/A",
+      actual5Time: record.actual5
+        ? new Date(record.actual5).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })
+        : "N/A",
+    }));
+    return { rows: formattedHistory, total: count ?? 0 };
+  };
+
+  const countRecords = async (filter) => {
+    const { count, error } = await filter(
+      supabase.from("discharge").select("id", { count: "exact", head: true }),
+    );
+    if (error) throw error;
+    return count ?? 0;
+  };
+
+  // Loads only the open tab; the other tab's badge comes from a count query
   const loadData = async () => {
+    const requestId = ++loadRequestRef.current;
     try {
       setIsLoading(true);
 
-      // Fetch pending records (planned5 is not null and actual5 is null)
-      const { data: pendingData, error: pendingError } = await supabase
-        .from("discharge")
-        .select("*")
-        .not("planned5", "is", null)
-        .is("actual5", null)
-        .order("planned5", { ascending: true });
-
-      if (pendingError) throw pendingError;
-      const formattedPending = (pendingData || []).map((record) => ({
-        ...record,
-        planned5Date: record.planned5
-          ? new Date(record.planned5).toLocaleDateString("en-GB")
-          : "N/A",
-        planned5Time: record.planned5
-          ? new Date(record.planned5).toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })
-          : "N/A",
-      }));
-      setPendingRecords(formattedPending || []);
-
-      // Fetch history records (both planned5 and actual5 are not null)
-      const { data: historyData, error: historyError } = await supabase
-        .from("discharge")
-        .select("*")
-        .not("planned5", "is", null)
-        .not("actual5", "is", null)
-        .order("actual5", { ascending: false });
-
-      if (historyError) throw historyError;
-      const formattedHistory = (historyData || []).map((record) => ({
-        ...record,
-        planned5Date: record.planned5
-          ? new Date(record.planned5).toLocaleDateString("en-GB")
-          : "N/A",
-        planned5Time: record.planned5
-          ? new Date(record.planned5).toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })
-          : "N/A",
-        actual5Date: record.actual5
-          ? new Date(record.actual5).toLocaleDateString("en-GB")
-          : "N/A",
-        actual5Time: record.actual5
-          ? new Date(record.actual5).toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })
-          : "N/A",
-      }));
-      setHistoryRecords(formattedHistory || []);
+      if (activeTab === "pending") {
+        const [rows, historyCount] = await Promise.all([
+          loadPendingRecords(),
+          countRecords(historyFilter),
+        ]);
+        // Ignore a slower answer for a tab/page the user has already left
+        if (requestId !== loadRequestRef.current) return;
+        setPendingRecords(rows);
+        setCounts({ pending: rows.length, history: historyCount });
+      } else {
+        const [history, pendingCount] = await Promise.all([
+          loadHistoryRecords(historyPage),
+          countRecords(pendingFilter),
+        ]);
+        if (requestId !== loadRequestRef.current) return;
+        setHistoryRecords(history.rows);
+        setCounts({ pending: pendingCount, history: history.total });
+      }
     } catch (error) {
       console.error("Error loading data from Supabase:", error);
       showNotification("Failed to load data", "error");
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) setIsLoading(false);
     }
   };
 
   // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
   useRealtimeTable("discharge", loadData);
 
-  // Load data on component mount
+  // Load the open tab (and history page) on mount and when they change
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeTab, historyPage]);
+
+  // If rows disappear, don't stay on an empty history page
+  const historyTotalPages = Math.max(
+    1,
+    Math.ceil(counts.history / HISTORY_PAGE_SIZE),
+  );
+  useEffect(() => {
+    if (historyPage > 0 && historyPage >= historyTotalPages) {
+      setHistoryPage(historyTotalPages - 1);
+    }
+  }, [historyPage, historyTotalPages]);
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    setHistoryPage(0);
+  };
 
   const handleOpenBillModal = (record) => {
     setSelectedRecord(record);
@@ -252,7 +323,7 @@ const DischargeBill = () => {
       </div>
       <div className="flex gap-2 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab("pending")}
+          onClick={() => switchTab("pending")}
           className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${
             activeTab === "pending"
               ? "text-green-600 border-b-2 border-green-600"
@@ -262,15 +333,15 @@ const DischargeBill = () => {
           <div className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
             Pending
-            {pendingRecords.length > 0 && (
+            {counts.pending > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] bg-red-100 text-red-600 rounded-full">
-                {pendingRecords.length}
+                {counts.pending}
               </span>
             )}
           </div>
         </button>
         <button
-          onClick={() => setActiveTab("history")}
+          onClick={() => switchTab("history")}
           className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${
             activeTab === "history"
               ? "text-green-600 border-b-2 border-green-600"
@@ -280,9 +351,9 @@ const DischargeBill = () => {
           <div className="flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
             History
-            {historyRecords.length > 0 && (
+            {counts.history > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-600 rounded-full">
-                {historyRecords.length}
+                {counts.history}
               </span>
             )}
           </div>
@@ -780,6 +851,17 @@ const DischargeBill = () => {
               </div>
             ))}
           </div>
+
+          {counts.history > 0 && (
+            <Pagination
+              page={historyPage}
+              pageSize={HISTORY_PAGE_SIZE}
+              total={counts.history}
+              onPageChange={setHistoryPage}
+              disabled={isLoading}
+              label="bills"
+            />
+          )}
         </div>
       )}
 

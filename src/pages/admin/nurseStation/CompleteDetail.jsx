@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import { isChangeForPatient } from '../../../utils/realtimeFilters';
 
 const CompleteDetail = ({ nurseName, onClose }) => {
     const [nurseTasks, setNurseTasks] = useState([]);
@@ -33,13 +34,30 @@ const CompleteDetail = ({ nurseName, onClose }) => {
             setLoading(true);
             setError(null);
 
-            const { data: tasksData, error } = await supabase
-                .from('nurse_assign_task')
-                .select('id, task_no, planned1, actual1, patient_name, patient_location, bed_no, shift, task, start_date, reminder, ward_type, room, Ipd_number')
-                .eq('assign_nurse', nurseName)
-                .order('timestamp', { ascending: false });
+            // List: newest tasks (Supabase returns at most 1,000 rows).
+            // Totals: counted in the database, so they include ALL of the nurse's tasks.
+            const [listResult, totalResult, completedResult] = await Promise.all([
+                supabase
+                    .from('nurse_assign_task')
+                    .select('id, task_no, planned1, actual1, patient_name, patient_location, bed_no, shift, task, start_date, reminder, ward_type, room, Ipd_number')
+                    .eq('assign_nurse', nurseName)
+                    .order('timestamp', { ascending: false })
+                    .limit(1000),
+                supabase
+                    .from('nurse_assign_task')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('assign_nurse', nurseName),
+                supabase
+                    .from('nurse_assign_task')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('assign_nurse', nurseName)
+                    .not('planned1', 'is', null)
+                    .not('actual1', 'is', null),
+            ]);
 
+            const error = listResult.error || totalResult.error || completedResult.error;
             if (error) throw error;
+            const tasksData = listResult.data;
 
             if (tasksData) {
                 const formattedTasks = tasksData.map(task => ({
@@ -74,9 +92,9 @@ const CompleteDetail = ({ nurseName, onClose }) => {
 
                 setNurseTasks(formattedTasks);
 
-                const completedTasks = formattedTasks.filter(task => task.status === 'Completed').length;
-                const pendingTasks = formattedTasks.filter(task => task.status === 'Pending').length;
-                const totalTasks = formattedTasks.length;
+                const totalTasks = totalResult.count || 0;
+                const completedTasks = completedResult.count || 0;
+                const pendingTasks = totalTasks - completedTasks;
                 const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
                 setSummary({
@@ -97,8 +115,10 @@ const CompleteDetail = ({ nurseName, onClose }) => {
         }
     }, [nurseName]);
 
-    // Real-time sync: refresh tasks when any user modifies nurse_assign_task
-    useRealtimeTable('nurse_assign_task', fetchNurseTasks);
+    // Real-time sync: refresh only when this nurse's tasks change
+    useRealtimeTable('nurse_assign_task', fetchNurseTasks, true, (payload) =>
+        isChangeForPatient(payload, ['assign_nurse'], nurseName)
+    );
 
     useEffect(() => {
         if (nurseName) {

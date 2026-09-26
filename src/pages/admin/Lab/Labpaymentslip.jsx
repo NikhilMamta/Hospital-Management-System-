@@ -1,14 +1,75 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, Eye, FileText, Upload, Check, Bell } from "lucide-react";
 import supabase from "../../../SupabaseClient";
+import Pagination from "../../../components/Pagination";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+const PAGE_SIZE = 50;
+
+// Only the columns formatRecord reads (was select("*"))
+const LAB_COLUMNS =
+  "id, lab_no, admission_no, patient_name, phone_no, age, gender, bed_no, location, ward_type, room, reason_for_visit, category, priority, pathology_tests, radiology_tests, radiology_type, payment_status, bill_image_url, planned1, actual1, created_by_nurse";
+
+// Format a raw lab record for the payment slip UI
+const formatRecord = (record) => ({
+  id: record.id,
+  lab_no: record.lab_no || "N/A",
+  uniqueNumber: record.admission_no || "N/A",
+  patientName: record.patient_name || "N/A",
+  phoneNumber: record.phone_no || "N/A",
+  age: record.age || "N/A",
+  gender: record.gender || "N/A",
+  bedNo: record.bed_no || "N/A",
+  location: record.location || "N/A",
+  wardType: record.ward_type || "N/A",
+  room: record.room || "N/A",
+  reasonForVisit: record.reason_for_visit || "N/A",
+  adviceNo: record.admission_no || "N/A",
+  category: record.category,
+  priority: record.priority,
+  pathologyTests: record.pathology_tests || [],
+  radiologyTests: record.radiology_tests || [],
+  radiologyType: record.radiology_type,
+  paymentStatus: record.payment_status,
+  billImage: record.bill_image_url,
+  processedDate: record.actual1,
+  paymentId: record.id,
+  admissionNo: record.admission_no,
+  planned1: record.planned1,
+  actual1: record.actual1,
+  planned3: record.planned1,
+  createdByNurse: record.created_by_nurse,
+});
+
+// Same conditions as the pending / history queries below
+const isPendingRow = (row) => !!row.planned1 && !row.payment_status;
+const isHistoryRow = (row) =>
+  row.payment_status === "Yes" || row.payment_status === "No";
+
+// Processed payments (payment_status set)
+const historyQuery = (columns, options) =>
+  supabase
+    .from("lab")
+    .select(columns, options)
+    .in("payment_status", ["Yes", "No"]);
 
 const Payment = () => {
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTabState] = useState("pending");
   const [pendingPayments, setPendingPayments] = useState([]);
   const [historyPayments, setHistoryPayments] = useState([]);
-  const [selectedPatient, setSelectedPatient] = useState("");
+  // History is paged on the server (loading it whole was cut at 1,000 rows)
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyStats, setHistoryStats] = useState({
+    pathology: 0,
+    radiology: 0,
+  });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [selectedPatient, setSelectedPatientState] = useState("");
   const [patientNames, setPatientNames] = useState([]);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDateState] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -45,40 +106,44 @@ const Payment = () => {
     setShowNotification(true);
   };
 
+  // A new tab or filter starts the history list again at page 0
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    setHistoryPage(0);
+  };
+  const setSelectedPatient = (name) => {
+    setSelectedPatientState(name);
+    setHistoryPage(0);
+  };
+  const setSelectedDate = (date) => {
+    setSelectedDateState(date);
+    setHistoryPage(0);
+  };
+
+  // Latest lists for the realtime handler (it is created once, on mount)
+  const pendingRef = useRef([]);
+  const historyRef = useRef([]);
+  useEffect(() => {
+    pendingRef.current = pendingPayments;
+  }, [pendingPayments]);
+  useEffect(() => {
+    historyRef.current = historyPayments;
+  }, [historyPayments]);
+
+  // Re-reads the history page and counts once; a save and its own realtime
+  // event (or a burst of events) arrive within this window and share one fetch.
+  const historyTimer = useRef(null);
+  const refreshHistory = () => {
+    clearTimeout(historyTimer.current);
+    historyTimer.current = setTimeout(
+      () => setHistoryVersion((v) => v + 1),
+      1000,
+    );
+  };
+
   // Load data from Supabase
   useEffect(() => {
     loadData();
-
-    // Format a raw lab record for the payment slip UI
-    const formatRecord = (record) => ({
-      id: record.id,
-      lab_no: record.lab_no || "N/A",
-      uniqueNumber: record.admission_no || "N/A",
-      patientName: record.patient_name || "N/A",
-      phoneNumber: record.phone_no || "N/A",
-      age: record.age || "N/A",
-      gender: record.gender || "N/A",
-      bedNo: record.bed_no || "N/A",
-      location: record.location || "N/A",
-      wardType: record.ward_type || "N/A",
-      room: record.room || "N/A",
-      reasonForVisit: record.reason_for_visit || "N/A",
-      adviceNo: record.admission_no || "N/A",
-      category: record.category,
-      priority: record.priority,
-      pathologyTests: record.pathology_tests || [],
-      radiologyTests: record.radiology_tests || [],
-      radiologyType: record.radiology_type,
-      paymentStatus: record.payment_status,
-      billImage: record.bill_image_url,
-      processedDate: record.actual1,
-      paymentId: record.id,
-      admissionNo: record.admission_no,
-      planned1: record.planned1,
-      actual1: record.actual1,
-      planned3: record.planned1,
-      createdByNurse: record.created_by_nurse,
-    });
 
     // Incrementally update state from a single realtime event
     const handleRealtimeChange = (payload) => {
@@ -88,23 +153,32 @@ const Payment = () => {
         const id = oldRow?.id;
         if (!id) return;
         setPendingPayments((prev) => prev.filter((r) => r.id !== id));
-        setHistoryPayments((prev) => prev.filter((r) => r.id !== id));
+        refreshHistory(); // the row may be on any history page
         return;
       }
 
       const row = newRow;
       if (!row) return;
 
+      const wasPending = pendingRef.current.some((r) => r.id === row.id);
+      const onHistoryPage = historyRef.current.some((r) => r.id === row.id);
+
       setPendingPayments((prev) => prev.filter((r) => r.id !== row.id));
-      setHistoryPayments((prev) => prev.filter((r) => r.id !== row.id));
 
       const formatted = formatRecord(row);
 
-      if (row.planned1 && !row.payment_status) {
+      if (isPendingRow(row)) {
         setPendingPayments((prev) => [formatted, ...prev]);
-      } else if (row.payment_status === "Yes" || row.payment_status === "No") {
-        setHistoryPayments((prev) => [formatted, ...prev]);
       }
+
+      // History is paged on the server: re-read it when a record moves in or
+      // out of it (every record reaches history from the pending queue) or
+      // when it is on the page being shown
+      const movedQueue =
+        eventType === "INSERT"
+          ? isHistoryRow(row)
+          : wasPending !== isPendingRow(row);
+      if (onHistoryPage || movedQueue) refreshHistory();
 
       if (formatted.patientName && formatted.patientName !== "N/A") {
         setPatientNames((prev) =>
@@ -132,95 +206,117 @@ const Payment = () => {
       .subscribe();
 
     return () => {
+      clearTimeout(historyTimer.current);
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // History page + the history-wide counts used by the stat cards
+  useEffect(() => {
+    let ignore = false;
+
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      try {
+        const from = historyPage * PAGE_SIZE;
+        let pageQuery = historyQuery(LAB_COLUMNS, { count: "exact" })
+          .order("timestamp", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        // Same filters as the pending tab, run on the server
+        if (selectedPatient) {
+          pageQuery = pageQuery.eq("patient_name", selectedPatient);
+        }
+        if (selectedDate) {
+          pageQuery = pageQuery
+            .gte("planned1", `${selectedDate} 00:00:00`)
+            .lte("planned1", `${selectedDate} 23:59:59.999`);
+        }
+
+        const [pageRes, pathologyRes, radiologyRes] = await Promise.all([
+          pageQuery,
+          historyQuery("id", { count: "exact", head: true }).eq(
+            "category",
+            "Pathology",
+          ),
+          historyQuery("id", { count: "exact", head: true }).eq(
+            "category",
+            "Radiology",
+          ),
+        ]);
+        const error =
+          pageRes.error || pathologyRes.error || radiologyRes.error;
+        if (error) throw error;
+        if (ignore) return;
+
+        const total = pageRes.count ?? 0;
+        // The page can run past the end after rows move out of history
+        if (!pageRes.data?.length && historyPage > 0 && total > 0) {
+          setHistoryPage(Math.ceil(total / PAGE_SIZE) - 1);
+          return;
+        }
+
+        setHistoryPayments((pageRes.data || []).map(formatRecord));
+        setHistoryTotal(total);
+        setHistoryStats({
+          pathology: pathologyRes.count ?? 0,
+          radiology: radiologyRes.count ?? 0,
+        });
+      } catch (error) {
+        console.error("Failed to load payment history:", error);
+        if (!ignore) {
+          showNotificationPopup(
+            "Failed to load payment data. Please try again.",
+            "error",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setHistoryLoading(false);
+          setHistoryReady(true);
+        }
+      }
+    };
+
+    loadHistory();
+    return () => {
+      ignore = true;
+    };
+  }, [historyPage, selectedPatient, selectedDate, historyVersion]);
 
   const loadData = async (silent = false) => {
     try {
       if (!silent) setInitialLoading(true);
 
-      // Load pending payments (planned1 IS NOT NULL AND actually IS NULL AND payment_status IS NULL)
-      const { data: pendingData, error: pendingError } = await supabase
-        .from("lab")
-        .select(`*`)
-        .not("planned1", "is", null)
-        .is("payment_status", null)
-        .order("timestamp", { ascending: false });
+      const [pendingData, historyNames] = await Promise.all([
+        // Load pending payments (planned1 IS NOT NULL AND payment_status IS NULL).
+        // The queue is short, so it is loaded whole (in 1,000-row chunks, never cut off).
+        fetchAllRows((from, to) =>
+          supabase
+            .from("lab")
+            .select(LAB_COLUMNS)
+            .not("planned1", "is", null)
+            .is("payment_status", null)
+            .order("timestamp", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to),
+        ),
+        // The patient filter lists everyone in pending + all of history,
+        // so only the name column of history is read here
+        fetchAllRows((from, to) =>
+          historyQuery("patient_name").order("id").range(from, to),
+        ),
+      ]);
 
-      if (pendingError) throw pendingError;
-
-      const formattedPending = pendingData.map((record) => ({
-        id: record.id,
-        lab_no: record.lab_no || "N/A",
-        uniqueNumber: record.admission_no || "N/A",
-        patientName: record.patient_name || "N/A",
-        phoneNumber: record.phone_no || "N/A",
-        age: record.age || "N/A",
-        gender: record.gender || "N/A",
-        bedNo: record.bed_no || "N/A",
-        location: record.location || "N/A",
-        wardType: record.ward_type || "N/A",
-        room: record.room || "N/A",
-        reasonForVisit: record.reason_for_visit || "N/A",
-        adviceNo: record.admission_no || "N/A",
-        category: record.category,
-        priority: record.priority,
-        pathologyTests: record.pathology_tests || [],
-        radiologyTests: record.radiology_tests || [],
-        radiologyType: record.radiology_type,
-        planned1: record.planned1,
-        actual1: record.actual1,
-        paymentId: record.id,
-        admissionNo: record.admission_no,
-        planned3: record.planned1,
-        createdByNurse: record.created_by_nurse,
-      }));
-
+      const formattedPending = pendingData.map(formatRecord);
       setPendingPayments(formattedPending);
 
-      // Load history payments (payment_status IS NOT NULL)
-      const { data: historyData, error: historyError } = await supabase
-        .from("lab")
-        .select("*")
-        .in("payment_status", ["Yes", "No"])
-        .order("timestamp", { ascending: false });
-
-      if (historyError) throw historyError;
-
-      const formattedHistory = historyData.map((record) => ({
-        id: record.id,
-        lab_no: record.lab_no || "N/A",
-        uniqueNumber: record.admission_no || "N/A",
-        patientName: record.patient_name || "N/A",
-        phoneNumber: record.phone_no || "N/A",
-        age: record.age || "N/A",
-        gender: record.gender || "N/A",
-        bedNo: record.bed_no || "N/A",
-        location: record.location || "N/A",
-        wardType: record.ward_type || "N/A",
-        room: record.room || "N/A",
-        reasonForVisit: record.reason_for_visit || "N/A",
-        adviceNo: record.admission_no || "N/A",
-        category: record.category,
-        priority: record.priority,
-        pathologyTests: record.pathology_tests || [],
-        radiologyTests: record.radiology_tests || [],
-        radiologyType: record.radiology_type,
-        paymentStatus: record.payment_status,
-        billImage: record.bill_image_url,
-        processedDate: record.actual1,
-        paymentId: record.id,
-        admissionNo: record.admission_no,
-        planned1: record.planned1,
-        actual1: record.actual1,
-        createdByNurse: record.created_by_nurse,
-      }));
-
-      setHistoryPayments(formattedHistory);
-
       // Extract unique patient names
-      const allRecords = [...formattedPending, ...formattedHistory];
+      const allRecords = [
+        ...formattedPending,
+        ...historyNames.map(formatRecord),
+      ];
       const uniquePatients = [...new Set(allRecords.map((r) => r.patientName))]
         .filter((name) => name && name !== "N/A")
         .sort();
@@ -341,7 +437,13 @@ const Payment = () => {
         .eq("id", selectedRecord.id);
       if (updateError) throw updateError;
 
-      await loadData();
+      // The record leaves the pending queue and joins history. Patch the queue
+      // here and re-read history once, instead of a full reload that the
+      // realtime event for this same update would repeat.
+      setPendingPayments((prev) =>
+        prev.filter((r) => r.id !== selectedRecord.id),
+      );
+      refreshHistory();
       showNotificationPopup("Payment processed successfully!", "success");
       setShowModal(false);
       resetForm();
@@ -406,14 +508,17 @@ const Payment = () => {
     }
   };
 
+  // Pending queue filters (history is filtered on the server)
   const applyFilters = (records) => {
     return records.filter((record) => {
       if (selectedPatient && record.patientName !== selectedPatient)
         return false;
       if (selectedDate && record.planned1) {
-        const recordDate = new Date(record.planned1)
-          .toISOString()
-          .split("T")[0];
+        // Local date, as shown in the Planned column and as the
+        // server-side history filter uses
+        const recordDate = new Date(record.planned1).toLocaleDateString(
+          "en-CA",
+        );
         if (recordDate !== selectedDate) return false;
       }
       return true;
@@ -421,28 +526,21 @@ const Payment = () => {
   };
 
   const filteredPendingPayments = applyFilters(pendingPayments);
-  const filteredHistoryPayments = applyFilters(historyPayments);
+  const filteredHistoryPayments = historyPayments; // filtered and paged on the server
 
-  const totalPathology = [...pendingPayments, ...historyPayments].filter(
-    (r) => r.category === "Pathology",
-  ).length;
-  const totalRadiology = [...pendingPayments, ...historyPayments].filter(
-    (r) => r.category === "Radiology",
-  ).length;
-  const completePathology = historyPayments.filter(
-    (r) => r.category === "Pathology",
-  ).length;
-  const completeRadiology = historyPayments.filter(
-    (r) => r.category === "Radiology",
-  ).length;
+  // Stat cards: pending from the loaded queue, history counted on the server
   const pendingPathology = pendingPayments.filter(
     (r) => r.category === "Pathology",
   ).length;
   const pendingRadiology = pendingPayments.filter(
     (r) => r.category === "Radiology",
   ).length;
+  const completePathology = historyStats.pathology;
+  const completeRadiology = historyStats.radiology;
+  const totalPathology = pendingPathology + completePathology;
+  const totalRadiology = pendingRadiology + completeRadiology;
 
-  if (initialLoading) {
+  if (initialLoading || !historyReady) {
     return (
       <div className="flex items-center justify-center min-h-screen p-6 bg-gray-50">
         <div className="text-center">
@@ -592,7 +690,7 @@ const Payment = () => {
                   {tab.toUpperCase()} (
                   {tab === "pending"
                     ? filteredPendingPayments.length
-                    : filteredHistoryPayments.length}
+                    : historyTotal}
                   )
                 </button>
               ))}
@@ -940,6 +1038,14 @@ const Payment = () => {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={historyPage}
+                pageSize={PAGE_SIZE}
+                total={historyTotal}
+                onPageChange={setHistoryPage}
+                disabled={historyLoading}
+                label="records"
+              />
             </div>
             <div className="md:hidden h-full overflow-auto space-y-3 pb-8">
               {filteredHistoryPayments.map((record) => (
@@ -966,6 +1072,16 @@ const Payment = () => {
                   </div>
                 </div>
               ))}
+              <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+                <Pagination
+                  page={historyPage}
+                  pageSize={PAGE_SIZE}
+                  total={historyTotal}
+                  onPageChange={setHistoryPage}
+                  disabled={historyLoading}
+                  label="records"
+                />
+              </div>
             </div>
           </div>
         )}

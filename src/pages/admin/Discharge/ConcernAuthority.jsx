@@ -1,13 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Building2, X, Clock, CheckCircle, Image } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
 import { useNotification } from '../../../contexts/NotificationContext';
+import Pagination from '../../../components/Pagination';
+import { fetchAllRows } from '../../../utils/supabaseQuery';
+
+const HISTORY_PAGE_SIZE = 50;
+
+const AUTHORITY_COLUMNS = 'id, admission_no, patient_name, department, consultant_name, staff_name, planned4, actual4, rmo_name, summary_report_image, concern_dept, work_file, rmo_status, concern_authority_work_file, delay4';
+
+const pendingFilter = (query) => query.not('planned4', 'is', null).is('actual4', null);
+const historyFilter = (query) => query.not('planned4', 'is', null).not('actual4', 'is', null);
 
 const ConcernAuthority = () => {
   const [activeTab, setActiveTab] = useState('pending');
   const [pendingRecords, setPendingRecords] = useState([]);
   const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  // Badge counts for both tabs (only the open tab's rows are loaded)
+  const [counts, setCounts] = useState({ pending: 0, history: 0 });
+  const loadRequestRef = useRef(0);
   const [selectedRecords, setSelectedRecords] = useState({});
   const [workFileStatus, setWorkFileStatus] = useState({});
   const [viewImageModal, setViewImageModal] = useState(false);
@@ -16,71 +29,118 @@ const ConcernAuthority = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission
 
+  const loadPendingRecords = async () => {
+    // Fetch pending records (planned4 is not null and actual4 is null).
+    // In 1,000-row chunks so the queue can never be cut silently.
+    const pendingData = await fetchAllRows((from, to) =>
+      pendingFilter(supabase.from('discharge').select(AUTHORITY_COLUMNS))
+        .order('planned4', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to)
+    );
+
+    return pendingData.map(record => ({
+      ...record,
+      planned4Date: record.planned4 ? new Date(record.planned4).toLocaleDateString('en-GB') : 'N/A',
+      planned4Time: record.planned4 ? new Date(record.planned4).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }) : 'N/A',
+    }));
+  };
+
+  const loadHistoryRecords = async (page) => {
+    // Fetch history records (both planned4 and actual4 are not null), one page
+    // at a time: the whole list would be cut at 1,000 rows.
+    const from = page * HISTORY_PAGE_SIZE;
+    const { data: historyData, error: historyError, count } = await historyFilter(
+      supabase.from('discharge').select(AUTHORITY_COLUMNS, { count: 'exact' })
+    )
+      .order('actual4', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + HISTORY_PAGE_SIZE - 1);
+
+    if (historyError) throw historyError;
+    const formattedHistory = (historyData || []).map(record => ({
+      ...record,
+      planned4Date: record.planned4 ? new Date(record.planned4).toLocaleDateString('en-GB') : 'N/A',
+      planned4Time: record.planned4 ? new Date(record.planned4).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }) : 'N/A',
+      actual4Date: record.actual4 ? new Date(record.actual4).toLocaleDateString('en-GB') : 'N/A',
+      actual4Time: record.actual4 ? new Date(record.actual4).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }) : 'N/A',
+    }));
+    return { rows: formattedHistory, total: count ?? 0 };
+  };
+
+  const countRecords = async (filter) => {
+    const { count, error } = await filter(
+      supabase.from('discharge').select('id', { count: 'exact', head: true })
+    );
+    if (error) throw error;
+    return count ?? 0;
+  };
+
+  // Loads only the open tab; the other tab's badge comes from a count query
   const loadData = async () => {
+    const requestId = ++loadRequestRef.current;
     try {
       setIsLoading(true);
 
-      // Fetch pending records (planned4 is not null and actual4 is null)
-      const { data: pendingData, error: pendingError } = await supabase
-        .from('discharge')
-        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned4, actual4, rmo_name, summary_report_image, concern_dept, work_file, rmo_status, concern_authority_work_file, delay4')
-        .not('planned4', 'is', null)
-        .is('actual4', null)
-        .order('planned4', { ascending: true });
-
-      if (pendingError) throw pendingError;
-      const formattedPending = (pendingData || []).map(record => ({
-        ...record,
-        planned4Date: record.planned4 ? new Date(record.planned4).toLocaleDateString('en-GB') : 'N/A',
-        planned4Time: record.planned4 ? new Date(record.planned4).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : 'N/A',
-      }));
-      setPendingRecords(formattedPending || []);
-
-      // Fetch history records (both planned4 and actual4 are not null)
-      const { data: historyData, error: historyError } = await supabase
-        .from('discharge')
-        .select('id, admission_no, patient_name, department, consultant_name, staff_name, planned4, actual4, rmo_name, summary_report_image, concern_dept, work_file, rmo_status, concern_authority_work_file, delay4')
-        .not('planned4', 'is', null)
-        .not('actual4', 'is', null)
-        .order('actual4', { ascending: false });
-
-      if (historyError) throw historyError;
-      const formattedHistory = (historyData || []).map(record => ({
-        ...record,
-        planned4Date: record.planned4 ? new Date(record.planned4).toLocaleDateString('en-GB') : 'N/A',
-        planned4Time: record.planned4 ? new Date(record.planned4).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : 'N/A',
-        actual4Date: record.actual4 ? new Date(record.actual4).toLocaleDateString('en-GB') : 'N/A',
-        actual4Time: record.actual4 ? new Date(record.actual4).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : 'N/A',
-      }));
-      setHistoryRecords(formattedHistory || []);
+      if (activeTab === 'pending') {
+        const [rows, historyCount] = await Promise.all([
+          loadPendingRecords(),
+          countRecords(historyFilter),
+        ]);
+        // Ignore a slower answer for a tab/page the user has already left
+        if (requestId !== loadRequestRef.current) return;
+        setPendingRecords(rows);
+        setCounts({ pending: rows.length, history: historyCount });
+      } else {
+        const [history, pendingCount] = await Promise.all([
+          loadHistoryRecords(historyPage),
+          countRecords(pendingFilter),
+        ]);
+        if (requestId !== loadRequestRef.current) return;
+        setHistoryRecords(history.rows);
+        setCounts({ pending: pendingCount, history: history.total });
+      }
 
     } catch (error) {
       console.error('Error loading data from Supabase:', error);
       showNotification('Failed to load data', 'error');
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) setIsLoading(false);
     }
   };
 
   // Real-time sync: refresh when discharge table changes (replaces aggressive polling)
   useRealtimeTable('discharge', loadData);
 
-  // Load data on component mount
+  // Load the open tab (and history page) on mount and when they change
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeTab, historyPage]);
+
+  // If rows disappear, don't stay on an empty history page
+  const historyTotalPages = Math.max(1, Math.ceil(counts.history / HISTORY_PAGE_SIZE));
+  useEffect(() => {
+    if (historyPage > 0 && historyPage >= historyTotalPages) {
+      setHistoryPage(historyTotalPages - 1);
+    }
+  }, [historyPage, historyTotalPages]);
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    setHistoryPage(0);
+  };
 
   const handleCheckboxChange = (admissionNo) => {
     setSelectedRecords((prev) => ({
@@ -117,36 +177,33 @@ const ConcernAuthority = () => {
     try {
       setIsSubmitting(true); // Set submitting state to true
 
-      // Prepare update data for each selected record
-      const updates = selectedAdmissions.map(admissionNo => ({
-        admission_no: admissionNo,
-        actual4: new Date().toISOString(), // Set current timestamp
-        concern_dept: workFileStatus[admissionNo], // Yes or No
-        delay4: calculateDelay(admissionNo), // Calculate delay
-      }));
+      const now = new Date().toLocaleString("en-CA", {
+        timeZone: "Asia/Kolkata",
+        hour12: false
+      }).replace(',', '');
 
-      // Update records in Supabase
-      const updatePromises = updates.map(async (updateData) => {
-        const { error } = await supabase
-          .from('discharge')
-          .update({
-            actual4: new Date().toLocaleString("en-CA", {
-              timeZone: "Asia/Kolkata",
-              hour12: false
-            }).replace(',', ''),
-            concern_authority_work_file: updateData.concern_dept,
-            planned5: new Date().toLocaleString("en-CA", {
-              timeZone: "Asia/Kolkata",
-              hour12: false
-            }).replace(',', ''),
-
-          })
-          .eq('admission_no', updateData.admission_no);
-
-        if (error) throw error;
+      // One update per Yes/No value instead of one request per record
+      const admissionsByValue = {};
+      selectedAdmissions.forEach((admissionNo) => {
+        const value = workFileStatus[admissionNo];
+        (admissionsByValue[value] = admissionsByValue[value] || []).push(admissionNo);
       });
 
-      await Promise.all(updatePromises);
+      const results = await Promise.all(
+        Object.entries(admissionsByValue).map(([value, admissionNos]) =>
+          supabase
+            .from('discharge')
+            .update({
+              actual4: now,
+              concern_authority_work_file: value,
+              planned5: now,
+            })
+            .in('admission_no', admissionNos)
+        )
+      );
+
+      const failed = results.find((result) => result.error);
+      if (failed) throw failed.error;
 
       // Reset form
       setSelectedRecords({});
@@ -162,18 +219,6 @@ const ConcernAuthority = () => {
     } finally {
       setIsSubmitting(false); // Reset submitting state
     }
-  };
-
-  const calculateDelay = (admissionNo) => {
-    const record = pendingRecords.find(r => r.admission_no === admissionNo);
-    if (!record || !record.planned4) return null;
-
-    const plannedDate = new Date(record.planned4);
-    const actualDate = new Date();
-    const diffHours = Math.floor((actualDate - plannedDate) / (1000 * 60 * 60));
-
-    if (diffHours <= 0) return 'On Time';
-    return `${diffHours} hour${diffHours > 1 ? 's' : ''} delay`;
   };
 
   const openImageViewer = (imageUrl) => {
@@ -201,7 +246,7 @@ const ConcernAuthority = () => {
       <div className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-gray-200">
         <div className="flex gap-2">
           <button
-            onClick={() => setActiveTab('pending')}
+            onClick={() => switchTab('pending')}
             className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'pending'
               ? 'text-green-600 border-b-2 border-green-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -210,15 +255,15 @@ const ConcernAuthority = () => {
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
               Pending
-              {pendingRecords.length > 0 && (
+              {counts.pending > 0 && (
                 <span className="px-1.5 py-0.5 text-[10px] bg-red-100 text-red-600 rounded-full">
-                  {pendingRecords.length}
+                  {counts.pending}
                 </span>
               )}
             </div>
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => switchTab('history')}
             className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'history'
               ? 'text-green-600 border-b-2 border-green-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -227,9 +272,9 @@ const ConcernAuthority = () => {
             <div className="flex items-center gap-1.5">
               <CheckCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
               History
-              {historyRecords.length > 0 && (
+              {counts.history > 0 && (
                 <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-600 rounded-full">
-                  {historyRecords.length}
+                  {counts.history}
                 </span>
               )}
             </div>
@@ -548,6 +593,17 @@ const ConcernAuthority = () => {
               </div>
             ))}
           </div>
+
+          {counts.history > 0 && (
+            <Pagination
+              page={historyPage}
+              pageSize={HISTORY_PAGE_SIZE}
+              total={counts.history}
+              onPageChange={setHistoryPage}
+              disabled={isLoading}
+              label="records"
+            />
+          )}
         </div>
       )}
 

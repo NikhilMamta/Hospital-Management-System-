@@ -1,12 +1,74 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, Eye, FileText, Upload, Check, Download } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
+import Pagination from "../../../components/Pagination";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+const PAGE_SIZE = 50;
+
+// Only the columns formatRecord reads (was select("*"))
+const LAB_COLUMNS =
+  "id, admission_no, patient_name, phone_no, age, gender, bed_no, location, ward_type, room, reason_for_visit, category, priority, pathology_tests, report_url, lab_report_remarks, planned1, actual1, planned3, actual3, payment_status";
+
+// Format a raw lab record into the component's UI model
+const formatRecord = (record) => ({
+  id: record.id,
+  uniqueNumber: record.admission_no || "N/A",
+  patientName: record.patient_name || "N/A",
+  phoneNumber: record.phone_no || "N/A",
+  age: record.age || "N/A",
+  gender: record.gender || "N/A",
+  bedNo: record.bed_no || "N/A",
+  location: record.location || "N/A",
+  wardType: record.ward_type || "N/A",
+  room: record.room || "N/A",
+  reasonForVisit: record.reason_for_visit || "N/A",
+  adviceNo: record.admission_no || "N/A",
+  category: record.category,
+  priority: record.priority,
+  pathologyTests: record.pathology_tests || [],
+  pathologyReport: record.report_url,
+  pathologyRemarks: record.lab_report_remarks,
+  pathologyCompletedDate: record.actual3,
+  planned1: record.planned1,
+  planned3: record.planned3,
+  actual3: record.actual3,
+  actual1: record.actual1,
+  paymentStatus: record.payment_status,
+  paymentId: record.id,
+  admissionNo: record.admission_no,
+});
+
+// Same conditions as the pending / history queries below
+const isPendingRow = (row) =>
+  row.category === "Pathology" &&
+  row.payment_status === "Yes" &&
+  !!row.planned3 &&
+  !row.actual3;
+const isHistoryRow = (row) =>
+  row.category === "Pathology" && !!row.planned3 && !!row.actual3;
+
+// Completed pathology records (planned3 and actual3 set)
+const historyQuery = (columns, options) =>
+  supabase
+    .from("lab")
+    .select(columns, options)
+    .eq("category", "Pathology")
+    .not("planned3", "is", null)
+    .not("actual3", "is", null);
 
 const Pathology = () => {
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTabState] = useState("pending");
   const [pendingRecords, setPendingRecords] = useState([]);
   const [historyRecords, setHistoryRecords] = useState([]);
+  // History is paged on the server (loading it whole was cut at 1,000 rows)
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyStats, setHistoryStats] = useState({ total: 0, high: 0 });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -15,10 +77,45 @@ const Pathology = () => {
   const [reportPreview, setReportPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [selectedPatient, setSelectedPatient] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedPatient, setSelectedPatientState] = useState("");
+  const [selectedDate, setSelectedDateState] = useState("");
   const [patientNames, setPatientNames] = useState([]);
   const { showNotification } = useNotification();
+
+  // A new tab or filter starts the history list again at page 0
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    setHistoryPage(0);
+  };
+  const setSelectedPatient = (name) => {
+    setSelectedPatientState(name);
+    setHistoryPage(0);
+  };
+  const setSelectedDate = (date) => {
+    setSelectedDateState(date);
+    setHistoryPage(0);
+  };
+
+  // Latest lists for the realtime handler (it is created once, on mount)
+  const pendingRef = useRef([]);
+  const historyRef = useRef([]);
+  useEffect(() => {
+    pendingRef.current = pendingRecords;
+  }, [pendingRecords]);
+  useEffect(() => {
+    historyRef.current = historyRecords;
+  }, [historyRecords]);
+
+  // Re-reads the history page and counts once; a save and its own realtime
+  // event (or a burst of events) arrive within this window and share one fetch.
+  const historyTimer = useRef(null);
+  const refreshHistory = () => {
+    clearTimeout(historyTimer.current);
+    historyTimer.current = setTimeout(
+      () => setHistoryVersion((v) => v + 1),
+      1000,
+    );
+  };
 
   const [formData, setFormData] = useState({
     report: null,
@@ -29,35 +126,6 @@ const Pathology = () => {
   useEffect(() => {
     loadData();
 
-    // Format a raw lab record into the component's UI model
-    const formatRecord = (record) => ({
-      id: record.id,
-      uniqueNumber: record.admission_no || "N/A",
-      patientName: record.patient_name || "N/A",
-      phoneNumber: record.phone_no || "N/A",
-      age: record.age || "N/A",
-      gender: record.gender || "N/A",
-      bedNo: record.bed_no || "N/A",
-      location: record.location || "N/A",
-      wardType: record.ward_type || "N/A",
-      room: record.room || "N/A",
-      reasonForVisit: record.reason_for_visit || "N/A",
-      adviceNo: record.admission_no || "N/A",
-      category: record.category,
-      priority: record.priority,
-      pathologyTests: record.pathology_tests || [],
-      pathologyReport: record.report_url,
-      pathologyRemarks: record.lab_report_remarks,
-      pathologyCompletedDate: record.actual3,
-      planned1: record.planned1,
-      planned3: record.planned3,
-      actual3: record.actual3,
-      actual1: record.actual1,
-      paymentStatus: record.payment_status,
-      paymentId: record.id,
-      admissionNo: record.admission_no,
-    });
-
     // Incrementally update state from a single realtime event
     const handleRealtimeChange = (payload) => {
       const { eventType, new: newRow, old: oldRow } = payload;
@@ -66,33 +134,38 @@ const Pathology = () => {
         const id = oldRow?.id;
         if (!id) return;
         setPendingRecords((prev) => prev.filter((r) => r.id !== id));
-        setHistoryRecords((prev) => prev.filter((r) => r.id !== id));
+        refreshHistory(); // the row may be on any history page
         return;
       }
 
       const row = newRow;
       if (!row) return;
 
-      const isRelevant = row.category === "Pathology";
+      const wasPending = pendingRef.current.some((r) => r.id === row.id);
+      const onHistoryPage = historyRef.current.some((r) => r.id === row.id);
 
       setPendingRecords((prev) => prev.filter((r) => r.id !== row.id));
-      setHistoryRecords((prev) => prev.filter((r) => r.id !== row.id));
-
-      if (!isRelevant) return;
-
-      const formatted = formatRecord(row);
-
-      if (row.planned3 && !row.actual3 && row.payment_status === "Yes") {
-        setPendingRecords((prev) => [formatted, ...prev]);
-      } else if (row.planned3 && row.actual3) {
-        setHistoryRecords((prev) => [formatted, ...prev]);
+      if (isPendingRow(row)) {
+        setPendingRecords((prev) => [formatRecord(row), ...prev]);
       }
 
-      if (formatted.patientName && formatted.patientName !== "N/A") {
+      // History is paged on the server: re-read it when this row is (or was)
+      // part of it, instead of patching one page
+      if (
+        onHistoryPage ||
+        isHistoryRow(row) ||
+        (isPendingRow(row) && !wasPending)
+      ) {
+        refreshHistory();
+      }
+
+      if (row.category !== "Pathology") return;
+
+      if (row.patient_name) {
         setPatientNames((prev) =>
-          prev.includes(formatted.patientName)
+          prev.includes(row.patient_name)
             ? prev
-            : [...prev, formatted.patientName].sort(),
+            : [...prev, row.patient_name].sort(),
         );
       }
     };
@@ -113,100 +186,106 @@ const Pathology = () => {
       .subscribe();
 
     return () => {
+      clearTimeout(historyTimer.current);
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // History page + the history-wide counts used by the stat cards
+  useEffect(() => {
+    let ignore = false;
+
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      try {
+        const from = historyPage * PAGE_SIZE;
+        let pageQuery = historyQuery(LAB_COLUMNS, { count: "exact" })
+          .order("actual3", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        // Same filters as the pending tab, run on the server
+        if (selectedPatient) {
+          pageQuery = pageQuery.eq("patient_name", selectedPatient);
+        }
+        if (selectedDate) {
+          pageQuery = pageQuery
+            .gte("planned3", `${selectedDate} 00:00:00`)
+            .lte("planned3", `${selectedDate} 23:59:59.999`);
+        }
+
+        const [pageRes, totalRes, highRes] = await Promise.all([
+          pageQuery,
+          historyQuery("id", { count: "exact", head: true }),
+          historyQuery("id", { count: "exact", head: true }).eq(
+            "priority",
+            "High",
+          ),
+        ]);
+        const error = pageRes.error || totalRes.error || highRes.error;
+        if (error) throw error;
+        if (ignore) return;
+
+        const total = pageRes.count ?? 0;
+        // The page can run past the end after rows move out of history
+        if (!pageRes.data?.length && historyPage > 0 && total > 0) {
+          setHistoryPage(Math.ceil(total / PAGE_SIZE) - 1);
+          return;
+        }
+
+        setHistoryRecords((pageRes.data || []).map(formatRecord));
+        setHistoryTotal(total);
+        setHistoryStats({
+          total: totalRes.count ?? 0,
+          high: highRes.count ?? 0,
+        });
+      } catch (error) {
+        console.error("Failed to load history:", error);
+        if (!ignore) setModalError("Failed to load data. Please try again.");
+      } finally {
+        if (!ignore) {
+          setHistoryLoading(false);
+          setHistoryReady(true);
+        }
+      }
+    };
+
+    loadHistory();
+    return () => {
+      ignore = true;
+    };
+  }, [historyPage, selectedPatient, selectedDate, historyVersion]);
 
   const loadData = async (silent = false) => {
     try {
       if (!silent) setInitialLoading(true);
 
-      // Load pending pathology records from lab table
-      // Conditions: category = 'Pathology', planned1 IS NOT NULL, actual1 IS NULL, payment_status IS NOT NULL
-      const { data: pendingData, error: pendingError } = await supabase
-        .from("lab")
-        .select(`*`)
-        .eq("category", "Pathology")
-        .eq("payment_status", "Yes")
-        .not("planned3", "is", null)
-        .is("actual3", null)
-        .order("timestamp", { ascending: false });
+      const [pendingData, historyNames] = await Promise.all([
+        // Pending queue: category = 'Pathology', payment_status = 'Yes', planned3 set, actual3 empty.
+        // It is short, so it is loaded whole (in 1,000-row chunks, never cut off).
+        fetchAllRows((from, to) =>
+          supabase
+            .from("lab")
+            .select(LAB_COLUMNS)
+            .eq("category", "Pathology")
+            .eq("payment_status", "Yes")
+            .not("planned3", "is", null)
+            .is("actual3", null)
+            .order("timestamp", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to),
+        ),
+        // The patient filter lists everyone in pending + all of history,
+        // so only the name column of history is read here
+        fetchAllRows((from, to) =>
+          historyQuery("patient_name").order("id").range(from, to),
+        ),
+      ]);
 
-      if (pendingError) throw pendingError;
-
-      const formattedPending = pendingData.map((record) => {
-        return {
-          id: record.id,
-          uniqueNumber: record.admission_no || "N/A",
-          patientName: record.patient_name || "N/A",
-          phoneNumber: record.phone_no || "N/A",
-          age: record.age || "N/A", // Corrected: age column
-          gender: record.gender || "N/A",
-          bedNo: record.bed_no || "N/A", // Corrected: bed_no column
-          location: record.location || "N/A",
-          wardType: record.ward_type || "N/A", // Corrected: ward_type column
-          room: record.room || "N/A",
-          reasonForVisit: record.reason_for_visit || "N/A",
-          adviceNo: record.admission_no || "N/A",
-          category: record.category,
-          priority: record.priority,
-          pathologyTests: record.pathology_tests || [],
-          planned1: record.planned1,
-          planned3: record.planned3,
-          actual1: record.actual1, // Corrected: actual1 column
-          paymentStatus: record.payment_status,
-          paymentId: record.id,
-          admissionNo: record.admission_no,
-        };
-      });
-
-      setPendingRecords(formattedPending);
-
-      // Load completed pathology records (pathology_report IS NOT NULL)
-      const { data: historyData, error: historyError } = await supabase
-        .from("lab")
-        .select(`*`)
-        .eq("category", "Pathology")
-        .not("planned3", "is", null)
-        .not("actual3", "is", null)
-        .order("actual3", { ascending: false });
-
-      if (historyError) throw historyError;
-
-      const formattedHistory = historyData.map((record) => {
-        return {
-          id: record.id,
-          uniqueNumber: record.admission_no || "N/A",
-          patientName: record.patient_name || "N/A",
-          phoneNumber: record.phone_no || "N/A",
-          age: record.age || "N/A", // Corrected: age column
-          gender: record.gender || "N/A",
-          bedNo: record.bed_no || "N/A", // Corrected: bed_no column
-          location: record.location || "N/A",
-          wardType: record.ward_type || "N/A", // Corrected: ward_type column
-          room: record.room || "N/A",
-          reasonForVisit: record.reason_for_visit || "N/A",
-          adviceNo: record.admission_no || "N/A",
-          category: record.category,
-          priority: record.priority,
-          pathologyTests: record.pathology_tests || [],
-          pathologyReport: record.report_url,
-          pathologyRemarks: record.lab_report_remarks,
-          pathologyCompletedDate: record.actual3,
-          planned1: record.planned1,
-          planned3: record.planned3,
-          actual3: record.actual3,
-          actual1: record.actual1, // Corrected: actual1 column
-          paymentStatus: record.payment_status,
-          paymentId: record.id,
-          admissionNo: record.admission_no,
-        };
-      });
-
-      setHistoryRecords(formattedHistory);
+      setPendingRecords(pendingData.map(formatRecord));
 
       // Extract unique patient names for filter
-      const allRecords = [...pendingData, ...historyData];
+      const allRecords = [...pendingData, ...historyNames];
       const uniqueNames = [
         ...new Set(allRecords.map((item) => item.patient_name).filter(Boolean)),
       ];
@@ -333,8 +412,13 @@ const Pathology = () => {
 
       if (updateError) throw updateError;
 
-      // Reload data
-      await loadData();
+      // The record leaves the pending queue and joins history. Patch the queue
+      // here and re-read history once, instead of a full reload that the
+      // realtime event for this same update would repeat.
+      setPendingRecords((prev) =>
+        prev.filter((r) => r.id !== selectedRecord.id),
+      );
+      refreshHistory();
 
       setShowModal(false);
       resetForm();
@@ -387,7 +471,7 @@ const Pathology = () => {
     }
   };
 
-  // Apply filters to records
+  // Apply filters to the pending queue (history is filtered on the server)
   const applyFilters = (records) => {
     return records.filter((record) => {
       // Filter by patient name
@@ -395,11 +479,12 @@ const Pathology = () => {
         return false;
       }
 
-      // Filter by date (match with planned3 date)
+      // Filter by date (match with planned3 date). Local date, as shown in
+      // the Planned column and as the server-side history filter uses.
       if (selectedDate && record.planned3) {
-        const planned3Date = new Date(record.planned3)
-          .toISOString()
-          .split("T")[0];
+        const planned3Date = new Date(record.planned3).toLocaleDateString(
+          "en-CA",
+        );
         if (planned3Date !== selectedDate) {
           return false;
         }
@@ -411,15 +496,15 @@ const Pathology = () => {
 
   // Get filtered data
   const filteredPendingRecords = applyFilters(pendingRecords);
-  const filteredHistoryRecords = applyFilters(historyRecords);
+  const filteredHistoryRecords = historyRecords; // already filtered and paged
 
-  // Calculate statistics
-  const totalRecords = pendingRecords.length + historyRecords.length;
-  const highPriorityCount = [...pendingRecords, ...historyRecords].filter(
-    (r) => r.priority === "High",
-  ).length;
+  // Calculate statistics (history part counted on the server)
+  const totalRecords = pendingRecords.length + historyStats.total;
+  const highPriorityCount =
+    pendingRecords.filter((r) => r.priority === "High").length +
+    historyStats.high;
 
-  if (initialLoading) {
+  if (initialLoading || !historyReady) {
     return (
       <div className="flex items-center justify-center min-h-screen p-6 bg-gray-50">
         <div className="text-center">
@@ -473,7 +558,7 @@ const Pathology = () => {
                 Completed
               </span>
               <span className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
-                {historyRecords.length}
+                {historyStats.total}
               </span>
             </div>
           </div>
@@ -514,7 +599,7 @@ const Pathology = () => {
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                History ({filteredHistoryRecords.length})
+                History ({historyTotal})
               </button>
             </nav>
 
@@ -579,7 +664,7 @@ const Pathology = () => {
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                History ({filteredHistoryRecords.length})
+                History ({historyTotal})
               </button>
             </nav>
 
@@ -1075,6 +1160,17 @@ const Pathology = () => {
                   </p>
                 </div>
               )}
+            </div>
+
+            <div className="mt-3 overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+              <Pagination
+                page={historyPage}
+                pageSize={PAGE_SIZE}
+                total={historyTotal}
+                onPageChange={setHistoryPage}
+                disabled={historyLoading}
+                label="records"
+              />
             </div>
           </>
         )}

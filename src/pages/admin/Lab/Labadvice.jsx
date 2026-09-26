@@ -1,13 +1,87 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Plus, X, Eye, FileText, CheckCircle, Search } from "lucide-react";
 import supabase from "../../../SupabaseClient"; // Adjust import path
 import { useNotification } from "../../../contexts/NotificationContext";
 import { useAuth } from "../../../contexts/AuthContext";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import Pagination from "../../../components/Pagination";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+const PAGE_SIZE = 50;
+
+// ipd_admissions columns used by the pending table and the advice form (was select("*"))
+const IPD_COLUMNS =
+  "id, admission_no, patient_name, consultant_dr, refer_by_dr, phone_no, whatsapp_no, father_husband_name, age, gender, adm_purpose, bed_no, location_status, ward_type, room, department, timestamp, ipd_number";
+
+// lab columns used by the history table and the view modal (was select("*"))
+const LAB_COLUMNS =
+  "id, lab_no, admission_no, patient_name, phone_no, father_husband_name, age, gender, reason_for_visit, bed_no, location, ward_type, room, department, priority, category, pathology_tests, radiology_type, radiology_tests, remarks, timestamp, ipd_number, created_by_nurse";
+
+// Transform an ipd_admissions row for the pending list
+const formatPending = (patient) => ({
+  id: patient.id,
+  admission_no: patient.admission_no,
+  uniqueNumber: patient.admission_no,
+  patientName: patient.patient_name,
+  consultantDr: patient.consultant_dr,
+  referByDr: patient.refer_by_dr,
+  phoneNumber: patient.phone_no || patient.whatsapp_no,
+  fatherHusband: patient.father_husband_name,
+  age: patient.age,
+  gender: patient.gender,
+  reasonForVisit: patient.adm_purpose || "N/A",
+  bedNo: patient.bed_no || "Not assigned",
+  location: patient.location_status || "General Ward",
+  wardType: patient.ward_type || "General",
+  room: patient.room || "Not assigned",
+  department: patient.department,
+  timestamp: patient.timestamp,
+  ipd_number: patient.ipd_number,
+});
+
+// Transform a lab row for the history list
+const formatHistory = (record) => ({
+  id: record.id,
+  adviceId: record.id,
+  adviceNo: record.lab_no,
+  admission_no: record.admission_no,
+  uniqueNumber: record.admission_no,
+  patientName: record.patient_name,
+  phoneNumber: record.phone_no,
+  fatherHusband: record.father_husband_name,
+  age: record.age,
+  gender: record.gender,
+  reasonForVisit: record.reason_for_visit,
+  bedNo: record.bed_no,
+  location: record.location,
+  wardType: record.ward_type,
+  room: record.room,
+  department: record.department,
+  priority: record.priority,
+  category: record.category,
+  pathologyTests: record.pathology_tests || [],
+  radiologyType: record.radiology_type || "",
+  radiologyTests: record.radiology_tests || [],
+  remarks: record.remarks || "",
+  completedDate: record.timestamp,
+  ipd_number: record.ipd_number,
+  timestamp: record.timestamp,
+  created_by_nurse: record.created_by_nurse,
+});
 
 const LabAdvice = () => {
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTabState] = useState("pending");
+  // Pending list: ids of every pending admission (in list order) + the rows of
+  // the page shown. Both lists are paged; loading them whole was cut at 1,000.
+  const [pendingIds, setPendingIds] = useState([]);
   const [pendingAdvices, setPendingAdvices] = useState([]);
+  const [pendingPage, setPendingPage] = useState(0);
+  const [pendingLoading, setPendingLoading] = useState(false);
   const [historyAdvices, setHistoryAdvices] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewingRecord, setViewingRecord] = useState(null);
@@ -29,53 +103,49 @@ const LabAdvice = () => {
     remarks: "",
   });
 
+  // Switching tabs starts that list again at page 0
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    setPendingPage(0);
+    setHistoryPage(0);
+  };
+
   // Load data from Supabase
   useEffect(() => {
-    loadData();
-
-    // Set up real-time subscription for lab table
-    const setupRealtimeSubscription = () => {
-      const channel = supabase.channel("lab_changes");
-
-      // Refresh history when a lab record changes
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "lab",
-        },
-        () => {
-          loadData();
-        },
-      );
-
-      // Refresh pending list when an ipd_admissions record changes (e.g., lab advice created via patient profile)
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "ipd_admissions",
-        },
-        () => {
-          loadData();
-        },
-      );
-
-      channel.subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    };
-
-    const cleanup = setupRealtimeSubscription();
-
-    return () => {
-      cleanup();
-    };
+    loadPendingIds();
   }, []);
+
+  // Pending ids as a Set, for the realtime filter below
+  const pendingIdSet = useRef(new Set());
+  useEffect(() => {
+    pendingIdSet.current = new Set(pendingIds);
+  }, [pendingIds]);
+
+  // Lab records inserted by this page; their realtime event is skipped because
+  // handleSubmit already reloads after the insert
+  const ownInserts = useRef(new Set());
+
+  // Shared, debounced realtime channels (was its own channel that reran every
+  // query on each single event).
+  // Refresh history + pending when a lab record changes
+  useRealtimeTable("lab", () => loadData(), true, (payload) => {
+    if (
+      payload.eventType === "INSERT" &&
+      ownInserts.current.delete(payload.new?.id)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  // Refresh pending list when an ipd_admissions record changes (e.g., lab advice created via patient profile).
+  // Only admissions that are pending-eligible, or already in the list, can change it.
+  useRealtimeTable("ipd_admissions", () => loadPendingIds(), true, (payload) => {
+    const row = payload.new;
+    const id = row?.id ?? payload.old?.id;
+    if (pendingIdSet.current.has(id)) return true;
+    return !!row?.planned1 && !row?.actual1;
+  });
 
   // Show success popup (legacy - use showNotification)
   const showSuccessNotification = (message) => {
@@ -136,137 +206,125 @@ const LabAdvice = () => {
     loadTests();
   }, [formData.category, formData.radiologyType]);
 
-  // Load pending data from ipd_admissions table
-  const loadPendingData = async () => {
+  // Pending = admissions with planned1 set and actual1 empty that have no lab
+  // record yet. The database works this out (view lab_advice_pending), so only
+  // the pending ids are downloaded; only the rows of the page shown are read in
+  // full below. (select("*") of every pending admission was cut at 1,000 rows.)
+  const loadPendingIds = async () => {
     try {
       setIsLoading(true);
 
-      // Fetch from ipd_admissions where planned1 is not null and actual1 is null
-      const { data: pendingPatients, error } = await supabase
-        .from("ipd_admissions")
-        .select("*")
-        .not("planned1", "is", null) // planned1 is not null
-        .is("actual1", null) // actual1 is null
-        .order("timestamp", { ascending: false });
-
-      if (error) {
-        console.error("Error loading pending lab advices:", error);
-        return [];
-      }
-
-      // Filter out patients who already have a lab advice record (so they do not stay in the pending list)
-      const admissionNos = (pendingPatients || []).map((p) => p.admission_no);
-      let existingLabRecords = [];
-
-      if (admissionNos.length > 0) {
-        const { data } = await supabase
-          .from("lab")
-          .select("admission_no")
-          .in("admission_no", admissionNos);
-
-        existingLabRecords = data || [];
-      }
-
-      const existingLabAdmissionNos = new Set(
-        existingLabRecords.map((r) => r.admission_no),
+      const pending = await fetchAllRows((from, to) =>
+        supabase
+          .from("lab_advice_pending")
+          .select("id")
+          .order("timestamp", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to),
       );
 
-      const filteredPatients = pendingPatients.filter(
-        (patient) => !existingLabAdmissionNos.has(patient.admission_no),
-      );
-
-      // Transform data for the component
-      const transformedData = filteredPatients.map((patient) => ({
-        id: patient.id,
-        admission_no: patient.admission_no,
-        uniqueNumber: patient.admission_no,
-        patientName: patient.patient_name,
-        consultantDr: patient.consultant_dr,
-        referByDr: patient.refer_by_dr,
-        phoneNumber: patient.phone_no || patient.whatsapp_no,
-        fatherHusband: patient.father_husband_name,
-        age: patient.age,
-        gender: patient.gender,
-        reasonForVisit: patient.adm_purpose || "N/A",
-        bedNo: patient.bed_no || "Not assigned",
-        location: patient.location_status || "General Ward",
-        wardType: patient.ward_type || "General",
-        room: patient.room || "Not assigned",
-        department: patient.department,
-        timestamp: patient.timestamp,
-        ipd_number: patient.ipd_number,
-      }));
-
-      return transformedData;
+      setPendingIds(pending.map((patient) => patient.id));
     } catch (error) {
-      console.error("Failed to load pending data:", error);
-      return [];
-    }
-  };
-
-  // Load history data from lab table
-  const loadHistoryData = async () => {
-    try {
-      const { data: labRecords, error } = await supabase
-        .from("lab")
-        .select("*")
-        .order("timestamp", { ascending: false });
-
-      if (error) {
-        console.error("Error loading lab history:", error);
-        return [];
-      }
-
-      // Transform data for the component
-      const transformedData = labRecords.map((record) => ({
-        id: record.id,
-        adviceId: record.id,
-        adviceNo: record.lab_no,
-        admission_no: record.admission_no,
-        uniqueNumber: record.admission_no,
-        patientName: record.patient_name,
-        phoneNumber: record.phone_no,
-        fatherHusband: record.father_husband_name,
-        age: record.age,
-        gender: record.gender,
-        reasonForVisit: record.reason_for_visit,
-        bedNo: record.bed_no,
-        location: record.location,
-        wardType: record.ward_type,
-        room: record.room,
-        department: record.department,
-        priority: record.priority,
-        category: record.category,
-        pathologyTests: record.pathology_tests || [],
-        radiologyType: record.radiology_type || "",
-        radiologyTests: record.radiology_tests || [],
-        remarks: record.remarks || "",
-        completedDate: record.timestamp,
-        ipd_number: record.ipd_number,
-        timestamp: record.timestamp,
-        created_by_nurse: record.created_by_nurse,
-      }));
-
-      return transformedData;
-    } catch (error) {
-      console.error("Failed to load history data:", error);
-      return [];
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      const pendingData = await loadPendingData();
-      const historyData = await loadHistoryData();
-
-      setPendingAdvices(pendingData);
-      setHistoryAdvices(historyData);
-    } catch (error) {
-      console.error("Failed to load data:", error);
+      console.error("Error loading pending lab advices:", error);
+      setPendingIds([]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Rows of the pending page shown (re-read when the id list or page changes)
+  useEffect(() => {
+    let ignore = false;
+
+    const lastPage = Math.max(0, Math.ceil(pendingIds.length / PAGE_SIZE) - 1);
+    if (pendingPage > lastPage) {
+      setPendingPage(lastPage); // the list got shorter
+      return;
+    }
+
+    const pageIds = pendingIds.slice(
+      pendingPage * PAGE_SIZE,
+      (pendingPage + 1) * PAGE_SIZE,
+    );
+    if (pageIds.length === 0) {
+      setPendingAdvices([]);
+      return;
+    }
+
+    const loadPendingPage = async () => {
+      setPendingLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("ipd_admissions")
+          .select(IPD_COLUMNS)
+          .in("id", pageIds);
+
+        if (error) throw error;
+        if (ignore) return;
+
+        // Keep the list order (newest admission first)
+        const byId = new Map((data || []).map((p) => [p.id, p]));
+        setPendingAdvices(
+          pageIds
+            .map((id) => byId.get(id))
+            .filter(Boolean)
+            .map(formatPending),
+        );
+      } catch (error) {
+        console.error("Failed to load pending data:", error);
+        if (!ignore) setPendingAdvices([]);
+      } finally {
+        if (!ignore) setPendingLoading(false);
+      }
+    };
+
+    loadPendingPage();
+    return () => {
+      ignore = true;
+    };
+  }, [pendingIds, pendingPage]);
+
+  // Load history data from lab table, one page at a time
+  useEffect(() => {
+    let ignore = false;
+
+    const loadHistoryPage = async () => {
+      setHistoryLoading(true);
+      try {
+        const from = historyPage * PAGE_SIZE;
+        const { data: labRecords, error, count } = await supabase
+          .from("lab")
+          .select(LAB_COLUMNS, { count: "exact" })
+          .order("timestamp", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (ignore) return;
+
+        setHistoryAdvices((labRecords || []).map(formatHistory));
+        setHistoryTotal(count ?? 0);
+      } catch (error) {
+        console.error("Error loading lab history:", error);
+        if (!ignore) {
+          setHistoryAdvices([]);
+          setHistoryTotal(0);
+        }
+      } finally {
+        if (!ignore) setHistoryLoading(false);
+      }
+    };
+
+    loadHistoryPage();
+    return () => {
+      ignore = true;
+    };
+  }, [historyPage, historyVersion]);
+
+  // Full refresh: pending ids (-> pending page) and the history page
+  const loadData = async () => {
+    setHistoryVersion((v) => v + 1);
+    await loadPendingIds();
   };
 
   // Generate lab number based on latest record
@@ -427,11 +485,14 @@ const LabAdvice = () => {
       const { data: labResult, error: labError } = await supabase
         .from("lab")
         .insert(labData)
-        .select();
+        .select("id");
 
       if (labError) {
         throw new Error(`Failed to save lab record: ${labError.message}`);
       }
+
+      // The reload below covers this insert; skip its realtime event
+      (labResult || []).forEach((r) => ownInserts.current.add(r.id));
 
       // Reload data (we keep the IPD admission active; lab advice is tracked in the `lab` table)
       await loadData();
@@ -498,7 +559,7 @@ const LabAdvice = () => {
                   : "text-gray-600 hover:bg-gray-200"
               }`}
             >
-              PENDING ({pendingAdvices.length})
+              PENDING ({pendingIds.length})
             </button>
             <button
               onClick={() => setActiveTab("history")}
@@ -508,7 +569,7 @@ const LabAdvice = () => {
                   : "text-gray-600 hover:bg-gray-200"
               }`}
             >
-              HISTORY ({historyAdvices.length})
+              HISTORY ({historyTotal})
             </button>
           </div>
         </div>
@@ -650,6 +711,14 @@ const LabAdvice = () => {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={pendingPage}
+                pageSize={PAGE_SIZE}
+                total={pendingIds.length}
+                onPageChange={setPendingPage}
+                disabled={pendingLoading}
+                label="patients"
+              />
             </div>
 
             {/* Mobile Card View */}
@@ -717,6 +786,16 @@ const LabAdvice = () => {
                   </p>
                 </div>
               )}
+              <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+                <Pagination
+                  page={pendingPage}
+                  pageSize={PAGE_SIZE}
+                  total={pendingIds.length}
+                  onPageChange={setPendingPage}
+                  disabled={pendingLoading}
+                  label="patients"
+                />
+              </div>
             </div>
           </>
         )}
@@ -881,6 +960,14 @@ const LabAdvice = () => {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={historyPage}
+                pageSize={PAGE_SIZE}
+                total={historyTotal}
+                onPageChange={setHistoryPage}
+                disabled={historyLoading}
+                label="records"
+              />
             </div>
 
             {/* Mobile Card View */}
@@ -967,6 +1054,16 @@ const LabAdvice = () => {
                   </p>
                 </div>
               )}
+              <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+                <Pagination
+                  page={historyPage}
+                  pageSize={PAGE_SIZE}
+                  total={historyTotal}
+                  onPageChange={setHistoryPage}
+                  disabled={historyLoading}
+                  label="records"
+                />
+              </div>
             </div>
           </>
         )}

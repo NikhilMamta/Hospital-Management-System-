@@ -22,6 +22,16 @@ import {
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import useDebounce from "../../../hooks/useDebounce";
+
+// Columns used by the table, the mobile cards and the edit/complete actions
+const TASK_COLUMNS =
+  "id, task_no, start_date, Ipd_number, patient_name, patient_location, bed_no, assign_nurse, shift, task, reminder, ward_type, room, timestamp, planned1, actual1, staff";
+
+const TASK_SEARCH_COLUMNS = ["patient_name", "Ipd_number", "task_no", "task"];
+
+// Most matches a search returns (the old page searched only the newest 1,000 tasks)
+const SEARCH_LIMIT = 1000;
 
 const TaskList = () => {
   const [activeTab, setActiveTab] = useState("Pending");
@@ -72,6 +82,10 @@ const TaskList = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [totalTaskCount, setTotalTaskCount] = useState(0);
+  const debouncedSearch = useDebounce(searchTerm, 400);
+  const loadSeqRef = useRef(0);
+  const lastLoadedTabRef = useRef(null);
 
   const tableRef = useRef(null);
   const refreshIntervalRef = useRef(null);
@@ -400,13 +414,30 @@ const TaskList = () => {
     }
   };
 
-  // Load tasks from database
+  // Load one page of tasks. The tab, search and date filters run in the database,
+  // so every task can be found (fetching the whole table stopped at 1,000 rows).
   const loadTasks = useCallback(
     async (showLoading = true) => {
+      // Ignore responses that arrive after a newer request (fast page clicks)
+      const seq = ++loadSeqRef.current;
       try {
         if (showLoading) setLoading(true);
 
-        let query = supabase.from("nurse_assign_task").select("*");
+        // Drop characters that have a meaning in PostgREST's or() filter syntax
+        const term = debouncedSearch.replace(/[,()"\\]/g, " ").trim();
+
+        // "estimated" is exact for small results and a fast planner estimate for
+        // very large ones (an exact count of 100k+ pending tasks took ~0.8 s).
+        let query = supabase
+          .from("nurse_assign_task")
+          .select(TASK_COLUMNS, term ? undefined : { count: "estimated" })
+          .not("planned1", "is", null);
+
+        // Pending: planned1 set, actual1 empty. History: both set.
+        query =
+          activeTab === "History"
+            ? query.not("actual1", "is", null)
+            : query.is("actual1", null);
 
         // Apply role-based filtering
         if (
@@ -419,11 +450,48 @@ const TaskList = () => {
           query = query.ilike("assign_nurse", `%${normalizedUserName}%`);
         }
 
-        const { data, error } = await query
-          .order("timestamp", { ascending: false })
-          .order("id", { ascending: false });
+        if (filterDate) {
+          query = query.eq("start_date", filterDate);
+        }
 
-        if (error) throw error;
+        const from = (currentPage - 1) * itemsPerPage;
+        let data;
+        let count;
+
+        if (term) {
+          // Search: fetch up to SEARCH_LIMIT matches WITHOUT an ORDER BY, then sort
+          // and page them here. Under RLS Postgres can't use column statistics for
+          // ilike, so "ORDER BY timestamp LIMIT 10" made it walk all 500k rows
+          // whenever few rows matched (7.6 s, timeout). Without ORDER BY it uses
+          // the trigram indexes and answers in milliseconds.
+          const { data: matches, error } = await query
+            .or(TASK_SEARCH_COLUMNS.map((col) => `${col}.ilike."%${term}%"`).join(","))
+            .limit(SEARCH_LIMIT);
+
+          if (seq !== loadSeqRef.current) return;
+          if (error) throw error;
+
+          const sorted = (matches || []).sort(
+            (a, b) =>
+              String(b.timestamp || "").localeCompare(String(a.timestamp || "")) ||
+              b.id - a.id,
+          );
+          count = sorted.length;
+          data = sorted.slice(from, from + itemsPerPage);
+        } else {
+          const result = await query
+            .order("timestamp", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, from + itemsPerPage - 1);
+
+          if (seq !== loadSeqRef.current) return;
+          if (result.error) throw result.error;
+
+          data = result.data;
+          count = result.count;
+        }
+
+        setTotalTaskCount(count ?? 0);
 
         if (data) {
           const transformedTasks = data.map((task) => {
@@ -499,10 +567,10 @@ const TaskList = () => {
         console.error("Error loading tasks:", error);
         showNotification("Error loading tasks from database", "error");
       } finally {
-        if (showLoading) setLoading(false);
+        if (showLoading && seq === loadSeqRef.current) setLoading(false);
       }
     },
-    [userRole, userName],
+    [userRole, userName, activeTab, filterDate, debouncedSearch, currentPage, itemsPerPage],
   );
 
   // Handle bed selection
@@ -685,7 +753,6 @@ const TaskList = () => {
 
   useEffect(() => {
     if (!userRole) return;
-    loadTasks(true); // Initial load with spinner
     loadPredefinedTasks();
     loadAvailableNurses();
 
@@ -694,7 +761,16 @@ const TaskList = () => {
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [loadTasks, loadPredefinedTasks, loadAvailableNurses, userRole, userName]);
+  }, [loadPredefinedTasks, loadAvailableNurses, userRole, userName]);
+
+  // (Re)load the task page. Spinner on first load and when switching tabs;
+  // page, search and date changes swap the rows quietly.
+  useEffect(() => {
+    if (!userRole) return;
+    const tabChanged = lastLoadedTabRef.current !== activeTab;
+    lastLoadedTabRef.current = activeTab;
+    loadTasks(tabChanged);
+  }, [loadTasks, userRole, activeTab]);
 
   // Load occupied beds when add task modal opens
   useEffect(() => {
@@ -864,42 +940,29 @@ const TaskList = () => {
       )
     : availableNurses;
 
-  // Filter tasks based on active tab
-  const filteredTasks = tasks.filter((task) => {
-    const matchesSearch =
-      task.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.ipdNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.taskId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.taskNames?.some((taskName) =>
-        taskName.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-
-    const matchesDate = filterDate ? task.taskStartDate === filterDate : true;
-
-    if (!matchesSearch || !matchesDate) return false;
-
-    // Filter based on planned1 and actual1 conditions
-    if (activeTab === "Pending") {
-      // Show tasks where planned1 is not null AND actual1 is null
-      return task.planned1 && !task.actual1;
-    } else if (activeTab === "History") {
-      // Show tasks where planned1 is not null AND actual1 is not null
-      return task.planned1 && task.actual1;
-    }
-
-    return false;
-  });
+  // Rows of the current page (search, date and tab are filtered in loadTasks).
+  // The tab check is repeated here so a task completed on this page leaves the
+  // Pending list at once; the realtime reload then brings in the next task.
+  const paginatedTasks = tasks.filter((task) =>
+    activeTab === "History"
+      ? task.planned1 && task.actual1
+      : task.planned1 && !task.actual1,
+  );
 
   // Reset current page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterDate, activeTab]);
+  }, [debouncedSearch, filterDate, activeTab]);
 
   // Calculate pagination
-  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(totalTaskCount / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
+
+  // If tasks disappear (completed elsewhere), don't stay on a page past the end
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   // Toggle card expansion on mobile
   const toggleCardExpansion = (taskId) => {
@@ -2061,9 +2124,9 @@ const TaskList = () => {
         <div className="text-sm text-gray-600">
           Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
           <span className="font-medium">
-            {Math.min(endIndex, filteredTasks.length)}
+            {Math.min(endIndex, totalTaskCount)}
           </span>{" "}
-          of <span className="font-medium">{filteredTasks.length}</span> tasks
+          of <span className="font-medium">{totalTaskCount}</span> tasks
         </div>
 
         <div className="flex items-center gap-2">
@@ -2264,7 +2327,7 @@ const TaskList = () => {
                         </tr>
                       </thead>
                       <tbody className="text-sm divide-y divide-gray-200">
-                        {filteredTasks.length === 0 ? (
+                        {paginatedTasks.length === 0 ? (
                           <tr>
                             <td
                               colSpan={activeTab === "Pending" ? 14 : 13}
@@ -2420,7 +2483,7 @@ const TaskList = () => {
                   ref={contentContainerRef}
                   className="h-full pb-4 overflow-y-auto scroll-container"
                 >
-                  {filteredTasks.length === 0 ? (
+                  {paginatedTasks.length === 0 ? (
                     <div className="p-8 text-center bg-white border border-gray-200 shadow-sm rounded-xl">
                       <ClipboardList className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                       <p className="mb-1 text-gray-500">
@@ -2444,7 +2507,7 @@ const TaskList = () => {
         </div>
 
         {/* Pagination Controls */}
-        {filteredTasks.length > 0 && (
+        {totalTaskCount > 0 && (
           <PaginationControls
             totalPages={totalPages}
             currentPage={currentPage}

@@ -8,21 +8,45 @@ import {
   Image as ImageIcon,
   Search,
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
 import {
   getPendingPatients,
   getHistoryPatients,
+  getInitiationCounts,
   updateRMOInitiation,
+  RMO_CHUNK_SIZE,
 } from "../../../api/discharge";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import { useDebounce } from "../../../hooks/useDebounce";
+
+// Rows revealed per scroll step
+const VISIBLE_STEP = 10;
+
+const nextChunk = (lastPage, allPages) =>
+  allPages.length * RMO_CHUNK_SIZE < lastPage.total ? allPages.length : undefined;
+
+// A row can move between chunks while the list changes; show it only once.
+const flattenChunks = (data) => {
+  const seen = new Set();
+  return (data?.pages || [])
+    .flatMap((page) => page.rows)
+    .filter((row) => !seen.has(row.id) && seen.add(row.id));
+};
 
 //
 const InitiationByRMO = () => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("pending");
   const [searchTerm, setSearchTerm] = useState("");
-  const [visibleCount, setVisibleCount] = useState(10);
+  const debouncedSearch = useDebounce(searchTerm, 400);
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
   const [showModal, setShowModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [modalError, setModalError] = useState("");
@@ -48,21 +72,40 @@ const InitiationByRMO = () => {
 
   const statusOptions = ["Completed", "Pending Documentation"];
 
-  // Queries
-  const { data: pendingPatients = [], isLoading: isLoadingPending } = useQuery({
-    queryKey: ["discharge", "pending"],
-    queryFn: getPendingPatients,
+  // Queries: both lists are over 1,000 rows, so they are loaded from the
+  // server in chunks (and searched there) instead of all at once.
+  const pendingQuery = useInfiniteQuery({
+    queryKey: ["discharge", "pending", debouncedSearch],
+    queryFn: ({ pageParam }) =>
+      getPendingPatients({ page: pageParam, search: debouncedSearch }),
+    initialPageParam: 0,
+    getNextPageParam: nextChunk,
     enabled: activeTab === "pending",
+    placeholderData: keepPreviousData,
   });
 
-  const { data: historyPatients = [], isLoading: isLoadingHistory } = useQuery({
-    queryKey: ["discharge", "history"],
-    queryFn: getHistoryPatients,
+  const historyQuery = useInfiniteQuery({
+    queryKey: ["discharge", "history", debouncedSearch],
+    queryFn: ({ pageParam }) =>
+      getHistoryPatients({ page: pageParam, search: debouncedSearch }),
+    initialPageParam: 0,
+    getNextPageParam: nextChunk,
     enabled: activeTab === "history",
+    placeholderData: keepPreviousData,
   });
 
-  const isLoading =
-    activeTab === "pending" ? isLoadingPending : isLoadingHistory;
+  // Tab badges come from count queries, so both are right without loading both tabs
+  const { data: counts = { pending: 0, history: 0 } } = useQuery({
+    queryKey: ["discharge", "counts"],
+    queryFn: getInitiationCounts,
+  });
+
+  const pendingPatients = flattenChunks(pendingQuery.data);
+  const historyPatients = flattenChunks(historyQuery.data);
+
+  const activeQuery = activeTab === "pending" ? pendingQuery : historyQuery;
+  const activeRows = activeTab === "pending" ? pendingPatients : historyPatients;
+  const isLoading = activeQuery.isLoading || activeQuery.isPlaceholderData;
 
   // Real-time synchronization
   useRealtimeQuery("discharge", ["discharge"]);
@@ -267,19 +310,14 @@ const InitiationByRMO = () => {
     setViewImageModal(true);
   };
 
-  const filterFn = (p) => {
-    const q = searchTerm.toLowerCase();
-    return (
-      (p.patientName || "").toLowerCase().includes(q) ||
-      (p.admissionNo || "").toLowerCase().includes(q)
-    );
-  };
+  // Search runs on the server (see the queries above)
+  const visiblePending = pendingPatients.slice(0, visibleCount);
+  const visibleHistory = historyPatients.slice(0, visibleCount);
 
-  const filteredPending = pendingPatients.filter(filterFn);
-  const filteredHistory = historyPatients.filter(filterFn);
-
-  const visiblePending = filteredPending.slice(0, visibleCount);
-  const visibleHistory = filteredHistory.slice(0, visibleCount);
+  const hasMorePending =
+    visiblePending.length < pendingPatients.length || !!pendingQuery.hasNextPage;
+  const hasMoreHistory =
+    visibleHistory.length < historyPatients.length || !!historyQuery.hasNextPage;
 
   useEffect(() => {
     const container = document.getElementById("scroll-container");
@@ -290,17 +328,37 @@ const InitiationByRMO = () => {
         container.scrollTop + container.clientHeight >=
         container.scrollHeight - 200
       ) {
-        setVisibleCount((prev) => prev + 10);
+        // Don't run ahead of the rows loaded so far (each extra step past
+        // them would ask the server for another chunk).
+        setVisibleCount((prev) =>
+          prev <= activeRows.length ? prev + VISIBLE_STEP : prev,
+        );
       }
     };
 
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [filteredPending.length, filteredHistory.length, activeTab]);
+  }, [pendingPatients.length, historyPatients.length, activeTab]);
+
+  // Fetch the next chunk once the rows already loaded have all been shown
+  useEffect(() => {
+    if (
+      visibleCount > activeRows.length &&
+      activeQuery.hasNextPage &&
+      !activeQuery.isFetchingNextPage
+    ) {
+      activeQuery.fetchNextPage();
+    }
+  }, [
+    visibleCount,
+    activeRows.length,
+    activeQuery.hasNextPage,
+    activeQuery.isFetchingNextPage,
+  ]);
 
   useEffect(() => {
-    setVisibleCount(10);
-  }, [activeTab, searchTerm]);
+    setVisibleCount(VISIBLE_STEP);
+  }, [activeTab, debouncedSearch]);
 
   return (
     <div className="p-2 space-y-3 md:p-6 md:space-y-4 bg-white min-h-screen">
@@ -357,9 +415,9 @@ const InitiationByRMO = () => {
           <div className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
             Pending
-            {pendingPatients.length > 0 && (
+            {counts.pending > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] bg-red-100 text-red-600 rounded-full">
-                {pendingPatients.length}
+                {counts.pending}
               </span>
             )}
           </div>
@@ -375,9 +433,9 @@ const InitiationByRMO = () => {
           <div className="flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
             History
-            {historyPatients.length > 0 && (
+            {counts.history > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-600 rounded-full">
-                {historyPatients.length}
+                {counts.history}
               </span>
             )}
           </div>
@@ -547,7 +605,7 @@ const InitiationByRMO = () => {
                 </p>
               </div>
             )}
-            {visiblePending.length < filteredPending.length && (
+            {hasMorePending && (
               <p className="col-span-full text-center text-xs text-gray-400 py-4">
                 Loading more...
               </p>
@@ -772,7 +830,7 @@ const InitiationByRMO = () => {
                 </p>
               </div>
             )}
-            {visibleHistory.length < filteredHistory.length && (
+            {hasMoreHistory && (
               <p className="col-span-full text-center text-xs text-gray-400 py-4">
                 Loading more...
               </p>

@@ -21,6 +21,18 @@ import {
 import supabase from '../../../SupabaseClient';
 import { useNotification } from '../../../contexts/NotificationContext';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import useDebounce from '../../../hooks/useDebounce';
+import Pagination from '../../../components/Pagination';
+import { cleanSearchTerm, ilikeAny } from '../../../utils/supabaseQuery';
+
+const PAGE_SIZE = 50;
+
+// Columns used by the table, the mobile cards and the complete/edit actions
+const TASK_COLUMNS =
+    'id, task_no, ipd_number, patient_name, patient_location, ward_type, room, bed_no, shift, assign_rmo, reminder, start_date, task, planned1, actual1, ot_information, timestamp';
+
+// ot_information too: OT tasks are listed (and were searchable) as "OT Information (surgical)"
+const TASK_SEARCH_COLUMNS = ['patient_name', 'ipd_number', 'task_no', 'task', 'ot_information'];
 
 // Separate OtCompletionModal component to prevent re-renders
 const OtCompletionModal = React.memo(({
@@ -436,6 +448,14 @@ const RMOTaskList = () => {
     const [userRole, setUserRole] = useState('');
     const [userName, setUserName] = useState('');
 
+    // Server paging (zero-based page)
+    const [page, setPage] = useState(0);
+    const [totalTaskCount, setTotalTaskCount] = useState(0);
+    const [isFetching, setIsFetching] = useState(false);
+    const debouncedSearch = useDebounce(searchTerm, 400);
+    const loadSeqRef = useRef(0);
+    const lastLoadedTabRef = useRef(null);
+
     const tableRef = useRef(null);
     const refreshIntervalRef = useRef(null);
     const rmoInputRef = useRef(null);
@@ -725,24 +745,51 @@ const RMOTaskList = () => {
         }
     };
 
-    const loadTasks = useCallback(async () => {
+    // Loads one page of the active tab. Tab, search and date filters run on the
+    // server (before, the newest 1,000 tasks were loaded and filtered here, so
+    // older tasks never showed up). rmo_assign_task is small (~9k rows), so
+    // ilike + ORDER BY + range is fast here.
+    const loadTasks = useCallback(async (showLoading = true) => {
+        // Ignore responses that arrive after a newer request (fast page clicks)
+        const seq = ++loadSeqRef.current;
         try {
-            setLoading(true);
+            if (showLoading) setLoading(true);
+            setIsFetching(true);
 
+            const from = page * PAGE_SIZE;
             let query = supabase
                 .from('rmo_assign_task')
-                .select('id, task_no, ipd_number, patient_name, patient_location, ward_type, room, bed_no, shift, assign_rmo, reminder, start_date, task, planned1, actual1, ot_information, status, submitted_by, timestamp')
-                .limit(1000);
+                .select(TASK_COLUMNS, { count: 'exact' })
+                .not('planned1', 'is', null);
+
+            // Pending: planned1 set, actual1 empty. History: both set.
+            query = activeTab === 'History'
+                ? query.not('actual1', 'is', null)
+                : query.is('actual1', null);
 
             // Apply role-based filtering
             if (userRole && userRole.toLowerCase().includes('rmo') && userName) {
                 query = query.ilike('assign_rmo', userName);
             }
 
-            const { data, error } = await query
-                .order('timestamp', { ascending: false });
+            if (filterDate) {
+                query = query.eq('start_date', filterDate);
+            }
 
+            const term = cleanSearchTerm(debouncedSearch);
+            if (term) {
+                query = query.or(ilikeAny(TASK_SEARCH_COLUMNS, term));
+            }
+
+            const { data, error, count } = await query
+                .order('timestamp', { ascending: false })
+                .order('id', { ascending: false })
+                .range(from, from + PAGE_SIZE - 1);
+
+            if (seq !== loadSeqRef.current) return;
             if (error) throw error;
+
+            setTotalTaskCount(count ?? 0);
 
             if (data) {
                 const transformedTasks = data.map(task => {
@@ -825,9 +872,12 @@ const RMOTaskList = () => {
             console.error('Error loading RMO tasks:', error);
             showNotification('Error loading RMO tasks from database', 'error');
         } finally {
-            setLoading(false);
+            if (seq === loadSeqRef.current) {
+                setLoading(false);
+                setIsFetching(false);
+            }
         }
-    }, [userRole, userName]);
+    }, [userRole, userName, activeTab, filterDate, debouncedSearch, page]);
 
     // Handle bed selection
     const handleBedSelect = (bedInfo) => {
@@ -944,18 +994,14 @@ const RMOTaskList = () => {
 
                 // Check if this is an OT Information task
                 const isOtInformation = taskName.toLowerCase().includes('ot information');
-                let otInformationData = null;
 
-                if (isOtInformation) {
-                    // Extract OT Information type from the task string
-                    const otMatch = taskName.match(/OT Information \((surgical|non-surgical)\)/);
-                    if (otMatch) {
-                        otInformationData = JSON.stringify({
-                            type: otMatch[1],
-                            created_at: now
-                        });
-                    }
-                }
+                // ot_information holds the plain type ('surgical' / 'non-surgical'): that is
+                // how existing rows store it and how this page and the completion flow read it.
+                // (This used to write a JSON string plus an `ot_information_type` field; that
+                // column doesn't exist, so the whole insert was rejected.)
+                const otMatch = isOtInformation
+                    ? taskName.match(/OT Information \((surgical|non-surgical)\)/)
+                    : null;
 
                 return {
                     timestamp: now,
@@ -972,8 +1018,7 @@ const RMOTaskList = () => {
                     reminder: newTaskData.reminder,
                     start_date: newTaskData.startDate,
                     task: isOtInformation ? 'OT Information' : taskName,
-                    ot_information: otInformationData,
-                    ot_information_type: otInformationData ? otMatch[1] : null
+                    ot_information: otMatch ? otMatch[1] : null
                 };
             });
 
@@ -1029,12 +1074,12 @@ const RMOTaskList = () => {
         )
         : predefinedTasks;
 
-    // Real-time sync: refresh task list when any user modifies rmo_assign_task
-    useRealtimeTable('rmo_assign_task', loadTasks);
+    // Real-time sync: quietly refresh the current page when any user modifies
+    // rmo_assign_task (before, every change blanked the list with a spinner)
+    useRealtimeTable('rmo_assign_task', () => loadTasks(false));
 
     useEffect(() => {
         if (!userRole) return;
-        loadTasks();
         loadPredefinedTasks();
         loadAvailableRmos();
 
@@ -1043,7 +1088,27 @@ const RMOTaskList = () => {
                 clearInterval(refreshIntervalRef.current);
             }
         };
-    }, [loadTasks, loadPredefinedTasks, loadAvailableRmos, userRole, userName]);
+    }, [loadPredefinedTasks, loadAvailableRmos, userRole, userName]);
+
+    // (Re)load the task page. Spinner on first load and when switching tabs;
+    // page, search and date changes swap the rows quietly.
+    useEffect(() => {
+        if (!userRole) return;
+        const tabChanged = lastLoadedTabRef.current !== activeTab;
+        lastLoadedTabRef.current = activeTab;
+        loadTasks(tabChanged);
+    }, [loadTasks, userRole, activeTab]);
+
+    // A new tab, search or date starts again from the first page
+    useEffect(() => {
+        setPage(0);
+    }, [debouncedSearch, filterDate, activeTab]);
+
+    // If tasks disappear (completed elsewhere), don't stay on a page past the end
+    const totalPages = Math.max(1, Math.ceil(totalTaskCount / PAGE_SIZE));
+    useEffect(() => {
+        if (page > 0 && page >= totalPages) setPage(totalPages - 1);
+    }, [page, totalPages]);
 
     // Load occupied beds when add task modal opens
     useEffect(() => {
@@ -1295,21 +1360,10 @@ const RMOTaskList = () => {
         }
     };
 
-    // Filter tasks based on active tab
+    // Tab, search and date are applied on the server. The tab check stays here
+    // so a task marked done locally leaves the Pending list at once; the
+    // realtime reload then refreshes the page and its count.
     const filteredTasks = tasks.filter(task => {
-        const matchesSearch =
-            task.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            task.ipdNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            task.taskId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            task.taskNames?.some(taskName =>
-                taskName.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-
-        const matchesDate = filterDate ? task.taskStartDate === filterDate : true;
-
-        if (!matchesSearch || !matchesDate) return false;
-
-        // Filter based on planned1 and actual1 conditions
         if (activeTab === 'Pending') {
             // Show tasks where planned1 is not null AND actual1 is null
             return task.planned1 && !task.actual1;
@@ -1892,7 +1946,9 @@ const RMOTaskList = () => {
                 {!loading && (
                     <>
                         {/* Desktop Table View */}
-                        <div className="hidden lg:block bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
+                        {/* lg:flex (was lg:block, which overrode flex): the inner list must be a
+                            flex child to scroll; as a block it was clipped after the first rows */}
+                        <div className="hidden lg:flex bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden flex-col h-[calc(100vh-280px)]">
                             <div ref={tableRef} className="overflow-auto flex-1">
                                 <table className="w-full whitespace-nowrap">
                                     <thead className="bg-gray-50 border-b border-gray-200 text-left sticky top-0 z-10 shadow-sm">
@@ -2185,6 +2241,19 @@ const RMOTaskList = () => {
                                 ))
                             )}
                         </div>
+
+                        {totalTaskCount > 0 && (
+                            <div className="rounded-xl overflow-hidden border border-t-0 border-gray-200 shadow-sm">
+                                <Pagination
+                                    page={page}
+                                    pageSize={PAGE_SIZE}
+                                    total={totalTaskCount}
+                                    onPageChange={setPage}
+                                    disabled={isFetching}
+                                    label="tasks"
+                                />
+                            </div>
+                        )}
                     </>
                 )}
             </div>

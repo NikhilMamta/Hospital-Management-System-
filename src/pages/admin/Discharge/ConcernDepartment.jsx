@@ -1,13 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Building2, X, Clock, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
 import { useNotification } from '../../../contexts/NotificationContext';
+import Pagination from '../../../components/Pagination';
+import { fetchAllRows } from '../../../utils/supabaseQuery';
+
+const HISTORY_PAGE_SIZE = 50;
+
+const pendingFilter = (query) => query.not('planned3', 'is', null).is('actual3', null);
+const historyFilter = (query) => query.not('planned3', 'is', null).not('actual3', 'is', null);
 
 const ConcernDepartment = () => {
   const [activeTab, setActiveTab] = useState('pending');
   const [pendingRecords, setPendingRecords] = useState([]);
   const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  // Badge counts for both tabs (only the open tab's rows are loaded)
+  const [counts, setCounts] = useState({ pending: 0, history: 0 });
+  const loadRequestRef = useRef(0);
   const [selectedRecords, setSelectedRecords] = useState({});
   const [concernDepartmentStatus, setConcernDepartmentStatus] = useState({});
   const [viewImageModal, setViewImageModal] = useState(false);
@@ -16,18 +27,41 @@ const ConcernDepartment = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingRecords, setUploadingRecords] = useState({});
 
+  const countRecords = async (filter) => {
+    const { count, error } = await filter(
+      supabase.from('discharge').select('id', { count: 'exact', head: true })
+    );
+    if (error) throw error;
+    return count ?? 0;
+  };
+
+  // Loads only the open tab; the other tab's badge comes from a count query
   const loadData = async () => {
+    const requestId = ++loadRequestRef.current;
     setIsLoading(true);
     try {
       if (activeTab === 'pending') {
-        await loadPendingRecords();
+        const [rows, historyCount] = await Promise.all([
+          loadPendingRecords(),
+          countRecords(historyFilter),
+        ]);
+        // Ignore a slower answer for a tab/page the user has already left
+        if (requestId !== loadRequestRef.current) return;
+        setPendingRecords(rows);
+        setCounts({ pending: rows.length, history: historyCount });
       } else {
-        await loadHistoryRecords();
+        const [history, pendingCount] = await Promise.all([
+          loadHistoryRecords(historyPage),
+          countRecords(pendingFilter),
+        ]);
+        if (requestId !== loadRequestRef.current) return;
+        setHistoryRecords(history.rows);
+        setCounts({ pending: pendingCount, history: history.total });
       }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current) setIsLoading(false);
     }
   };
 
@@ -36,24 +70,40 @@ const ConcernDepartment = () => {
 
   useEffect(() => {
     loadData();
-  }, [activeTab]);
+  }, [activeTab, historyPage]);
+
+  // If rows disappear, don't stay on an empty history page
+  const historyTotalPages = Math.max(1, Math.ceil(counts.history / HISTORY_PAGE_SIZE));
+  useEffect(() => {
+    if (historyPage > 0 && historyPage >= historyTotalPages) {
+      setHistoryPage(historyTotalPages - 1);
+    }
+  }, [historyPage, historyTotalPages]);
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    setHistoryPage(0);
+  };
 
   const loadPendingRecords = async () => {
     try {
+      // In 1,000-row chunks so the queue can never be cut silently.
       // Fetch records where:
       // - planned1 is not null AND actual1 is not null (RMO initiated)
       // - work_file is not null (file work completed)
       // - planned2 is not null (file work timestamp)
       // - planned3 is not null (concern department planned)
       // - actual3 is null (concern department not completed yet)
-      const { data, error } = await supabase
-        .from('discharge')
-        .select('id, admission_no, patient_name, department, consultant_name, staff_name, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, work_file, planned2, planned3, actual3, delay3, remark')
-        .not('planned3', 'is', null)
-        .is('actual3', null)
-        .order('planned3', { ascending: true });
-
-      if (error) throw error;
+      const data = await fetchAllRows((from, to) =>
+        pendingFilter(
+          supabase
+            .from('discharge')
+            .select('id, admission_no, patient_name, department, consultant_name, staff_name, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, work_file, planned2, planned3, actual3, delay3, remark')
+        )
+          .order('planned3', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
 
       // Format the data for display
       const formattedRecords = data.map(record => ({
@@ -92,26 +142,30 @@ const ConcernDepartment = () => {
         remark: record.remark
       }));
 
-      setPendingRecords(formattedRecords);
+      return formattedRecords;
     } catch (error) {
       console.error('Error loading pending records:', error);
-      setPendingRecords([]);
+      return [];
     }
   };
 
-  const loadHistoryRecords = async () => {
+  const loadHistoryRecords = async (page) => {
     try {
+      // One page at a time: the whole list would be cut at 1,000 rows.
       // Fetch records where:
       // - planned1 is not null AND actual1 is not null
       // - work_file is not null
       // - planned2 is not null
       // - planned3 is not null AND actual3 is not null (concern department completed)
-      const { data, error } = await supabase
-        .from('discharge')
-        .select('id, admission_no, patient_name, department, consultant_name, staff_name, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, work_file, planned2, concern_dept, actual3, planned3, delay3')
-        .not('planned3', 'is', null)
-        .not('actual3', 'is', null)
-        .order('actual3', { ascending: false });
+      const from = page * HISTORY_PAGE_SIZE;
+      const { data, error, count } = await historyFilter(
+        supabase
+          .from('discharge')
+          .select('id, admission_no, patient_name, department, consultant_name, staff_name, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, work_file, planned2, concern_dept, actual3, planned3, delay3', { count: 'exact' })
+      )
+        .order('actual3', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + HISTORY_PAGE_SIZE - 1);
 
       if (error) throw error;
 
@@ -164,10 +218,10 @@ const ConcernDepartment = () => {
         actual3: record.actual3
       }));
 
-      setHistoryRecords(formattedRecords);
+      return { rows: formattedRecords, total: count ?? 0 };
     } catch (error) {
       console.error('Error loading history records:', error);
-      setHistoryRecords([]);
+      return { rows: [], total: 0 };
     }
   };
 
@@ -209,35 +263,35 @@ const ConcernDepartment = () => {
         return updated;
       });
 
-      const updates = [];
+      const now = new Date().toLocaleString("en-CA", {
+        timeZone: "Asia/Kolkata",
+        hour12: false
+      }).replace(',', '');
 
-      // Process each selected record
+      // Group the selected records by their Yes/No value, so each value is
+      // saved with one request instead of one request per record
+      const idsByValue = {};
       for (const admissionNo of selectedAdmissions) {
         const record = pendingRecords.find(r => r.admissionNo === admissionNo);
         if (!record) continue;
 
-        const updateData = {
-          concern_dept: concernDepartmentStatus[admissionNo],
-          actual3: new Date().toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false
-          }).replace(',', ''),
-          planned4: new Date().toLocaleString("en-CA", {
-            timeZone: "Asia/Kolkata",
-            hour12: false
-          }).replace(',', ''),
-        };
-
-        updates.push(
-          supabase
-            .from('discharge')
-            .update(updateData)
-            .eq('id', record.id)
-        );
+        const value = concernDepartmentStatus[admissionNo];
+        (idsByValue[value] = idsByValue[value] || []).push(record.id);
       }
 
       // Execute all updates
-      const results = await Promise.all(updates);
+      const results = await Promise.all(
+        Object.entries(idsByValue).map(([value, ids]) =>
+          supabase
+            .from('discharge')
+            .update({
+              concern_dept: value,
+              actual3: now,
+              planned4: now,
+            })
+            .in('id', ids)
+        )
+      );
 
       // Check for errors
       const errors = results.filter(result => result.error);
@@ -319,7 +373,7 @@ const ConcernDepartment = () => {
       <div className="flex flex-col md:flex-row md:justify-between md:items-center border-b border-gray-200">
         <div className="flex gap-2">
           <button
-            onClick={() => setActiveTab('pending')}
+            onClick={() => switchTab('pending')}
             className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'pending'
               ? 'text-green-600 border-b-2 border-green-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -328,15 +382,15 @@ const ConcernDepartment = () => {
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
               Pending
-              {pendingRecords.length > 0 && (
+              {counts.pending > 0 && (
                 <span className="px-1.5 py-0.5 text-[10px] bg-red-100 text-red-600 rounded-full">
-                  {pendingRecords.length}
+                  {counts.pending}
                 </span>
               )}
             </div>
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => switchTab('history')}
             className={`px-3 py-1.5 font-medium text-xs md:text-sm transition-colors relative ${activeTab === 'history'
               ? 'text-green-600 border-b-2 border-green-600'
               : 'text-gray-600 hover:text-gray-900'
@@ -345,9 +399,9 @@ const ConcernDepartment = () => {
             <div className="flex items-center gap-1.5">
               <CheckCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
               History
-              {historyRecords.length > 0 && (
+              {counts.history > 0 && (
                 <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-600 rounded-full">
-                  {historyRecords.length}
+                  {counts.history}
                 </span>
               )}
             </div>
@@ -799,6 +853,17 @@ const ConcernDepartment = () => {
               </div>
             )}
           </div>
+
+          {counts.history > 0 && (
+            <Pagination
+              page={historyPage}
+              pageSize={HISTORY_PAGE_SIZE}
+              total={counts.history}
+              onPageChange={setHistoryPage}
+              disabled={isLoading}
+              label="records"
+            />
+          )}
         </div>
       )}
 

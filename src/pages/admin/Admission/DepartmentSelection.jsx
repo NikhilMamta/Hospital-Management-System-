@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Building2,
   Users,
@@ -11,19 +11,87 @@ import {
   Bell,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import useDebounce from "../../../hooks/useDebounce";
+import Pagination from "../../../components/Pagination";
+import {
+  cleanSearchTerm,
+  ilikeAny,
+  fetchAllRows,
+} from "../../../utils/supabaseQuery";
+
+const HISTORY_PAGE_SIZE = 50;
+
+// Columns used by transformPatient (tables, cards and the assign modal)
+const PATIENT_COLUMNS =
+  "id, admission_no, patient_name, phone_no, attender_name, attender_mobile_no, reason_for_visit, date_of_birth, age, gender, status, department, timestamp, planned1, actual1, submitted_by";
+
+const HISTORY_SEARCH_COLUMNS = [
+  "admission_no",
+  "patient_name",
+  "phone_no",
+  "attender_name",
+  "attender_mobile_no",
+  "department",
+];
+
+const formatDateTime = (value) =>
+  value
+    ? value.split(" ")[0].split("-").reverse().join("/") +
+      " " +
+      (value.split(" ")[1]?.substring(0, 5) || "")
+    : "-";
+
+const transformPatient = (patient) => ({
+  id: patient.id,
+  admissionNo:
+    patient.admission_no ||
+    `ADM-${patient.id?.toString().padStart(3, "0") || "001"}`,
+  patientName: patient.patient_name || "",
+  phoneNumber: patient.phone_no || "",
+  attenderName: patient.attender_name || "",
+  attenderMobile: patient.attender_mobile_no || "",
+  reasonForVisit: patient.reason_for_visit || "",
+  dateOfBirth: patient.date_of_birth || "",
+  age: patient.age || "",
+  gender: patient.gender || "Male",
+  status: patient.status || "pending",
+  department: patient.department || "",
+  assignedDate: patient.actual1 || "",
+  timestamp: patient.timestamp || "",
+  planned1: patient.planned1 || "",
+  actual1: patient.actual1 || "",
+  planned1Formatted: formatDateTime(patient.planned1),
+  actual1Formatted: formatDateTime(patient.actual1),
+  submittedBy: patient.submitted_by || "-",
+});
+
+// Head-only count of patient_admission rows (no rows are downloaded)
+const countPatients = (applyFilters) =>
+  applyFilters(
+    supabase
+      .from("patient_admission")
+      .select("id", { count: "exact", head: true }),
+  );
 
 const DepartmentSelection = () => {
   const [pendingPatients, setPendingPatients] = useState([]);
   const [historyPatients, setHistoryPatients] = useState([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [isHistoryFetching, setIsHistoryFetching] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState("IPD");
   const [activeView, setActiveView] = useState("pending");
   const [assignError, setAssignError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 400);
+  const historySeqRef = useRef(0);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
+    assigned: 0,
     opd: 0,
     ipd: 0,
     emergency: 0,
@@ -39,111 +107,12 @@ const DepartmentSelection = () => {
 
   useEffect(() => {
     loadPatients();
-
-    // Incrementally update state from a single realtime event
-    const handleRealtimeChange = (payload) => {
-      const { eventType, new: newRow, old: oldRow } = payload;
-
-      if (eventType === "DELETE") {
-        const id = oldRow?.id;
-        if (!id) return;
-        setPendingPatients((prev) => prev.filter((p) => p.id !== id));
-        setHistoryPatients((prev) => prev.filter((p) => p.id !== id));
-        return;
-      }
-
-      const row = newRow;
-      if (!row) return;
-
-      const transformed = {
-        id: row.id,
-        admissionNo:
-          row.admission_no ||
-          `ADM-${row.id?.toString().padStart(3, "0") || "001"}`,
-        patientName: row.patient_name || "",
-        phoneNumber: row.phone_no || "",
-        attenderName: row.attender_name || "",
-        attenderMobile: row.attender_mobile_no || "",
-        reasonForVisit: row.reason_for_visit || "",
-        dateOfBirth: row.date_of_birth || "",
-        age: row.age || "",
-        gender: row.gender || "Male",
-        status: row.status || "pending",
-        department: row.department || "",
-        assignedDate: row.actual1 || "",
-        timestamp: row.timestamp || "",
-        planned1: row.planned1 || "",
-        actual1: row.actual1 || "",
-        planned1Formatted: row.planned1
-          ? row.planned1.split(" ")[0].split("-").reverse().join("/") +
-            " " +
-            (row.planned1.split(" ")[1]?.substring(0, 5) || "")
-          : "-",
-        actual1Formatted: row.actual1
-          ? row.actual1.split(" ")[0].split("-").reverse().join("/") +
-            " " +
-            (row.actual1.split(" ")[1]?.substring(0, 5) || "")
-          : "-",
-        submittedBy: row.submitted_by || "-",
-      };
-
-      // Remove from both arrays first
-      setPendingPatients((prev) => prev.filter((p) => p.id !== row.id));
-      setHistoryPatients((prev) => prev.filter((p) => p.id !== row.id));
-
-      if (transformed.status === "pending") {
-        setPendingPatients((prev) => [transformed, ...prev]);
-      } else if (transformed.status === "assigned") {
-        setHistoryPatients((prev) => [transformed, ...prev]);
-      }
-
-      // Recompute stats
-      setTimeout(() => {
-        setPendingPatients((pending) => {
-          setHistoryPatients((history) => {
-            setStats({
-              total: pending.length + history.length,
-              pending: pending.length,
-              opd: history.filter((p) => p.department === "OPD").length,
-              ipd: history.filter((p) => p.department === "IPD").length,
-              emergency: history.filter((p) => p.department === "Emergency")
-                .length,
-            });
-            return history;
-          });
-          return pending;
-        });
-      }, 0);
-    };
-
-    // Set up real-time subscription for patient updates
-    const setupRealtimeSubscription = () => {
-      const channel = supabase
-        .channel("patient_admission_changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "patient_admission",
-          },
-          (payload) => {
-            handleRealtimeChange(payload);
-          },
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    };
-
-    const cleanup = setupRealtimeSubscription();
-
-    return () => {
-      cleanup();
-    };
   }, []);
+
+  // Any change to patient_admission (from any user): refresh quietly.
+  // Replaces a private channel that patched the lists by hand, which can't
+  // keep a paged history list and its counts right.
+  useRealtimeTable("patient_admission", () => loadPatients(true));
 
   // Auto-hide notification after 3 seconds
   useEffect(() => {
@@ -161,78 +130,79 @@ const DepartmentSelection = () => {
     setShowNotification(true);
   };
 
+  // Pending list (small, loaded in full so its search stays instant) and the
+  // stat cards (head-only counts; the old full-table load stopped at 1,000 rows).
+  const loadSummary = async () => {
+    const [pendingRows, totalRes, assignedRes, opdRes, ipdRes, emergencyRes] =
+      await Promise.all([
+        fetchAllRows((from, to) =>
+          supabase
+            .from("patient_admission")
+            .select(PATIENT_COLUMNS)
+            // A missing status counts as pending (same as transformPatient)
+            .or("status.eq.pending,status.is.null")
+            .order("timestamp", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to),
+        ),
+        countPatients((q) => q),
+        countPatients((q) => q.eq("status", "assigned")),
+        countPatients((q) => q.eq("status", "assigned").eq("department", "OPD")),
+        countPatients((q) => q.eq("status", "assigned").eq("department", "IPD")),
+        countPatients((q) =>
+          q.eq("status", "assigned").eq("department", "Emergency"),
+        ),
+      ]);
+
+    const countError = [totalRes, assignedRes, opdRes, ipdRes, emergencyRes].find(
+      (res) => res.error,
+    )?.error;
+    if (countError) throw countError;
+
+    setPendingPatients(pendingRows.map(transformPatient));
+    setStats({
+      total: totalRes.count ?? 0,
+      pending: pendingRows.length,
+      assigned: assignedRes.count ?? 0,
+      opd: opdRes.count ?? 0,
+      ipd: ipdRes.count ?? 0,
+      emergency: emergencyRes.count ?? 0,
+    });
+  };
+
+  // One page of assigned patients; the search runs on the server
+  const loadHistory = async () => {
+    // Ignore responses that arrive after a newer request (fast typing / paging)
+    const seq = ++historySeqRef.current;
+    setIsHistoryFetching(true);
+    try {
+      const from = historyPage * HISTORY_PAGE_SIZE;
+      let query = supabase
+        .from("patient_admission")
+        .select(PATIENT_COLUMNS, { count: "exact" })
+        .eq("status", "assigned")
+        .order("timestamp", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + HISTORY_PAGE_SIZE - 1);
+
+      const term = cleanSearchTerm(debouncedSearch);
+      if (term) query = query.or(ilikeAny(HISTORY_SEARCH_COLUMNS, term));
+
+      const { data, error, count } = await query;
+      if (seq !== historySeqRef.current) return;
+      if (error) throw error;
+
+      setHistoryPatients((data || []).map(transformPatient));
+      setHistoryTotal(count ?? 0);
+    } finally {
+      if (seq === historySeqRef.current) setIsHistoryFetching(false);
+    }
+  };
+
   const loadPatients = async (silent = false) => {
     try {
       if (!silent) setIsLoading(true);
-
-      const { data, error } = await supabase
-        .from("patient_admission")
-        .select("*")
-        .order("timestamp", { ascending: false });
-
-      if (error) {
-        console.error("Error loading patients:", error);
-        showNotificationPopup("Failed to load patients", "error");
-        return;
-      }
-
-      if (data) {
-        const transformedPatients = data.map((patient) => ({
-          id: patient.id,
-          admissionNo:
-            patient.admission_no ||
-            `ADM-${patient.id?.toString().padStart(3, "0") || "001"}`,
-          patientName: patient.patient_name || "",
-          phoneNumber: patient.phone_no || "",
-          attenderName: patient.attender_name || "",
-          attenderMobile: patient.attender_mobile_no || "",
-          reasonForVisit: patient.reason_for_visit || "",
-          dateOfBirth: patient.date_of_birth || "",
-          age: patient.age || "",
-          gender: patient.gender || "Male",
-          status: patient.status || "pending",
-          department: patient.department || "",
-          assignedDate: patient.actual1 || "",
-          timestamp: patient.timestamp || "",
-          planned1: patient.planned1 || "",
-          actual1: patient.actual1 || "",
-          planned1Formatted: patient.planned1
-            ? patient.planned1.split(" ")[0].split("-").reverse().join("/") +
-              " " +
-              (patient.planned1.split(" ")[1]?.substring(0, 5) || "")
-            : "-",
-          actual1Formatted: patient.actual1
-            ? patient.actual1.split(" ")[0].split("-").reverse().join("/") +
-              " " +
-              (patient.actual1.split(" ")[1]?.substring(0, 5) || "")
-            : "-",
-          submittedBy: patient.submitted_by || "-",
-        }));
-
-        const pending = transformedPatients.filter(
-          (p) => p.status === "pending",
-        );
-        const assigned = transformedPatients.filter(
-          (p) => p.status === "assigned",
-        );
-
-        setPendingPatients(pending);
-        setHistoryPatients(assigned);
-
-        const opdCount = assigned.filter((p) => p.department === "OPD").length;
-        const ipdCount = assigned.filter((p) => p.department === "IPD").length;
-        const emergencyCount = assigned.filter(
-          (p) => p.department === "Emergency",
-        ).length;
-
-        setStats({
-          total: transformedPatients.length,
-          pending: pending.length,
-          opd: opdCount,
-          ipd: ipdCount,
-          emergency: emergencyCount,
-        });
-      }
+      await Promise.all([loadSummary(), loadHistory()]);
     } catch (error) {
       console.error("Failed to load patients:", error);
       showNotificationPopup("Failed to load patients", "error");
@@ -241,6 +211,36 @@ const DepartmentSelection = () => {
       setIsInitialLoad(false);
     }
   };
+
+  // History paging / search: reload just the history page. The first run is
+  // skipped because the mount effect above already loads everything.
+  const skipFirstHistoryLoad = useRef(true);
+  useEffect(() => {
+    if (skipFirstHistoryLoad.current) {
+      skipFirstHistoryLoad.current = false;
+      return;
+    }
+    loadHistory().catch((error) => {
+      console.error("Failed to load patients:", error);
+      showNotificationPopup("Failed to load patients", "error");
+    });
+  }, [historyPage, debouncedSearch]);
+
+  // A new search starts the history list again from the first page
+  useEffect(() => {
+    setHistoryPage(0);
+  }, [debouncedSearch]);
+
+  // If rows disappear, don't stay on a page past the end
+  const historyTotalPages = Math.max(
+    1,
+    Math.ceil(historyTotal / HISTORY_PAGE_SIZE),
+  );
+  useEffect(() => {
+    if (historyPage > 0 && historyPage >= historyTotalPages) {
+      setHistoryPage(historyTotalPages - 1);
+    }
+  }, [historyPage, historyTotalPages]);
 
   const handleAssignClick = (patient) => {
     setSelectedPatient(patient);
@@ -281,7 +281,9 @@ const DepartmentSelection = () => {
       }
 
       if (data && data.length > 0) {
-        await loadPatients();
+        // Quiet refresh so the patient has left Pending before the modal
+        // closes (a few small queries now, no longer the whole table)
+        await loadPatients(true);
 
         setShowAssignModal(false);
         setSelectedPatient(null);
@@ -345,8 +347,10 @@ const DepartmentSelection = () => {
     );
   };
 
+  // Pending is the complete list, filtered here; history is already searched
+  // on the server (one page at a time)
   const filteredPendingPatients = filterPatients(pendingPatients);
-  const filteredHistoryPatients = filterPatients(historyPatients);
+  const filteredHistoryPatients = historyPatients;
 
   return (
     <div className="p-3 space-y-4 md:p-6 bg-gray-50 min-h-[75vh]">
@@ -441,7 +445,7 @@ const DepartmentSelection = () => {
             Found{" "}
             {activeView === "pending"
               ? filteredPendingPatients.length
-              : filteredHistoryPatients.length}{" "}
+              : historyTotal}{" "}
             results
           </p>
         )}
@@ -475,7 +479,7 @@ const DepartmentSelection = () => {
             } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <CheckCircle className="w-4 h-4 md:w-5 md:h-5" />
-            History ({historyPatients.length})
+            History ({stats.assigned})
           </button>
         </div>
 
@@ -932,6 +936,17 @@ const DepartmentSelection = () => {
                 </div>
               )}
             </div>
+
+            {!isInitialLoad && historyTotal > 0 && (
+              <Pagination
+                page={historyPage}
+                pageSize={HISTORY_PAGE_SIZE}
+                total={historyTotal}
+                onPageChange={setHistoryPage}
+                disabled={isHistoryFetching}
+                label="patients"
+              />
+            )}
           </>
         )}
       </div>

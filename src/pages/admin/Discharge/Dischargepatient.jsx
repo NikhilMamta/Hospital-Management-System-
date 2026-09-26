@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Edit2, Save, UserCheck, Search } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import Pagination from '../../../components/Pagination';
+import { fetchAllRows } from '../../../utils/supabaseQuery';
+
+const PAGE_SIZE = 50;
 
 const DischargePatient = () => {
   const [dischargeRecords, setDischargeRecords] = useState([]);
+  const [page, setPage] = useState(0);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const recordsRequestRef = useRef(0);
   const [availablePatients, setAvailablePatients] = useState([]);
+  const [availableLoaded, setAvailableLoaded] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [modalError, setModalError] = useState('');
@@ -23,10 +31,11 @@ const DischargePatient = () => {
     remark: ''
   });
 
-  // Real-time sync: refresh when discharge table changes
+  // Real-time sync: refresh when discharge table changes. The patient list for
+  // the Add Discharge form is only needed while the form is open.
   useRealtimeTable('discharge', () => {
     fetchDischargeRecords();
-    fetchAvailablePatients();
+    if (showModal) fetchAvailablePatients();
   });
 
   const getUserFromLocalStorage = () => {
@@ -38,51 +47,59 @@ const DischargePatient = () => {
 
   useEffect(() => {
     getUserFromLocalStorage();
-    fetchDischargeRecords();
-    fetchAvailablePatients();
   }, []);
 
+  useEffect(() => {
+    fetchDischargeRecords();
+  }, [page]);
+
+  // If rows disappear (e.g. deleted elsewhere), don't stay on an empty page
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
+    if (page > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalRecords]);
+
+  // One page at a time: the full list was cut at 1,000 rows
   const fetchDischargeRecords = async () => {
+    const requestId = ++recordsRequestRef.current;
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const from = page * PAGE_SIZE;
+      const { data, error, count } = await supabase
         .from('discharge')
-        .select('id, discharge_number, admission_no, patient_name, department, consultant_name, staff_name, timestamp, remark')
-        .order('timestamp', { ascending: false });
+        .select('id, discharge_number, admission_no, patient_name, department, consultant_name, staff_name, timestamp, remark', { count: 'exact' })
+        .order('timestamp', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
 
       if (error) throw error;
+      // Ignore a slower answer for a page the user has already left
+      if (requestId !== recordsRequestRef.current) return;
       setDischargeRecords(data || []);
+      setTotalRecords(count ?? 0);
     } catch (error) {
       console.error('Error fetching discharge records:', error.message);
     } finally {
-      setLoading(false);
+      if (requestId === recordsRequestRef.current) setLoading(false);
     }
   };
 
+  // IPD admissions that have no discharge record yet. The database works out
+  // the difference (view discharge_available_patients), so only these ~200
+  // patients are downloaded instead of every admission and every discharge.
   const fetchAvailablePatients = async () => {
     try {
-      const { data, error } = await supabase
-        .from('ipd_admissions')
-        .select('id, admission_no, patient_name, department, consultant_dr, ipd_number')
-        .order('timestamp', { ascending: false });
-
-      if (error) throw error;
-
-      const dischargedData = await supabase
-        .from('discharge')
-        .select('admission_no');
-
-      if (dischargedData.error) throw dischargedData.error;
-
-      const dischargedAdmissionNos = new Set(
-        dischargedData.data?.map(d => d.admission_no) || []
-      );
-
-      const available = (data || []).filter(
-        patient => !dischargedAdmissionNos.has(patient.admission_no)
+      const available = await fetchAllRows((from, to) =>
+        supabase
+          .from('discharge_available_patients')
+          .select('id, admission_no, patient_name, department, consultant_dr, ipd_number')
+          .order('timestamp', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to)
       );
 
       setAvailablePatients(available);
+      setAvailableLoaded(true);
     } catch (error) {
       console.error('Error fetching available patients:', error.message);
     }
@@ -155,8 +172,14 @@ const DischargePatient = () => {
         .single();
 
       if (error) throw error;
-      await fetchDischargeRecords();
-      await fetchAvailablePatients();
+      // The new record is the newest, so it shows at the top of the first page.
+      // The patient list is loaded again the next time the form opens; until
+      // then just drop the patient that was discharged now.
+      setAvailablePatients(prev =>
+        prev.filter(patient => patient.admission_no !== formData.admission_no)
+      );
+      if (page === 0) await fetchDischargeRecords();
+      else setPage(0);
 
       setShowModal(false);
       resetForm();
@@ -225,6 +248,7 @@ const DischargePatient = () => {
       staff_name: currentUser ? currentUser.name : ''
     }));
     setShowModal(true);
+    fetchAvailablePatients();
   };
 
   const filteredPatients = availablePatients.filter(patient =>
@@ -460,6 +484,17 @@ const DischargePatient = () => {
               </div>
             )}
           </div>
+
+          {totalRecords > 0 && (
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={totalRecords}
+              onPageChange={setPage}
+              disabled={loading}
+              label="records"
+            />
+          )}
         </>
       )}
 
@@ -515,7 +550,7 @@ const DischargePatient = () => {
                         ))}
                       </div>
                     )}
-                    {showDropdown && filteredPatients.length === 0 && searchTerm && (
+                    {showDropdown && availableLoaded && filteredPatients.length === 0 && searchTerm && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-center text-gray-500 text-sm">
                         No patients found
                       </div>

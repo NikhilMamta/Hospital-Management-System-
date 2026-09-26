@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Activity,
   AlertCircle,
@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import useDebounce from "../../../hooks/useDebounce";
+import { cleanSearchTerm, ilikeAny } from "../../../utils/supabaseQuery";
 import { useNotification } from "../../../contexts/NotificationContext";
 
 // ─── Constants & Configuration ───────────────────────────────
@@ -405,104 +407,213 @@ const LabWorkflowCard = ({ labCase, isExpanded, onToggle }) => {
 
 // ─── Main Dashboard ─────────────────────────────────────────
 
+// ─── Server queries ─────────────────────────────────────────
+
+// Rows fetched per step of the infinite scroll (10 are revealed per scroll)
+const CHUNK_SIZE = 30;
+
+// Columns read by the cards and buildLabStage (was select("*")).
+// planned5 / actual5 are not columns of lab, so "Report Released" never completes.
+const LAB_COLUMNS =
+  "id, timestamp, lab_no, patient_name, category, bed_no, room, admission_no, ipd_number, consultant_dr, remarks, pathology_tests, radiology_tests, planned1, actual1, planned2, actual2, planned3, actual3, planned4, actual4";
+
+const SEARCH_COLUMNS = ["patient_name", "lab_no", "admission_no"];
+
+const processRecord = (record) => {
+  const stages = LAB_STAGES.map((def) => buildLabStage(def, record));
+  const completedCount = stages.filter((s) => s.status === "completed").length;
+  const progress = Math.round((completedCount / stages.length) * 100);
+
+  return { ...record, stages, progress, completedCount };
+};
+
+// Local wall-clock time as "YYYY-MM-DD HH:MM:SS". planned1 (text) and planned3
+// (timestamp without time zone) are stored in local time, and the browser reads
+// them as local time, so this is the value to compare them with.
+const toLocalDbTime = (ms) => {
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+
+const countPaid = () =>
+  supabase
+    .from("lab")
+    .select("id", { count: "exact", head: true })
+    .eq("payment_status", "Yes");
+
 const LabWorkflowDashboard = () => {
   const [records, setRecords] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({
+    active: 0,
+    pendingCollection: 0,
+    inProcessing: 0,
+    ready: 0,
+  });
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearch = useDebounce(searchTerm, 400);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
   const [expandedId, setExpandedId] = useState(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const { showNotification } = useNotification();
 
+  const visibleCountRef = useRef(10);
+  const listGeneration = useRef(0); // newer list fetches win over older ones
+  const loadingMore = useRef(false);
+
+  useEffect(() => {
+    visibleCountRef.current = visibleCount;
+  }, [visibleCount]);
+
+  // Filters, search and paging run on the server (the full list was cut at
+  // 1,000 rows and filtered in the browser)
+  const buildListQuery = useCallback(
+    (from, to) => {
+      let query = supabase
+        .from("lab")
+        .select(LAB_COLUMNS, { count: "exact" })
+        .eq("payment_status", "Yes")
+        .order("timestamp", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to);
+
+      if (categoryFilter !== "all") {
+        query = query.eq("category", categoryFilter);
+      }
+
+      const term = cleanSearchTerm(debouncedSearch);
+      if (term) {
+        query = query.or(ilikeAny(SEARCH_COLUMNS, term));
+      }
+
+      return query;
+    },
+    [categoryFilter, debouncedSearch],
+  );
+
   const fetchData = useCallback(async () => {
+    const generation = ++listGeneration.current;
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("lab")
-        .select("*")
-        .eq("payment_status", "Yes")
-        .order("timestamp", { ascending: false });
 
+      // Re-read as many rows as are loaded, so a refresh keeps the scroll length
+      const size = Math.max(
+        CHUNK_SIZE,
+        Math.ceil(visibleCountRef.current / CHUNK_SIZE) * CHUNK_SIZE,
+      );
+
+      // No record reaches 100% (see LAB_COLUMNS), so "completed" is always
+      // empty and "active" shows every record, as before
+      const listRequest =
+        statusFilter === "completed"
+          ? Promise.resolve({ data: [], count: 0, error: null })
+          : buildListQuery(0, size - 1);
+
+      // Summary cards count every paid record, not only the loaded ones.
+      // A stage is "pending" (not "overdue") for 1 hour after it was planned.
+      const hourAgo = toLocalDbTime(Date.now() - 3600000);
+      const [list, active, pendingCollection, inProcessing, ready] =
+        await Promise.all([
+          listRequest,
+          countPaid(),
+          countPaid().is("actual1", null).gte("planned1", hourAgo),
+          countPaid().is("actual3", null).gte("planned3", hourAgo),
+          countPaid().not("actual4", "is", null),
+        ]);
+
+      const error =
+        list.error ||
+        active.error ||
+        pendingCollection.error ||
+        inProcessing.error ||
+        ready.error;
       if (error) throw error;
+      if (generation !== listGeneration.current) return;
 
-      const processed = (data || []).map((record) => {
-        const stages = LAB_STAGES.map((def) => buildLabStage(def, record));
-        const completedCount = stages.filter((s) => s.status === "completed").length;
-        const progress = Math.round((completedCount / stages.length) * 100);
-
-        return { ...record, stages, progress, completedCount };
+      setRecords((list.data || []).map(processRecord));
+      setTotal(list.count ?? 0);
+      setStats({
+        active: active.count ?? 0,
+        pendingCollection: pendingCollection.count ?? 0,
+        inProcessing: inProcessing.count ?? 0,
+        ready: ready.count ?? 0,
       });
-
-      setRecords(processed);
     } catch (err) {
       console.error("Error fetching lab workflow:", err);
       showNotification("Failed to load lab workflow data.", "error");
     } finally {
-      setLoading(false);
+      if (generation === listGeneration.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
-  }, [showNotification]);
+  }, [buildListQuery, statusFilter, showNotification]);
 
   useRealtimeTable("lab", fetchData);
+
+  // A new search or filter starts the list again from the top
+  useEffect(() => {
+    visibleCountRef.current = 10;
+    setVisibleCount(10);
+  }, [statusFilter, categoryFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Filters
-  const filteredRecords = useMemo(() => {
-    let result = records;
+  const filteredRecords = records; // already filtered on the server
 
-    if (categoryFilter !== "all") {
-      result = result.filter((r) => r.category === categoryFilter);
+  // Infinite scroll: reveal 10 more; fetch the next chunk when they are not loaded yet
+  useEffect(() => {
+    if (
+      loading ||
+      loadingMore.current ||
+      visibleCount <= records.length ||
+      records.length >= total
+    ) {
+      return;
     }
 
-    if (statusFilter === "active") {
-      result = result.filter((r) => r.progress < 100);
-    } else if (statusFilter === "completed") {
-      result = result.filter((r) => r.progress === 100);
-    }
+    const generation = listGeneration.current;
+    const from = records.length;
+    loadingMore.current = true;
 
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      result = result.filter(
-        (r) =>
-          r.patient_name?.toLowerCase().includes(q) ||
-          r.lab_no?.toLowerCase().includes(q) ||
-          r.admission_no?.toLowerCase().includes(q)
-      );
-    }
+    buildListQuery(from, from + CHUNK_SIZE - 1)
+      .then(({ data, error, count }) => {
+        if (error) throw error;
+        if (generation !== listGeneration.current) return;
+        setRecords((prev) =>
+          prev.length === from
+            ? [...prev, ...(data || []).map(processRecord)]
+            : prev,
+        );
+        setTotal(count ?? 0);
+      })
+      .catch((err) => console.error("Error fetching more lab records:", err))
+      .finally(() => {
+        loadingMore.current = false;
+      });
+  }, [visibleCount, records.length, total, loading, buildListQuery]);
 
-    return result;
-  }, [records, categoryFilter, statusFilter, searchTerm]);
-
-  // Infinite scroll
   useEffect(() => {
     const handleScroll = () => {
       if (
         window.innerHeight + window.scrollY >=
           document.documentElement.scrollHeight - 200 &&
-        visibleCount < filteredRecords.length
+        visibleCount < total
       ) {
-        setVisibleCount((prev) => Math.min(prev + 10, filteredRecords.length));
+        setVisibleCount((prev) => Math.min(prev + 10, total));
       }
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [visibleCount, filteredRecords.length]);
+  }, [visibleCount, total]);
 
-  const stats = useMemo(() => {
-    const active = records.filter((r) => r.progress < 100);
-    return {
-      total: records.length,
-      active: active.length,
-      pendingCollection: records.filter((r) => r.stages[1].status === "pending").length,
-      inProcessing: records.filter((r) => r.stages[3].status === "pending").length,
-      ready: records.filter((r) => r.stages[4].status === "completed" && r.progress < 100).length,
-    };
-  }, [records]);
-
-  if (loading && records.length === 0) {
+  if (loading && !hasLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="flex flex-col items-center gap-4">
@@ -654,7 +765,7 @@ const LabWorkflowDashboard = () => {
         </div>
 
         {/* Loading Footer */}
-        {visibleCount < filteredRecords.length && (
+        {visibleCount < total && (
           <div className="flex justify-center py-6">
             <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" />
             <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:-0.15s] mx-1" />

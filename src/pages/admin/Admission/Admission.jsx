@@ -1,9 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, X, Edit2, Save, UserPlus, Search, Filter } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
-import { getPatients, createPatient, updatePatient } from "../../../api/patients";
+import {
+  getPatients,
+  createPatient,
+  updatePatient,
+  PATIENTS_PAGE_SIZE,
+} from "../../../api/patients";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import useDebounce from "../../../hooks/useDebounce";
+import Pagination from "../../../components/Pagination";
 
 const Admission = () => {
   const queryClient = useQueryClient();
@@ -12,7 +19,9 @@ const Admission = () => {
   const [modalError, setModalError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState("");
-  
+  const [page, setPage] = useState(0);
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
   const [formData, setFormData] = useState({
     patientName: "",
     phoneNumber: "",
@@ -23,11 +32,28 @@ const Admission = () => {
     gender: "Male",
   });
 
-  // Queries
-  const { data: patients = [], isLoading } = useQuery({
-    queryKey: ['patients'],
-    queryFn: getPatients,
+  // Queries: one page at a time; search and date filter run on the server
+  const {
+    data: patientsPage = { rows: [], total: 0 },
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: ['patients', page, debouncedSearch, filterDate],
+    queryFn: () => getPatients({ page, search: debouncedSearch, date: filterDate }),
+    placeholderData: keepPreviousData,
   });
+  const patients = patientsPage.rows;
+  const totalPages = Math.max(1, Math.ceil(patientsPage.total / PATIENTS_PAGE_SIZE));
+
+  // A new search or date starts again from the first page
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, filterDate]);
+
+  // If rows disappear (e.g. deleted elsewhere), don't stay on an empty page
+  useEffect(() => {
+    if (page > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalPages]);
 
   // Real-time synchronization
   useRealtimeQuery('patient_admission', ['patients']);
@@ -60,20 +86,8 @@ const Admission = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Filter patients based on search query and date filter
-  const filteredPatients = patients.filter((patient) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      searchQuery === "" ||
-      patient.patientName.toLowerCase().includes(q) ||
-      patient.phoneNumber.includes(searchQuery) ||
-      patient.admissionNo.toLowerCase().includes(q) ||
-      patient.attenderName.toLowerCase().includes(q);
-
-    const matchesDate = filterDate === "" || patient.dateOfBirth === filterDate;
-
-    return matchesSearch && matchesDate;
-  });
+  // Search and date of birth filter are applied by getPatients on the server
+  const filteredPatients = patients;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -475,6 +489,19 @@ const Admission = () => {
           </div>
         )}
       </div>
+
+      {patientsPage.total > 0 && (
+        <div className="overflow-hidden border border-t-0 border-gray-200 rounded-lg shadow-sm">
+          <Pagination
+            page={page}
+            pageSize={PATIENTS_PAGE_SIZE}
+            total={patientsPage.total}
+            onPageChange={setPage}
+            disabled={isFetching}
+            label="patients"
+          />
+        </div>
+      )}
 
       {/* Add New Patient Modal */}
       {showModal && (

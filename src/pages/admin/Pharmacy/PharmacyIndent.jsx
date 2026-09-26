@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { sendIndentApprovalNotification } from "../../../utils/whatsappService";
 import {
   Plus,
@@ -13,21 +13,65 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
-import { 
-  getPharmacyIndents, 
-  getActiveAdmissions, 
-  getOtCompletionDays, 
-  getMedicines, 
-  getInvestigations, 
+import {
+  getPharmacyIndents,
+  getPharmacyIndentsByIds,
+  PHARMACY_INDENTS_PAGE_SIZE,
+  getActiveAdmissions,
+  getOtCompletionDays,
+  getMedicines,
+  getInvestigations,
   getCategories,
   createPharmacyIndent,
   updatePharmacyIndent,
   deletePharmacyIndent
 } from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import useDebounce from "../../../hooks/useDebounce";
+
+// Loaded chunks as one list; a row can show up twice when new indents push
+// older ones into the next chunk, so keep the first copy.
+const uniqueRows = (pages = []) => {
+  const seen = new Set();
+  return pages.flatMap((page) => page.rows).filter((row) => !seen.has(row.id) && seen.add(row.id));
+};
+
+// Server order of the list: newest first (timestamp, then id).
+const sortsBefore = (a, b) =>
+  a.timestamp > b.timestamp || (a.timestamp === b.timestamp && a.id > b.id);
+
+/**
+ * Puts re-read rows into the loaded chunks: changed rows are taken out and put
+ * back where they now sort (an edit moves an indent to the top); deleted rows,
+ * or rows that no longer match the search, stay out. Rows that sort after the
+ * last loaded one are left for the next "load more".
+ */
+const patchIndentPages = (data, changedIds, freshRows) => {
+  const pages = data.pages.map((page) => ({
+    ...page,
+    rows: page.rows.filter((row) => !changedIds.has(row.id)),
+  }));
+  const moreOnServer = pages[pages.length - 1].full;
+  const lastLoaded = pages.flatMap((page) => page.rows).pop();
+
+  [...freshRows]
+    .sort((a, b) => (sortsBefore(a, b) ? -1 : 1))
+    .forEach((row) => {
+      if (moreOnServer && lastLoaded && !sortsBefore(row, lastLoaded)) return;
+      const page = pages.find((p) => p.rows.some((r) => sortsBefore(row, r)));
+      if (page) {
+        page.rows.splice(page.rows.findIndex((r) => sortsBefore(row, r)), 0, row);
+      } else {
+        pages[pages.length - 1].rows.push(row);
+      }
+    });
+
+  return { ...data, pages };
+};
 
 const PharmacyIndents = () => {
   const queryClient = useQueryClient();
@@ -48,23 +92,31 @@ const PharmacyIndents = () => {
 
   // --- Queries ---
 
+  // Search runs on the server (it used to check only the loaded chunks)
+  const debouncedSearch = useDebounce(searchTerm, 400);
+  const indentsKey = ['pharmacy', 'indents', 'list', debouncedSearch];
+
   // Main Indents Query
-  const { 
-    data: infiniteIndents, 
-    fetchNextPage, 
-    hasNextPage, 
-    isFetchingNextPage, 
-    isLoading: isLoadingIndents 
+  const {
+    data: infiniteIndents,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isLoadingIndents
   } = useInfiniteQuery({
-    queryKey: ['pharmacy', 'indents'],
-    queryFn: getPharmacyIndents,
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => {
-      return lastPage.length === 50 ? allPages.length : undefined;
+    queryKey: indentsKey,
+    queryFn: async ({ pageParam }) => {
+      const rows = await getPharmacyIndents({ offset: pageParam, search: debouncedSearch });
+      return { rows, full: rows.length === PHARMACY_INDENTS_PAGE_SIZE };
     },
+    initialPageParam: 0,
+    // The next chunk starts after the rows we hold (realtime updates add/remove rows)
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.full ? uniqueRows(allPages).length : undefined,
+    placeholderData: keepPreviousData,
   });
 
-  const indents = infiniteIndents?.pages.flat() || [];
+  const indents = useMemo(() => uniqueRows(infiniteIndents?.pages), [infiniteIndents]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -85,16 +137,19 @@ const PharmacyIndents = () => {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Active Admissions Query
-  const { data: admissionPatients = [] } = useQuery({
+  const {
+    data: admissionPatients = [],
+    isStale: isAdmissionsStale,
+    refetch: refetchAdmissions,
+  } = useQuery({
     queryKey: ['admissions', 'active'],
     queryFn: getActiveAdmissions,
   });
 
-  // OT Days Query (depends on indents)
+  // OT Days Query: all completed OTs (a small table), no longer tied to the loaded indents
   const { data: otDaysMap = {} } = useQuery({
-    queryKey: ['ot', 'days', indents.length, indents[0]?.id],
-    queryFn: () => getOtCompletionDays(indents.map(i => i.ipd_number).filter(Boolean)),
-    enabled: indents.length > 0,
+    queryKey: ['ot', 'completion-days'],
+    queryFn: getOtCompletionDays,
   });
 
   // Metadata Queries
@@ -106,8 +161,46 @@ const PharmacyIndents = () => {
   });
 
   // Real-time synchronization
-  useRealtimeQuery('pharmacy', ['pharmacy', 'indents']);
-  useRealtimeQuery('ipd_admissions', ['admissions', 'active']);
+  // Re-read only the indents that changed instead of refetching every loaded
+  // chunk. Ids are collected for each event; the hook calls
+  // applyIndentChanges once per burst (1 s debounce).
+  const changedIndentIds = useRef(new Set());
+  const rememberChangedIndent = useCallback((payload) => {
+    const id = payload.new?.id ?? payload.old?.id;
+    if (id != null) changedIndentIds.current.add(id);
+    return true;
+  }, []);
+
+  const applyIndentChanges = async () => {
+    const ids = [...changedIndentIds.current];
+    changedIndentIds.current.clear();
+    // Other searches kept in the cache reload when shown again
+    queryClient.invalidateQueries({ queryKey: ['pharmacy', 'indents', 'list'], type: 'inactive' });
+
+    if (!queryClient.getQueryData(indentsKey) || ids.length === 0 || ids.length > 100) {
+      queryClient.invalidateQueries({ queryKey: indentsKey });
+      return;
+    }
+    try {
+      const freshRows = await getPharmacyIndentsByIds(ids, debouncedSearch);
+      queryClient.setQueryData(indentsKey, (data) =>
+        data ? patchIndentPages(data, new Set(ids), freshRows) : data,
+      );
+    } catch (error) {
+      console.error("Error refreshing changed indents:", error);
+      queryClient.invalidateQueries({ queryKey: indentsKey });
+    }
+  };
+
+  useRealtimeTable('pharmacy', applyIndentChanges, true, rememberChangedIndent);
+
+  // Admissions change all day but only the indent form uses them: listen while
+  // it is open, and reload a stale list when it opens.
+  useRealtimeQuery('ipd_admissions', ['admissions', 'active'], { enabled: showModal });
+  useEffect(() => {
+    // Only when the form opens (not each time the list turns stale while open)
+    if (showModal && isAdmissionsStale) refetchAdmissions();
+  }, [showModal]);
 
   // --- Mutations ---
 
@@ -530,15 +623,8 @@ const PharmacyIndents = () => {
     return [];
   };
 
-  const filteredIndents = indents.filter(
-    (indent) =>
-      indent.indent_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      indent.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      indent.admission_number
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      indent.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  // Already filtered by the search on the server
+  const filteredIndents = indents;
 
   const summaryData = getSummaryData();
   const totalQuantity = summaryData.reduce(

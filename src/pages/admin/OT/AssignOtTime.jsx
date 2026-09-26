@@ -472,7 +472,7 @@ const AssignOtTime = () => {
         .from("ot_information")
         .update({
           actual1: new Date().toISOString(),
-          rmo: formData.rmo,
+          rmo: formData.rmo, 
           doctor: doctorToUse,
           ot_date: formData.ot_date,
           ot_time: formData.ot_time,

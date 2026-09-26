@@ -9,6 +9,7 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useOutletContext } from "react-router-dom";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { isChangeForPatient } from "../../../utils/realtimeFilters";
 
 export default function RMOTask() {
   const [pendingList, setPendingList] = useState([]);
@@ -168,7 +169,10 @@ export default function RMOTask() {
   }, [ipdNumber]);
 
   // Silent refresh: real-time updates skip the loading spinner to avoid scroll-reset flicker
-  useRealtimeTable("rmo_assign_task", () => fetchRMOTasks(true));
+  // Only this patient's task changes trigger a reload
+  useRealtimeTable("rmo_assign_task", () => fetchRMOTasks(true), true, (payload) =>
+    isChangeForPatient(payload, ["ipd_number"], ipdNumber),
+  );
 
   const getFilteredTasks = () => {
     const tasks = activeTab === "pending" ? pendingList : historyList;

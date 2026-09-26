@@ -111,9 +111,10 @@ const ShiftHandover = () => {
 
       // We fetch ALL tasks for this nurse in this shift
       // This allows us to see patients who have 0 pending tasks
+      // Only the columns the patient list and the handover use (was select *)
       const { data, error } = await supabase
         .from("nurse_assign_task")
-        .select("*")
+        .select("id, Ipd_number, patient_name, bed_no, ward_type, room, patient_location, actual1, timestamp")
         .ilike("assign_nurse", `%${normalizedFromNurse}%`)
         .ilike("shift", normalizedShift)
         .order("timestamp", { ascending: false });

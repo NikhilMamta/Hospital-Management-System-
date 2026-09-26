@@ -1,17 +1,44 @@
 import supabase from '../SupabaseClient';
+import { cleanSearchTerm, ilikeAny } from '../utils/supabaseQuery';
+
+export const PATIENTS_PAGE_SIZE = 50;
+
+// Columns used by the Admission list and its edit form
+const PATIENT_COLUMNS =
+  "id, admission_no, patient_name, phone_no, attender_name, reason_for_visit, date_of_birth, age, gender, status, timestamp, submitted_by";
+
+const SEARCH_COLUMNS = ["patient_name", "phone_no", "admission_no", "attender_name"];
 
 /**
- * Fetches all patient admissions.
+ * Fetches one page of patient admissions, newest first.
+ * Search and the date of birth filter run on the server, so every patient can
+ * be found (fetching the whole table was silently capped at 1,000 rows).
+ *
+ * @param {Object} options
+ * @param {number} options.page   - Zero-based page number
+ * @param {string} options.search - Matches name, phone, admission no or attender name
+ * @param {string} options.date   - "YYYY-MM-DD": only patients with that date of birth
+ * @returns {Promise<{ rows: Array, total: number }>}
  */
-export const getPatients = async () => {
-  const { data, error } = await supabase
+export const getPatients = async ({ page = 0, search = "", date = "" } = {}) => {
+  const from = page * PATIENTS_PAGE_SIZE;
+
+  let query = supabase
     .from("patient_admission")
-    .select("*")
-    .order("timestamp", { ascending: false });
+    .select(PATIENT_COLUMNS, { count: "exact" })
+    .order("timestamp", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, from + PATIENTS_PAGE_SIZE - 1);
+
+  const term = cleanSearchTerm(search);
+  if (term) query = query.or(ilikeAny(SEARCH_COLUMNS, term));
+  if (date) query = query.eq("date_of_birth", date);
+
+  const { data, error, count } = await query;
 
   if (error) throw error;
 
-  return (data || []).map((patient) => ({
+  const rows = (data || []).map((patient) => ({
     id: patient.id,
     admissionNo:
       patient.admission_no ||
@@ -28,6 +55,8 @@ export const getPatients = async () => {
     timestampFormatted: patient.timestamp ? patient.timestamp : "-",
     submittedBy: patient.submitted_by || "-",
   }));
+
+  return { rows, total: count ?? 0 };
 };
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Trash2,
   Search,
@@ -13,11 +13,29 @@ import {
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
+import useDebounce from "../../../hooks/useDebounce";
+import Pagination from "../../../components/Pagination";
+import { cleanSearchTerm, ilikeAny } from "../../../utils/supabaseQuery";
+
+const PAGE_SIZE = 50;
+
+// Columns shown in the table / cards and used by the delete modal + RPC
+const PATIENT_COLUMNS =
+  "id, patient_name, ipd_number, admission_no, ward_type, bed_no, consultant_dr, phone_no, age, gender, timestamp";
+
+const SEARCH_COLUMNS = ["patient_name", "ipd_number", "admission_no", "phone_no"];
 
 const DeletePatient = () => {
   const [patients, setPatients] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [matchCount, setMatchCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  // true until the first load (it now starts one render after isAdmin is set)
+  const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const debouncedSearch = useDebounce(searchText, 400);
+  const loadSeqRef = useRef(0);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -40,29 +58,76 @@ const DeletePatient = () => {
     setCurrentUser(user);
     setIsAdmin(user?.role === "admin");
     if (user?.role === "admin") {
-      fetchPatients();
       fetchAuditLogs();
     }
   }, []);
 
-  // Fetch all IPD patients
-  const fetchPatients = async () => {
-    setLoading(true);
+  // Fetch one page of IPD patients; the search runs on the server so every
+  // patient can be found (the full-table load stopped at 1,000 rows).
+  // showLoading: spinner for first load / Refresh / after a delete; paging
+  // and typing swap the rows quietly.
+  const fetchPatients = async (showLoading = true) => {
+    const seq = ++loadSeqRef.current;
+    if (showLoading) setLoading(true);
+    setIsFetching(true);
     try {
-      const { data, error } = await supabase
-        .from("ipd_admissions")
-        .select("*")
-        .order("timestamp", { ascending: false });
+      const from = page * PAGE_SIZE;
+      const term = cleanSearchTerm(debouncedSearch);
 
-      if (error) throw error;
-      setPatients(data || []);
+      let query = supabase
+        .from("ipd_admissions")
+        .select(PATIENT_COLUMNS, { count: "exact" })
+        .order("timestamp", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (term) query = query.or(ilikeAny(SEARCH_COLUMNS, term));
+
+      // "x / y patients": y is every patient, so count it separately while searching
+      const [pageRes, totalRes] = await Promise.all([
+        query,
+        term
+          ? supabase
+              .from("ipd_admissions")
+              .select("id", { count: "exact", head: true })
+          : null,
+      ]);
+
+      if (seq !== loadSeqRef.current) return;
+      if (pageRes.error) throw pageRes.error;
+      if (totalRes?.error) throw totalRes.error;
+
+      setPatients(pageRes.data || []);
+      setMatchCount(pageRes.count ?? 0);
+      setTotalCount(term ? totalRes.count ?? 0 : pageRes.count ?? 0);
     } catch (error) {
       console.error("Error fetching patients:", error);
       showNotification("Failed to fetch patients", "error");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setIsFetching(false);
+      }
     }
   };
+
+  // (Re)load when the page or search changes; spinner only on the first load
+  const hasLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchPatients(!hasLoadedRef.current);
+    hasLoadedRef.current = true;
+  }, [isAdmin, page, debouncedSearch]);
+
+  // A new search starts again from the first page
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch]);
+
+  // If rows disappear (e.g. after a delete), don't stay on an empty page
+  const totalPages = Math.max(1, Math.ceil(matchCount / PAGE_SIZE));
+  useEffect(() => {
+    if (page > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalPages]);
 
   // Fetch audit logs
   const fetchAuditLogs = async () => {
@@ -84,18 +149,8 @@ const DeletePatient = () => {
     }
   };
 
-  // Filter patients by search
-  const filteredPatients = useMemo(() => {
-    if (!searchText.trim()) return patients;
-    const term = searchText.toLowerCase();
-    return patients.filter(
-      (p) =>
-        (p.patient_name || "").toLowerCase().includes(term) ||
-        (p.ipd_number || "").toLowerCase().includes(term) ||
-        (p.admission_no || "").toLowerCase().includes(term) ||
-        (p.phone_no || "").includes(term)
-    );
-  }, [patients, searchText]);
+  // Search is applied by fetchPatients on the server
+  const filteredPatients = patients;
 
   // Open delete confirmation modal
   const handleDeleteClick = (patient) => {
@@ -247,17 +302,17 @@ const DeletePatient = () => {
             <div className="bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
               <span className="text-xs text-gray-600 md:text-sm">
                 <span className="font-bold text-gray-900">
-                  {filteredPatients.length}
+                  {matchCount}
                 </span>
                 /
                 <span className="font-bold text-gray-900">
-                  {patients.length}
+                  {totalCount}
                 </span>{" "}
                 patients
               </span>
             </div>
             <button
-              onClick={fetchPatients}
+              onClick={() => fetchPatients()}
               disabled={loading}
               className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs md:text-sm"
             >
@@ -426,6 +481,15 @@ const DeletePatient = () => {
                   </tbody>
                 </table>
               </div>
+
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={matchCount}
+                onPageChange={setPage}
+                disabled={isFetching}
+                label="patients"
+              />
             </>
           )}
         </div>

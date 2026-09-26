@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Eye } from "lucide-react";
 import supabase from "../SupabaseClient";
+import { getCurrentShiftLabel, getPatientCardIpd } from "../hooks/usePatientCardNurses";
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -33,17 +34,21 @@ const StatusBadge = ({ status }) => {
 };
 
 // Patient Card Component
+// `nurses`: pass the nurse list from usePatientCardNurses (one request for all
+// cards on screen); `null` means the parent is still loading it. Leave it out and
+// the card loads its own nurses as before.
 const PatientCard = ({
   patient,
   onViewDetails,
   onEdit,
   onDelete,
   compactView,
+  nurses,
 }) => {
-  const [assignedNurses, setAssignedNurses] = useState([]);
-  const [currentShift, setCurrentShift] = useState("");
-  const [otDays, setOtDays] = useState(null);
-  const [otDaysLabel, setOtDaysLabel] = useState("OT Days:");
+  const nursesFromParent = nurses !== undefined;
+  const [ownNurses, setOwnNurses] = useState([]);
+  const currentShift = getCurrentShiftLabel();
+  const assignedNurses = nursesFromParent ? nurses || [] : ownNurses;
 
   // Function to calculate time in ward
   const calculateTimeInWard = (admissionDate) => {
@@ -67,87 +72,34 @@ const PatientCard = ({
     }
   };
 
-  // Fetch assigned nurses for this patient and current shift
+  // Only when the parent doesn't supply them: fetch this patient's nurses for
+  // the current shift. (The old OT-days query was removed: its result was never shown.)
   useEffect(() => {
+    if (nursesFromParent) return;
+
     const fetchNurses = async () => {
-      const now = new Date();
-      const hour = now.getHours();
-
-      let shiftLabel = "";
-      if (hour >= 8 && hour < 14) {
-        shiftLabel = "Shift A";
-      } else if (hour >= 14 && hour < 20) {
-        shiftLabel = "Shift B";
-      } else {
-        shiftLabel = "Shift C";
-      }
-      setCurrentShift(shiftLabel);
-
       try {
         const { data, error } = await supabase
           .from("nurse_assign_task")
           .select("assign_nurse, shift")
-          .eq("Ipd_number", patient.ipd_number || patient.admission_no)
-          .eq("shift", shiftLabel)
+          .eq("Ipd_number", getPatientCardIpd(patient))
+          .eq("shift", getCurrentShiftLabel())
           .order("timestamp", { ascending: false });
 
         if (!error && data) {
           const unique = [
             ...new Set(data.map((n) => n.assign_nurse?.trim()).filter(Boolean)),
           ];
-          setAssignedNurses(unique);
+          setOwnNurses(unique);
         } else {
-          setAssignedNurses([]);
+          setOwnNurses([]);
         }
       } catch (err) {
-        setAssignedNurses([]);
+        setOwnNurses([]);
       }
     };
     fetchNurses();
-  }, [patient.ipd_number, patient.admission_no]);
-
-  // Fetch OT Days
-  useEffect(() => {
-    const fetchOTDays = async () => {
-      const ipd = patient.ipd_number || patient.admission_no;
-      if (!ipd) return;
-      try {
-        const { data, error } = await supabase
-          .from("ot_information")
-          .select("ot_date, actual2, status")
-          .eq("ipd_number", ipd)
-          .not("ot_date", "is", null)
-          .order("ot_date", { ascending: true })
-          .limit(1);
-
-        if (!error && data && data.length > 0) {
-          const record = data[0];
-          if (record.status === "Cancel") {
-            setOtDays(null);
-            return;
-          }
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
-          if (record.actual2) {
-            const completedDate = new Date(record.actual2);
-            completedDate.setHours(0, 0, 0, 0);
-            const diffMs = today - completedDate;
-            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            setOtDays(diffDays < 0 ? 0 : diffDays);
-            setOtDaysLabel("Days Since OT Done:");
-          } else {
-            setOtDays(null);
-          }
-        } else {
-          setOtDays(null);
-        }
-      } catch (err) {
-        setOtDays(null);
-      }
-    };
-    fetchOTDays();
-  }, [patient.ipd_number, patient.admission_no]);
+  }, [nursesFromParent, patient.ipd_number, patient.admission_no]);
 
   const patientName = patient.patient_name || patient.name || "N/A";
   const consultantDr = patient.consultant_dr || patient.doctor || "N/A";

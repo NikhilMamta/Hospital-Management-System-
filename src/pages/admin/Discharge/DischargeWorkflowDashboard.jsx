@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Activity,
   AlertCircle,
@@ -21,6 +27,17 @@ import { useNavigate } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
 import { useNotification } from "../../../contexts/NotificationContext";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+// Every discharge column the workflow cards use (was select("*"))
+const DISCHARGE_COLUMNS =
+  "id, timestamp, discharge_number, admission_no, patient_name, department, consultant_name, staff_name, remark, planned1, actual1, rmo_status, rmo_name, summary_report_image, summary_report_image_name, planned2, actual2, work_file, planned3, actual3, concern_dept, planned4, actual4, concern_authority_work_file, planned5, actual5, bill_status, bill_image";
+
+const IPD_COLUMNS =
+  "admission_no, ipd_number, bed_no, ward_type, room, bed_location, actual1";
+
+// Above this many changed rows a full reload is cheaper than a lookup by id
+const MAX_INCREMENTAL_ROWS = 200;
 
 const STAGES = [
   {
@@ -71,6 +88,59 @@ const normalizeKey = (value) =>
   String(value || "")
     .trim()
     .toLowerCase();
+
+const buildIpdMap = (rows) => {
+  const map = {};
+  (rows || []).forEach((item) => {
+    map[normalizeKey(item.admission_no)] = item;
+  });
+  return map;
+};
+
+// Same order as the server query: newest request first, then newest id
+const compareCases = (a, b) => {
+  if (a.timestamp !== b.timestamp) {
+    if (!a.timestamp) return -1;
+    if (!b.timestamp) return 1;
+    return a.timestamp < b.timestamp ? 1 : -1;
+  }
+  return b.id - a.id;
+};
+
+const fetchAllDischarges = () =>
+  fetchAllRows((from, to) =>
+    supabase
+      .from("discharge")
+      .select(DISCHARGE_COLUMNS)
+      .order("timestamp", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to),
+  );
+
+// All IPD rows in 1,000-row chunks. Nearly every admission has a discharge
+// case, and this avoids an .in() list of every admission number (~17 KB URL).
+const fetchAllIpdDetails = () =>
+  fetchAllRows((from, to) =>
+    supabase
+      .from("ipd_admissions")
+      .select(IPD_COLUMNS)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+
+// IPD rows for a few admissions (realtime updates); small chunks keep the URL short
+const fetchIpdDetailsFor = async (admissionNumbers) => {
+  const rows = [];
+  for (let i = 0; i < admissionNumbers.length; i += 100) {
+    const { data, error } = await supabase
+      .from("ipd_admissions")
+      .select(IPD_COLUMNS)
+      .in("admission_no", admissionNumbers.slice(i, i + 100));
+    if (error) throw error;
+    rows.push(...(data || []));
+  }
+  return rows;
+};
 
 const formatDateTime = (value) => {
   if (!value) return { date: "-", time: "-" };
@@ -754,47 +824,26 @@ const DischargeWorkflowDashboard = () => {
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const [visibleCount, setVisibleCount] = useState(12);
 
+  // IPD details by normalized admission no, kept apart from the discharge rows
+  // so either side can be refreshed on its own
+  const [ipdMap, setIpdMap] = useState({});
+  const ipdMapRef = useRef({});
+  ipdMapRef.current = ipdMap;
+  const caseKeysRef = useRef(new Set());
+
+  // Stats, filters and the department list are worked out from every case,
+  // so both lists are loaded in full (a plain select stopped at 1,000 rows).
   const fetchWorkflowData = useCallback(async () => {
     try {
       setLoading(true);
 
-      const { data: dischargeData, error: dischargeError } = await supabase
-        .from("discharge")
-        .select("*")
-        .order("timestamp", { ascending: false });
+      const [dischargeData, ipdData] = await Promise.all([
+        fetchAllDischarges(),
+        fetchAllIpdDetails(),
+      ]);
 
-      if (dischargeError) throw dischargeError;
-
-      const admissionNumbers = [
-        ...new Set(
-          (dischargeData || [])
-            .map((record) => record.admission_no)
-            .filter(Boolean),
-        ),
-      ];
-
-      const { data: ipdData, error: ipdError } = admissionNumbers.length
-        ? await supabase
-            .from("ipd_admissions")
-            .select(
-              "admission_no, ipd_number, bed_no, ward_type, room, bed_location, actual1",
-            )
-            .in("admission_no", admissionNumbers)
-        : { data: [], error: null };
-
-      if (ipdError) throw ipdError;
-
-      const ipdMap = {};
-      (ipdData || []).forEach((item) => {
-        ipdMap[normalizeKey(item.admission_no)] = item;
-      });
-
-      const merged = (dischargeData || []).map((record) => ({
-        ...record,
-        ipdDetails: ipdMap[normalizeKey(record.admission_no)] || null,
-      }));
-
-      setRecords(merged);
+      setRecords(dischargeData);
+      setIpdMap(buildIpdMap(ipdData));
       setLastUpdated(new Date());
     } catch (error) {
       console.error("Error loading discharge workflow dashboard:", error);
@@ -805,16 +854,125 @@ const DischargeWorkflowDashboard = () => {
     }
   }, [showNotification]);
 
-  useRealtimeTable("discharge", fetchWorkflowData);
-  useRealtimeTable("ipd_admissions", fetchWorkflowData);
+  // Realtime: the shared hook hands over only the last change of a burst, but
+  // its predicate sees every change. Collect what changed there, then reload
+  // just those rows instead of both whole tables (a bill write touches both
+  // tables and used to reload everything twice).
+  const changesRef = useRef({
+    dischargeIds: new Set(),
+    admissionNumbers: new Set(),
+    reloadIpd: false,
+  });
+
+  const collectDischargeChange = useCallback((payload) => {
+    const id = payload.new?.id ?? payload.old?.id;
+    if (id != null) changesRef.current.dischargeIds.add(id);
+    return true;
+  }, []);
+
+  const collectIpdChange = useCallback((payload) => {
+    const admissionNo = payload.new?.admission_no;
+    if (payload.eventType === "DELETE" || !admissionNo) {
+      // A deleted row only carries its id
+      changesRef.current.reloadIpd = true;
+      return true;
+    }
+    // Admissions without a discharge case don't change this dashboard
+    if (!caseKeysRef.current.has(normalizeKey(admissionNo))) return false;
+    changesRef.current.admissionNumbers.add(admissionNo);
+    return true;
+  }, []);
+
+  const applyDischargeChanges = useCallback(async () => {
+    const ids = [...changesRef.current.dischargeIds];
+    changesRef.current.dischargeIds.clear();
+    if (ids.length === 0) return;
+    if (ids.length > MAX_INCREMENTAL_ROWS) {
+      fetchWorkflowData();
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("discharge")
+        .select(DISCHARGE_COLUMNS)
+        .in("id", ids);
+      if (error) throw error;
+
+      // Changed ids that are not returned any more were deleted
+      const changedIds = new Set(ids);
+      setRecords((previous) =>
+        [
+          ...previous.filter((record) => !changedIds.has(record.id)),
+          ...(data || []),
+        ].sort(compareCases),
+      );
+
+      // A new case for an admission whose IPD row isn't loaded yet
+      const missing = [
+        ...new Set(
+          (data || [])
+            .map((record) => record.admission_no)
+            .filter(
+              (admissionNo) =>
+                admissionNo && !ipdMapRef.current[normalizeKey(admissionNo)],
+            ),
+        ),
+      ];
+      if (missing.length) {
+        const ipdRows = await fetchIpdDetailsFor(missing);
+        setIpdMap((previous) => ({ ...previous, ...buildIpdMap(ipdRows) }));
+      }
+
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error("Error refreshing discharge workflow dashboard:", error);
+    }
+  }, [fetchWorkflowData]);
+
+  const applyIpdChanges = useCallback(async () => {
+    const admissionNumbers = [...changesRef.current.admissionNumbers];
+    const reloadIpd = changesRef.current.reloadIpd;
+    changesRef.current.admissionNumbers.clear();
+    changesRef.current.reloadIpd = false;
+
+    try {
+      if (reloadIpd) {
+        setIpdMap(buildIpdMap(await fetchAllIpdDetails()));
+      } else if (admissionNumbers.length) {
+        const ipdRows = await fetchIpdDetailsFor(admissionNumbers);
+        setIpdMap((previous) => ({ ...previous, ...buildIpdMap(ipdRows) }));
+      } else {
+        return;
+      }
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error("Error refreshing discharge workflow dashboard:", error);
+    }
+  }, []);
+
+  useRealtimeTable("discharge", applyDischargeChanges, true, collectDischargeChange);
+  useRealtimeTable("ipd_admissions", applyIpdChanges, true, collectIpdChange);
 
   useEffect(() => {
     fetchWorkflowData();
   }, [fetchWorkflowData]);
 
+  useEffect(() => {
+    caseKeysRef.current = new Set(
+      records.map((record) => normalizeKey(record.admission_no)),
+    );
+  }, [records]);
+
   const workflows = useMemo(
-    () => records.map((record) => buildWorkflowCase(record)),
-    [records],
+    () =>
+      records.map((record) =>
+        buildWorkflowCase({
+          ...record,
+          ipdDetails: ipdMap[normalizeKey(record.admission_no)] || null,
+        }),
+      ),
+    [records, ipdMap],
   );
 
   const departments = useMemo(

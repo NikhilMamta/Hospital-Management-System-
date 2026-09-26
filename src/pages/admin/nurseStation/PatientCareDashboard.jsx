@@ -396,10 +396,13 @@ const PatientCareDashboard = () => {
   }, []);
 
   // ── Fetch all tasks once ──
-  const fetchTasks = useCallback(async () => {
+  // silent = realtime refresh: keep the list and scroll position, no spinner
+  const fetchTasks = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
-      setVisibleCount(10);
+      if (!silent) {
+        setLoading(true);
+        setVisibleCount(10);
+      }
 
       const { data, error } = await supabase
         .from("nurse_assign_task")
@@ -414,12 +417,12 @@ const PatientCareDashboard = () => {
       console.error("Error loading data:", err);
       showNotification("Error loading patient care data", "error");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [showNotification]);
 
-  // Real-time updates
-  useRealtimeTable("nurse_assign_task", fetchTasks);
+  // Real-time updates (quiet refresh, the list stays where the user scrolled)
+  useRealtimeTable("nurse_assign_task", () => fetchTasks(true));
 
   // Initial load
   useEffect(() => {
@@ -575,7 +578,7 @@ const PatientCareDashboard = () => {
             </p>
           </div>
           <button
-            onClick={fetchTasks}
+            onClick={() => fetchTasks()}
             className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 transition-all bg-white border border-gray-200 rounded-lg hover:border-green-200 hover:text-green-700 active:scale-[0.98]"
           >
             <RefreshCw className="w-3.5 h-3.5" />

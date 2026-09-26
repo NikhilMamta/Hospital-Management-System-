@@ -17,7 +17,7 @@ import useRealtimeTable from "./useRealtimeTable";
  *   per table (see useRealtimeTable.js).  Any number of useRealtimeQuery
  *   hooks for the same table reuse one WebSocket subscription.
  *
- * @param {string}          table    - Supabase table to listen to
+ * @param {string|string[]} table    - Supabase table to listen to
  * @param {Array|string}    queryKey - React Query key(s) to invalidate on change
  * @param {Object}          options
  * @param {boolean}         options.enabled - Whether the listener is active
@@ -36,24 +36,25 @@ const useRealtimeQuery = (table, queryKey, options = {}) => {
   useEffect(() => { filterRef.current   = filter;    }, [filter]);
   useEffect(() => { queryKeyRef.current = queryKey;  }, [queryKey]);
 
-  // Stable callback — identity never changes, so useRealtimeTable never
-  // re-subscribes due to this callback changing.
-  const handleChange = useRef((payload) => {
-    if (filterRef.current && !filterRef.current(payload)) return;
+  // Checked for every payload, before useRealtimeTable's debounce, so a burst
+  // still invalidates if any one of its changes matches the filter.
+  const shouldHandle = useRef(
+    (payload) => !filterRef.current || filterRef.current(payload),
+  ).current;
 
-    // 300 ms delay mirrors useRealtimeTable's own delay (ensures DB write is
-    // committed before the refetch lands).
-    setTimeout(() => {
-      const key = queryKeyRef.current;
-      queryClient.invalidateQueries({
-        queryKey: Array.isArray(key) ? key : [key],
-      });
-    }, 300);
+  // Stable callback — identity never changes, so useRealtimeTable never
+  // re-subscribes due to this callback changing. useRealtimeTable already
+  // waits for the burst to settle (and the DB write to commit).
+  const handleChange = useRef(() => {
+    const key = queryKeyRef.current;
+    queryClient.invalidateQueries({
+      queryKey: Array.isArray(key) ? key : [key],
+    });
   }).current;
 
   // Reuse the single shared channel for this table.
   // useRealtimeTable guarantees at most one WS channel per table name.
-  useRealtimeTable(table, handleChange, enabled);
+  useRealtimeTable(table, handleChange, enabled, shouldHandle);
 };
 
 export default useRealtimeQuery;

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import supabase from '../../../SupabaseClient';
 import useRealtimeTable from '../../../hooks/useRealtimeTable';
+import { isChangeForPatient } from '../../../utils/realtimeFilters';
 
 const RMOCompleteDetail = ({ nurseName, onClose }) => {
     const [rmoTasks, setRmoTasks] = useState([]);
@@ -33,13 +34,32 @@ const RMOCompleteDetail = ({ nurseName, onClose }) => {
             setLoading(true);
             setError(null);
 
-            const { data: tasksData, error } = await supabase
-                .from('rmo_assign_task')
-                .select('id, task_no, planned1, actual1, patient_name, patient_location, bed_no, shift, task, start_date, reminder, ward_type, room, Ipd_number')
-                .eq('assign_rmo', nurseName)
-                .order('timestamp', { ascending: false });
+            // List: newest tasks (Supabase returns at most 1,000 rows).
+            // Totals: counted in the database, so they include ALL of the RMO's tasks.
+            // (rmo_assign_task spells the column ipd_number; asking for Ipd_number made
+            // this whole request fail.)
+            const [listResult, totalResult, completedResult] = await Promise.all([
+                supabase
+                    .from('rmo_assign_task')
+                    .select('id, task_no, planned1, actual1, patient_name, patient_location, bed_no, shift, task, start_date, reminder, ward_type, room, ipd_number')
+                    .eq('assign_rmo', nurseName)
+                    .order('timestamp', { ascending: false })
+                    .limit(1000),
+                supabase
+                    .from('rmo_assign_task')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('assign_rmo', nurseName),
+                supabase
+                    .from('rmo_assign_task')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('assign_rmo', nurseName)
+                    .not('planned1', 'is', null)
+                    .not('actual1', 'is', null),
+            ]);
 
+            const error = listResult.error || totalResult.error || completedResult.error;
             if (error) throw error;
+            const tasksData = listResult.data;
 
             if (tasksData) {
                 const formattedTasks = tasksData.map(task => ({
@@ -69,14 +89,14 @@ const RMOCompleteDetail = ({ nurseName, onClose }) => {
                     reminder: task.reminder || 'No',
                     wardType: task.ward_type || 'N/A',
                     room: task.room || 'N/A',
-                    ipdNumber: task.Ipd_number || 'N/A',
+                    ipdNumber: task.ipd_number || 'N/A',
                 }));
 
                 setRmoTasks(formattedTasks);
 
-                const completedTasks = formattedTasks.filter(task => task.status === 'Completed').length;
-                const pendingTasks = formattedTasks.filter(task => task.status === 'Pending').length;
-                const totalTasks = formattedTasks.length;
+                const totalTasks = totalResult.count || 0;
+                const completedTasks = completedResult.count || 0;
+                const pendingTasks = totalTasks - completedTasks;
                 const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
                 setSummary({
@@ -97,8 +117,10 @@ const RMOCompleteDetail = ({ nurseName, onClose }) => {
         }
     }, [nurseName]);
 
-    // Real-time sync: refresh tasks when any user modifies rmo_assign_task
-    useRealtimeTable('rmo_assign_task', fetchRmoTasks);
+    // Real-time sync: refresh only when this RMO's tasks change
+    useRealtimeTable('rmo_assign_task', fetchRmoTasks, true, (payload) =>
+        isChangeForPatient(payload, ['assign_rmo'], nurseName)
+    );
 
     useEffect(() => {
         if (nurseName) {

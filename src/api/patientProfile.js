@@ -1,21 +1,57 @@
 import supabase from '../SupabaseClient';
+import { fetchAllRows } from '../utils/supabaseQuery';
+
+// Columns the Patient Profile list, its filters and PatientCard use (was select *)
+const PATIENT_LIST_COLUMNS =
+  "id, ipd_number, admission_no, patient_name, consultant_dr, age, gender, phone_no, department, " +
+  "ward_type, location_status, bed_location, bed_no, room, pat_category, time_in_ward, timestamp";
 
 /**
  * Fetches discharged admission numbers from the discharge table.
+ * All of them, 1,000 at a time: a single request stopped at 1,000 of 2,000+,
+ * so discharged patients beyond that showed up as Active.
  */
 export const getDischargedAdmissions = async () => {
-  const { data, error } = await supabase
-    .from("discharge")
-    .select("admission_no");
+  const data = await fetchAllRows((from, to) =>
+    supabase
+      .from("discharge")
+      .select("admission_no")
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
 
-  if (error) throw error;
-  
   const set = new Set(
     (data || [])
       .map((d) => String(d.admission_no || "").trim().toLowerCase())
       .filter(Boolean)
   );
   return set;
+};
+
+// Nurse -> IPD numbers of every patient she has tasks for, kept for 2 minutes so
+// realtime refreshes of the patient list don't re-read her whole task history.
+const NURSE_IPDS_TTL = 2 * 60 * 1000;
+let nurseIpdsCache = null; // { nurse, fetchedAt, ipds }
+
+const getNurseAssignedIpds = async (userName) => {
+  const nurse = userName.trim();
+  if (
+    nurseIpdsCache &&
+    nurseIpdsCache.nurse === nurse &&
+    Date.now() - nurseIpdsCache.fetchedAt < NURSE_IPDS_TTL
+  ) {
+    return nurseIpdsCache.ipds;
+  }
+
+  // Distinct IPD numbers of all her tasks, worked out in the database
+  // (get_nurse_patient_ipds). Reading tasks directly stopped at 1,000 of her
+  // ~12,000 tasks, so most of her patients (e.g. 180 of 230) were missing.
+  const { data, error } = await supabase.rpc("get_nurse_patient_ipds", { p_nurse: nurse });
+  if (error) throw error;
+
+  const ipds = data || [];
+  nurseIpdsCache = { nurse, fetchedAt: Date.now(), ipds };
+  return ipds;
 };
 
 /**
@@ -28,23 +64,7 @@ export const fetchIpdPatients = async ({ userRole, userName, doctorTab, shiftRan
   // NURSE / OT / OT STAFF
   if (["nurse", "ot", "ot staff"].includes(userRole)) {
     shouldFilter = true;
-    const { data, error } = await supabase
-      .from("nurse_assign_task")
-      .select("Ipd_number")
-      .ilike("assign_nurse", `%${userName.trim()}%`)
-      .not("Ipd_number", "is", null);
-
-    if (error) throw error;
-    if (data) {
-      ipdNumbers = Array.from(
-        new Set(
-          data
-            .map((t) => t.Ipd_number)
-            .filter((num) => num)
-            .map((num) => String(num).trim())
-        )
-      );
-    }
+    ipdNumbers = await getNurseAssignedIpds(userName);
   }
   // RMO
   else if (userRole === "rmo") {
@@ -62,29 +82,52 @@ export const fetchIpdPatients = async ({ userRole, userName, doctorTab, shiftRan
     }
   }
 
-  // FETCH PATIENTS
-  let query = supabase
-    .from("ipd_admissions")
-    .select("*")
-    .order("timestamp", { ascending: false });
-
-  if (userRole === "doctor") {
-    if (doctorTab === "active" || doctorTab === "discharged") {
-      query = query.eq("consultant_dr", userName);
-    }
+  if (shouldFilter && ipdNumbers.length === 0) {
+    return []; // should filter but no IDs found
   }
 
-  if (shouldFilter) {
-    if (ipdNumbers.length > 0) {
-      query = query.in("ipd_number", ipdNumbers);
-    } else {
-      query = query.eq("id", -1); // Force empty result if should filter but no IDs found
+  // FETCH PATIENTS: the whole list, 1,000 at a time (the page filters, counts and
+  // splits Active/Discharged in the browser; one request stopped at 1,000 patients)
+  const buildQuery = (ipdBatch) => {
+    let query = supabase
+      .from("ipd_admissions")
+      .select(PATIENT_LIST_COLUMNS)
+      .order("timestamp", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (userRole === "doctor") {
+      if (doctorTab === "active" || doctorTab === "discharged") {
+        query = query.eq("consultant_dr", userName);
+      }
     }
+
+    if (ipdBatch) {
+      query = query.in("ipd_number", ipdBatch);
+    }
+
+    return query;
+  };
+
+  if (!shouldFilter) {
+    return fetchAllRows((from, to) => buildQuery().range(from, to));
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  // A nurse can have hundreds of patients: send the IPD numbers in batches so
+  // the request URL stays short, then merge back into newest-first order.
+  const IPD_BATCH = 200;
+  const batches = [];
+  for (let i = 0; i < ipdNumbers.length; i += IPD_BATCH) {
+    batches.push(ipdNumbers.slice(i, i + IPD_BATCH));
+  }
+  const results = await Promise.all(
+    batches.map((batch) => fetchAllRows((from, to) => buildQuery(batch).range(from, to)))
+  );
+  return results
+    .flat()
+    .sort(
+      (a, b) =>
+        String(b.timestamp || "").localeCompare(String(a.timestamp || "")) || b.id - a.id
+    );
 };
 
 /**
@@ -98,6 +141,23 @@ export const deleteIpdPatient = async (patientId) => {
 
   if (error) throw error;
   return true;
+};
+
+/**
+ * Nurses per patient for the given shift, for a whole page of patient cards in
+ * one call (each PatientCard used to run its own query).
+ * @returns {Promise<Record<string, string[]>>} IPD number -> nurse names, most recent first
+ */
+export const getPatientCardNurses = async (ipdNumbers, shift) => {
+  if (!ipdNumbers.length) return {};
+
+  const { data, error } = await supabase.rpc("get_patient_card_nurses", {
+    p_ipds: ipdNumbers,
+    p_shift: shift,
+  });
+
+  if (error) throw error;
+  return Object.fromEntries((data || []).map((row) => [row.ipd, row.nurses || []]));
 };
 
 /**

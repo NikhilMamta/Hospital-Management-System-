@@ -1,21 +1,88 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, Check, FileText, Calendar, Search, Filter } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
+import Pagination from "../../../components/Pagination";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+// History used to show only the latest 100; pages of 100 keep that first view
+const PAGE_SIZE = 100;
+
+// Only the columns the lists read (was select("*"))
+const LAB_COLUMNS =
+  "id, lab_no, admission_no, patient_name, phone_no, reason_for_visit, category, pathology_tests, radiology_tests, payment_status, planned2, actual2";
+
+// Same conditions as the pending / history queries below
+const isPendingRow = (row) =>
+  row.payment_status === "Yes" && !!row.planned2 && !row.actual2;
+const isHistoryRow = (row) => row.payment_status === "Yes" && !!row.actual2;
+
+// Received samples (payment done, actual2 set)
+const historyQuery = (columns, options) =>
+  supabase
+    .from("lab")
+    .select(columns, options)
+    .eq("payment_status", "Yes")
+    .not("actual2", "is", null);
 
 const ReceiveSample = () => {
   const [pendingSamples, setPendingSamples] = useState([]);
   const [historySamples, setHistorySamples] = useState([]);
+  // History is paged on the server (it was cut at the latest 100)
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyStats, setHistoryStats] = useState({
+    pathology: 0,
+    radiology: 0,
+  });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyReady, setHistoryReady] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTabState] = useState("pending");
 
   // Filters
-  const [selectedPatient, setSelectedPatient] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedPatient, setSelectedPatientState] = useState("");
+  const [selectedDate, setSelectedDateState] = useState("");
   const [patientNames, setPatientNames] = useState([]);
 
   const { showNotification } = useNotification();
+
+  // A new tab or filter starts the history list again at page 0
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    setHistoryPage(0);
+  };
+  const setSelectedPatient = (name) => {
+    setSelectedPatientState(name);
+    setHistoryPage(0);
+  };
+  const setSelectedDate = (date) => {
+    setSelectedDateState(date);
+    setHistoryPage(0);
+  };
+
+  // Latest lists for the realtime handler (it is created once, on mount)
+  const pendingRef = useRef([]);
+  const historyRef = useRef([]);
+  useEffect(() => {
+    pendingRef.current = pendingSamples;
+  }, [pendingSamples]);
+  useEffect(() => {
+    historyRef.current = historySamples;
+  }, [historySamples]);
+
+  // Re-reads the history page and counts once; a save and its own realtime
+  // event (or a burst of events) arrive within this window and share one fetch.
+  const historyTimer = useRef(null);
+  const refreshHistory = () => {
+    clearTimeout(historyTimer.current);
+    historyTimer.current = setTimeout(
+      () => setHistoryVersion((v) => v + 1),
+      1000,
+    );
+  };
 
   useEffect(() => {
     loadData();
@@ -28,21 +95,30 @@ const ReceiveSample = () => {
         const id = oldRow?.id;
         if (!id) return;
         setPendingSamples((prev) => prev.filter((r) => r.id !== id));
-        setHistorySamples((prev) => prev.filter((r) => r.id !== id));
+        refreshHistory(); // the row may be on any history page
         return;
       }
 
       const row = newRow;
       if (!row) return;
 
-      setPendingSamples((prev) => prev.filter((r) => r.id !== row.id));
-      setHistorySamples((prev) => prev.filter((r) => r.id !== row.id));
+      const wasPending = pendingRef.current.some((r) => r.id === row.id);
+      const onHistoryPage = historyRef.current.some((r) => r.id === row.id);
 
-      if (row.payment_status === "Yes" && row.planned2 && !row.actual2) {
+      setPendingSamples((prev) => prev.filter((r) => r.id !== row.id));
+
+      if (isPendingRow(row)) {
         setPendingSamples((prev) => [row, ...prev]);
-      } else if (row.payment_status === "Yes" && row.actual2) {
-        setHistorySamples((prev) => [row, ...prev]);
       }
+
+      // History is paged on the server: re-read it when a record moves in or
+      // out of it (records reach history from the pending queue) or when it
+      // is on the page being shown
+      const movedQueue =
+        eventType === "INSERT"
+          ? isHistoryRow(row)
+          : wasPending !== isPendingRow(row);
+      if (onHistoryPage || movedQueue) refreshHistory();
 
       if (row.patient_name) {
         setPatientNames((prev) =>
@@ -69,41 +145,109 @@ const ReceiveSample = () => {
       .subscribe();
 
     return () => {
+      clearTimeout(historyTimer.current);
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // History page + the history-wide counts used by the stat cards
+  useEffect(() => {
+    let ignore = false;
+
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      try {
+        const from = historyPage * PAGE_SIZE;
+        let pageQuery = historyQuery(LAB_COLUMNS, { count: "exact" })
+          .order("actual2", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        // Same filters as the pending tab, run on the server
+        if (selectedPatient) {
+          pageQuery = pageQuery.eq("patient_name", selectedPatient);
+        }
+        if (selectedDate) {
+          pageQuery = pageQuery
+            .gte("planned2", `${selectedDate} 00:00:00`)
+            .lte("planned2", `${selectedDate} 23:59:59.999`);
+        }
+
+        const [pageRes, pathologyRes, radiologyRes] = await Promise.all([
+          pageQuery,
+          historyQuery("id", { count: "exact", head: true }).eq(
+            "category",
+            "Pathology",
+          ),
+          historyQuery("id", { count: "exact", head: true }).eq(
+            "category",
+            "Radiology",
+          ),
+        ]);
+        const error =
+          pageRes.error || pathologyRes.error || radiologyRes.error;
+        if (error) throw error;
+        if (ignore) return;
+
+        const total = pageRes.count ?? 0;
+        // The page can run past the end after rows move out of history
+        if (!pageRes.data?.length && historyPage > 0 && total > 0) {
+          setHistoryPage(Math.ceil(total / PAGE_SIZE) - 1);
+          return;
+        }
+
+        setHistorySamples(pageRes.data || []);
+        setHistoryTotal(total);
+        setHistoryStats({
+          pathology: pathologyRes.count ?? 0,
+          radiology: radiologyRes.count ?? 0,
+        });
+      } catch (error) {
+        console.error("Failed to load sample history:", error);
+        if (!ignore) showNotification("Failed to load sample data.", "error");
+      } finally {
+        if (!ignore) {
+          setHistoryLoading(false);
+          setHistoryReady(true);
+        }
+      }
+    };
+
+    loadHistory();
+    return () => {
+      ignore = true;
+    };
+  }, [historyPage, selectedPatient, selectedDate, historyVersion]);
 
   const loadData = async (silent = false) => {
     try {
       if (!silent) setIsInitialLoading(true);
 
-      // Load Pending: planned2 is NOT NULL (Scheduled) AND actual2 is NULL (Not Received)
-      const { data: pending, error: pendingError } = await supabase
-        .from("lab")
-        .select("*")
-        .eq("payment_status", "Yes")
-        .not("planned2", "is", null)
-        .is("actual2", null)
-        .order("timestamp", { ascending: false });
+      const [pending, historyNames] = await Promise.all([
+        // Load Pending: planned2 is NOT NULL (Scheduled) AND actual2 is NULL (Not Received).
+        // Loaded whole (in 1,000-row chunks) so the queue is never cut off.
+        fetchAllRows((from, to) =>
+          supabase
+            .from("lab")
+            .select(LAB_COLUMNS)
+            .eq("payment_status", "Yes")
+            .not("planned2", "is", null)
+            .is("actual2", null)
+            .order("timestamp", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to),
+        ),
+        // The patient filter lists everyone in pending + all of history,
+        // so only the name column of history is read here
+        fetchAllRows((from, to) =>
+          historyQuery("patient_name").order("id").range(from, to),
+        ),
+      ]);
 
-      if (pendingError) throw pendingError;
-
-      // Load History: actual2 is NOT NULL (Received)
-      const { data: history, error: historyError } = await supabase
-        .from("lab")
-        .select("*")
-        .eq("payment_status", "Yes")
-        .not("actual2", "is", null)
-        .order("actual2", { ascending: false })
-        .limit(100);
-
-      if (historyError) throw historyError;
-
-      setPendingSamples(pending || []);
-      setHistorySamples(history || []);
+      setPendingSamples(pending);
 
       // Extract unique patient names for filter
-      const allRecords = [...(pending || []), ...(history || [])];
+      const allRecords = [...pending, ...historyNames];
       const names = [
         ...new Set(allRecords.map((r) => r.patient_name).filter(Boolean)),
       ].sort();
@@ -136,29 +280,34 @@ const ReceiveSample = () => {
       if (error) throw error;
 
       showNotification("Sample received successfully!", "success");
-      // Data reload handled by subscription, but we can optimistically update or reload
-      loadData();
+      // The sample moves from pending to history. Patch the queue here and
+      // re-read history once (was a full reload on top of the realtime update).
+      setPendingSamples((prev) => prev.filter((r) => r.id !== record.id));
+      refreshHistory();
     } catch (error) {
       console.error("Failed to receive sample:", error);
       showNotification("Failed to update sample status.", "error");
     }
   };
 
-  // Helper to calculate stats
+  // Helper to calculate stats (history part counted on the server; it was
+  // counted from the latest 100 only)
+  const pendPath = pendingSamples.filter(
+    (r) => r.category === "Pathology",
+  ).length;
+  const pendRad = pendingSamples.filter(
+    (r) => r.category === "Radiology",
+  ).length;
   const stats = {
-    totalPath:
-      pendingSamples.filter((r) => r.category === "Pathology").length +
-      historySamples.filter((r) => r.category === "Pathology").length,
-    totalRad:
-      pendingSamples.filter((r) => r.category === "Radiology").length +
-      historySamples.filter((r) => r.category === "Radiology").length,
-    pendPath: pendingSamples.filter((r) => r.category === "Pathology").length,
-    pendRad: pendingSamples.filter((r) => r.category === "Radiology").length,
-    compPath: historySamples.filter((r) => r.category === "Pathology").length,
-    compRad: historySamples.filter((r) => r.category === "Radiology").length,
+    totalPath: pendPath + historyStats.pathology,
+    totalRad: pendRad + historyStats.radiology,
+    pendPath,
+    pendRad,
+    compPath: historyStats.pathology,
+    compRad: historyStats.radiology,
   };
 
-  // Filter Logic
+  // Filter Logic (pending queue; history is filtered on the server)
   const filterRecords = (records) => {
     return records.filter((record) => {
       const matchesPatient = selectedPatient
@@ -181,7 +330,7 @@ const ReceiveSample = () => {
   };
 
   const filteredPending = filterRecords(pendingSamples);
-  const filteredHistory = filterRecords(historySamples);
+  const filteredHistory = historySamples; // filtered and paged on the server
 
   // Date formatter
   const formatDate = (dateString) => {
@@ -194,7 +343,7 @@ const ReceiveSample = () => {
     });
   };
 
-  if (isInitialLoading) {
+  if (isInitialLoading || !historyReady) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
@@ -314,7 +463,7 @@ const ReceiveSample = () => {
                       : "border-transparent text-gray-500 hover:text-gray-700"
                   }`}
                 >
-                  History ({filteredHistory.length})
+                  History ({historyTotal})
                 </button>
               </nav>
 
@@ -372,7 +521,7 @@ const ReceiveSample = () => {
                       : "border-transparent text-gray-500 hover:text-gray-700"
                   }`}
                 >
-                  History ({filteredHistory.length})
+                  History ({historyTotal})
                 </button>
               </nav>
               <div className="flex flex-wrap gap-2">
@@ -656,6 +805,14 @@ const ReceiveSample = () => {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={historyPage}
+                pageSize={PAGE_SIZE}
+                total={historyTotal}
+                onPageChange={setHistoryPage}
+                disabled={historyLoading}
+                label="samples"
+              />
             </div>
 
             {/* Mobile List */}
@@ -706,6 +863,16 @@ const ReceiveSample = () => {
                   <p className="text-gray-500">No history records</p>
                 </div>
               )}
+              <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+                <Pagination
+                  page={historyPage}
+                  pageSize={PAGE_SIZE}
+                  total={historyTotal}
+                  onPageChange={setHistoryPage}
+                  disabled={historyLoading}
+                  label="samples"
+                />
+              </div>
             </div>
           </div>
         )}

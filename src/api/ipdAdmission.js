@@ -1,16 +1,43 @@
 import supabase from '../SupabaseClient';
 
-/**
- * Fetches all IPD admission records.
- */
-export const getIpdAdmissions = async () => {
-  const { data, error } = await supabase
-    .from("ipd_admissions")
-    .select("*")
-    .order("timestamp", { ascending: false });
+export const IPD_ADMISSIONS_PAGE_SIZE = 50;
 
+const SEARCH_COLUMNS = ["patient_name", "admission_no", "ipd_number", "phone_no", "whatsapp_no"];
+
+/**
+ * Fetches one page of IPD admissions, newest first.
+ * Search and date filtering run on the server, so every admission can be found
+ * (fetching the whole table was silently capped at 1,000 rows by Supabase).
+ *
+ * @param {Object} options
+ * @param {number} options.page   - Zero-based page number
+ * @param {string} options.search - Matches name, admission no, IPD no, phone or WhatsApp
+ * @param {string} options.date   - "YYYY-MM-DD": only admissions (planned1) on that day
+ * @returns {Promise<{ rows: Array, total: number }>}
+ */
+export const getIpdAdmissions = async ({ page = 0, search = "", date = "" } = {}) => {
+  const from = page * IPD_ADMISSIONS_PAGE_SIZE;
+
+  let query = supabase
+    .from("ipd_admissions")
+    .select("*", { count: "exact" })
+    .order("timestamp", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, from + IPD_ADMISSIONS_PAGE_SIZE - 1);
+
+  // Drop characters that have a meaning in PostgREST's or() filter syntax.
+  const term = search.replace(/[,()"\\]/g, " ").trim();
+  if (term) {
+    query = query.or(SEARCH_COLUMNS.map((col) => `${col}.ilike."%${term}%"`).join(","));
+  }
+
+  if (date) {
+    query = query.gte("planned1", `${date} 00:00:00`).lte("planned1", `${date} 23:59:59.999`);
+  }
+
+  const { data, error, count } = await query;
   if (error) throw error;
-  return data || [];
+  return { rows: data || [], total: count ?? 0 };
 };
 
 /**
@@ -56,9 +83,12 @@ export const getIpdMasters = async () => {
 
 /**
  * Saves (Insert/Update) IPD Admission.
+ *
+ * Bed status and patient_admission.actual2 are set by database triggers on
+ * ipd_admissions (see sql_scripts/IPD_ADMISSION_FIX_LOG.md), inside the same
+ * transaction as this insert/update, so a save either fully succeeds or fails.
  */
 export const saveIpdAdmission = async ({ patientData, isEditing, id }) => {
-  let result;
   if (isEditing) {
     const { data, error } = await supabase
       .from("ipd_admissions")
@@ -66,32 +96,15 @@ export const saveIpdAdmission = async ({ patientData, isEditing, id }) => {
       .eq("id", id)
       .select();
     if (error) throw error;
-    result = data[0];
-  } else {
-    const { data, error } = await supabase
-      .from("ipd_admissions")
-      .insert([patientData])
-      .select();
-    if (error) throw error;
-    result = data[0];
+    return data[0];
   }
 
-  // Chain updates
-  await Promise.all([
-    // Occupy bed
-    supabase.from("all_floor_bed").update({ status: "Occupied" })
-      .eq("floor", patientData.floor)
-      .eq("ward", patientData.ward_type)
-      .eq("room", patientData.room)
-      .eq("bed", patientData.bed_no),
-    
-    // Mark patient admission as completed in IPD selection
-    !isEditing ? supabase.from("patient_admission").update({
-      actual2: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "")
-    }).eq("admission_no", patientData.admission_no) : Promise.resolve()
-  ]);
-
-  return result;
+  const { data, error } = await supabase
+    .from("ipd_admissions")
+    .insert([patientData])
+    .select();
+  if (error) throw error;
+  return data[0];
 };
 
 /**

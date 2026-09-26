@@ -73,7 +73,7 @@ export default function Dashboard() {
   useRealtimeQuery("all_floor_bed", ['dashboard']);
 
   const handlePostSuccess = () => {
-    queryClient.invalidateQueries(['congratulations-posts']);
+    queryClient.invalidateQueries({ queryKey: ['congratulations-posts'] });
   };
 
   // Calculate percentage for progress bars

@@ -35,11 +35,13 @@ const createEmptySummary = () => ({
   topPerformer: "N/A",
 });
 
-const getTodayDateString = () => {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offset).toISOString().split("T")[0];
+// "YYYY-MM-DD" in the browser's local time zone (toISOString alone would give the UTC date)
+const toLocalDateString = (date) => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().split("T")[0];
 };
+
+const getTodayDateString = () => toLocalDateString(new Date());
 
 const parseDateOnly = (value) => {
   if (!value || typeof value !== "string") return null;
@@ -180,77 +182,27 @@ const ScoreDashboard = () => {
         return;
       }
 
-      const startDateValue = startBoundary.toISOString().split("T")[0];
-      const endDateValue = endBoundary.toISOString().split("T")[0];
-
-      const { data, error } = await supabase
-        .from("nurse_assign_task")
-        .select("assign_nurse, shift, planned1, actual1, start_date")
-        .gte("start_date", startDateValue)
-        .lte("start_date", endDateValue);
+      // Per-nurse totals are calculated in the database (get_nurse_score_stats),
+      // so every task in the range is counted, not just the first 1,000 rows.
+      const { data, error } = await supabase.rpc("get_nurse_score_stats", {
+        p_start: toLocalDateString(startBoundary),
+        p_end: toLocalDateString(endBoundary),
+      });
 
       if (error) throw error;
 
-      endBoundary.setHours(23, 59, 59, 999);
-
-      const filteredTasks = (data || []).filter((task) => {
-        if (!task.assign_nurse || task.assign_nurse.trim() === "") return false;
-
-        const taskDate = parseDateOnly(task.start_date);
-        if (!taskDate) return false;
-
-        return taskDate >= startBoundary && taskDate <= endBoundary;
-      });
-
-      const totalTasks = filteredTasks.length;
-      const completedTasks = filteredTasks.filter(
-        (task) => task.planned1 && task.actual1,
-      ).length;
-      const pendingTasks = filteredTasks.filter(
-        (task) => task.planned1 && !task.actual1,
-      ).length;
-
-      const nurseStatsMap = new Map();
-      const uniqueNurses = new Set();
-
-      filteredTasks.forEach((task) => {
-        const nurseName = task.assign_nurse.trim();
-        uniqueNurses.add(nurseName);
-
-        if (!nurseStatsMap.has(nurseName)) {
-          nurseStatsMap.set(nurseName, {
-            name: nurseName,
-            total: 0,
-            completed: 0,
-            pending: 0,
-            shifts: new Set(),
-          });
-        }
-
-        const stats = nurseStatsMap.get(nurseName);
-        stats.total += 1;
-
-        if (task.planned1 && task.actual1) {
-          stats.completed += 1;
-        } else if (task.planned1 && !task.actual1) {
-          stats.pending += 1;
-        }
-
-        if (task.shift) {
-          stats.shifts.add(task.shift);
-        }
-      });
-
-      const formattedNurseStats = Array.from(nurseStatsMap.values())
+      const formattedNurseStats = (data || [])
         .map((stat) => {
-          const shiftsArray = Array.from(stat.shifts);
-          const score =
-            stat.total > 0
-              ? Math.round((stat.completed / stat.total) * 100)
-              : 0;
+          const total = Number(stat.total) || 0;
+          const completed = Number(stat.completed) || 0;
+          const shiftsArray = stat.shifts || [];
+          const score = total > 0 ? Math.round((completed / total) * 100) : 0;
 
           return {
-            ...stat,
+            name: stat.name,
+            total,
+            completed,
+            pending: Number(stat.pending) || 0,
             shifts:
               shiftsArray.length > 0
                 ? shiftsArray.slice(0, 2).join(", ") +
@@ -260,6 +212,10 @@ const ScoreDashboard = () => {
           };
         })
         .sort((a, b) => b.score - a.score || b.completed - a.completed);
+
+      const totalTasks = formattedNurseStats.reduce((sum, stat) => sum + stat.total, 0);
+      const completedTasks = formattedNurseStats.reduce((sum, stat) => sum + stat.completed, 0);
+      const pendingTasks = formattedNurseStats.reduce((sum, stat) => sum + stat.pending, 0);
 
       const topPerformer =
         formattedNurseStats.length > 0 ? formattedNurseStats[0].name : "N/A";
@@ -276,7 +232,7 @@ const ScoreDashboard = () => {
         totalTasks,
         totalCompleted: completedTasks,
         pendingTasks,
-        uniqueNurses: uniqueNurses.size,
+        uniqueNurses: formattedNurseStats.length,
         avgScore,
         topPerformer,
       });

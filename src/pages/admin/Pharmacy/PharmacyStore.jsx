@@ -1,13 +1,27 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Eye, FileText, X, Download, CheckCircle, Clock } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
-import { getStoreIndents, updateIndentStatus } from "../../../api/pharmacy";
+import {
+  getStorePendingIndents,
+  getStoreHistoryPage,
+  getStoreHistoryCount,
+  getStoreFilterOptions,
+  normalizeStoreWard,
+  STORE_HISTORY_PAGE_SIZE,
+  updateIndentStatus,
+} from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import useDebounce from "../../../hooks/useDebounce";
+import Pagination from "../../../components/Pagination";
 import {
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
 } from "../../../utils/pharmacyIndentUtils";
+
+// New or edited indents (no planned2 yet) have not reached the store.
+const reachedStore = (payload) =>
+  payload.eventType === "DELETE" || Boolean(payload.new?.planned2);
 
 const StoreMedicinePage = () => {
   const queryClient = useQueryClient();
@@ -30,54 +44,104 @@ const StoreMedicinePage = () => {
   const [selectedDate, setSelectedDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
+  const [historyPage, setHistoryPage] = useState(0);
   const { showNotification } = useNotification();
 
-  const normalizeWardFilter = (wardValue) => {
-    const normalizedWard = String(wardValue || "").trim().toLowerCase();
-    if (!normalizedWard) return "";
-    if (normalizedWard.includes("picu")) return "PICU";
-    if (normalizedWard.includes("nicu")) return "NICU";
-    if (normalizedWard.includes("icu")) return "ICU";
-    if (normalizedWard.includes("hdu")) return "HDU";
-    if (normalizedWard.includes("emergency")) return "Emergency";
-    if (normalizedWard.includes("private")) return "Private Ward";
-    if (normalizedWard.includes("general ward(5th floor)") || normalizedWard.includes("5th floor")) {
-      return "General Ward(5th floor)";
-    }
-    return String(wardValue || "").trim();
-  };
+  // Same ward groups as the server-side filter in api/pharmacy.js
+  const normalizeWardFilter = normalizeStoreWard;
 
   // --- Queries ---
-  const { data: rawData = { patient: [], departmental: [] }, isLoading: isInitialLoading } = useQuery({
-    queryKey: ['pharmacy', 'store'],
-    queryFn: getStoreIndents
+  // Pending and history used to be split here from one list that stopped at
+  // the newest 1,000 indents, which hid older pending ones. Pending is a small
+  // queue read whole; history is paged on the server.
+  const { data: rawPending = { patient: [], departmental: [] }, isLoading: isInitialLoading } = useQuery({
+    queryKey: ['pharmacy', 'store', 'pending'],
+    queryFn: getStorePendingIndents
   });
 
-  // Real-time
-  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'store']);
+  const isHistoryTab = activeTab === "history";
+  const debouncedSearch = useDebounce(searchTerm, 400);
+  const historyFilters = useMemo(() => ({
+    search: debouncedSearch,
+    patient: selectedPatient,
+    ward: selectedWard,
+    indentType: indentTypeFilter,
+    date: selectedDate,
+  }), [debouncedSearch, selectedPatient, selectedWard, indentTypeFilter, selectedDate]);
+
+  const { data: historyData, isLoading: isLoadingHistory, isFetching: isFetchingHistory } = useQuery({
+    queryKey: ['pharmacy', 'store', 'history', historyPage, historyFilters],
+    queryFn: () => getStoreHistoryPage({ page: historyPage, filters: historyFilters }),
+    enabled: isHistoryTab,
+    placeholderData: keepPreviousData,
+  });
+
+  // The History tab label needs the total while the Pending tab is open too
+  const { data: historyCount = 0 } = useQuery({
+    queryKey: ['pharmacy', 'store', 'history-count', historyFilters],
+    queryFn: () => getStoreHistoryCount(historyFilters),
+    enabled: !isHistoryTab,
+    placeholderData: keepPreviousData,
+  });
+
+  const historyTotal = isHistoryTab && historyData ? historyData.total : historyCount;
+  const historyPageCount = Math.max(1, Math.ceil(historyTotal / STORE_HISTORY_PAGE_SIZE));
+
+  // A new search, filter or tab starts again from the first page
+  useEffect(() => {
+    setHistoryPage(0);
+  }, [historyFilters, activeTab]);
+
+  // If rows disappear, don't stay on an empty page
+  useEffect(() => {
+    if (historyPage > 0 && historyPage >= historyPageCount) setHistoryPage(historyPageCount - 1);
+  }, [historyPage, historyPageCount]);
+
+  // Every patient and ward the filters can offer. It takes ~13 requests, so it
+  // loads once the History tab or a dropdown is used, and is cached for a
+  // while instead of reloading on each change.
+  const [wantFilterOptions, setWantFilterOptions] = useState(false);
+  const loadFilterOptions = () => setWantFilterOptions(true);
+  const { data: filterOptions = { titles: [], wards: [] } } = useQuery({
+    queryKey: ['pharmacy', 'store-filter-options'],
+    queryFn: getStoreFilterOptions,
+    enabled: isHistoryTab || wantFilterOptions,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+  });
+
+  // Real-time: patient indents are in `pharmacy`, ward indents in
+  // departmental_pharmacy_indent (the old array form only heard the second).
+  useRealtimeQuery('pharmacy', ['pharmacy', 'store'], { filter: reachedStore });
+  useRealtimeQuery('departmental_pharmacy_indent', ['pharmacy', 'store'], { filter: reachedStore });
 
   // --- Derived Data ---
-  const normalizedData = useMemo(() => {
-    return [
-      ...rawData.patient.map(normalizePatientPharmacyIndent),
-      ...rawData.departmental.map(normalizeDepartmentalPharmacyIndent),
-    ];
-  }, [rawData]);
+  const pendingIndents = useMemo(() => [
+    ...rawPending.patient.map(normalizePatientPharmacyIndent),
+    ...rawPending.departmental.map(normalizeDepartmentalPharmacyIndent),
+  ], [rawPending]);
 
-  const pendingIndents = useMemo(() => normalizedData.filter(i => i.planned2 && !i.actual2), [normalizedData]);
-  const historyIndents = useMemo(() => normalizedData.filter(i => i.planned2 && i.actual2), [normalizedData]);
+  // One page: patient indents first, then departmental ones (as before)
+  const historyIndents = useMemo(() => [
+    ...(historyData?.patient || []).map(normalizePatientPharmacyIndent),
+    ...(historyData?.departmental || []).map(normalizeDepartmentalPharmacyIndent),
+  ], [historyData]);
+
+  const normalizedData = useMemo(() => [...pendingIndents, ...historyIndents], [pendingIndents, historyIndents]);
 
   const patientNames = useMemo(() => {
-    return [...new Set(normalizedData.map(i => i.displayTitle || i.patientName).filter(Boolean))].sort();
-  }, [normalizedData]);
+    const loaded = normalizedData.map(i => i.displayTitle || i.patientName).filter(Boolean);
+    return [...new Set([...filterOptions.titles, ...loaded])].sort();
+  }, [normalizedData, filterOptions]);
 
   const wardLocations = useMemo(() => {
-    const unique = [...new Set(normalizedData.map(i => normalizeWardFilter(i.location || i.wardLocation)).filter(Boolean))];
+    const loaded = normalizedData.map(i => normalizeWardFilter(i.location || i.wardLocation)).filter(Boolean);
+    const unique = [...new Set([...filterOptions.wards, ...loaded])];
     const filters = ["ICU", "Private Ward", "PICU", "NICU", "Emergency", "HDU", "General Ward(5th floor)"];
     return [...filters, ...unique.filter(w => !filters.includes(w))].filter(Boolean);
-  }, [normalizedData]);
+  }, [normalizedData, filterOptions]);
 
-  const loading = isInitialLoading;
+  const loading = isInitialLoading || (isHistoryTab && isLoadingHistory);
 
   // --- Mutations ---
   const confirmMutation = useMutation({
@@ -149,7 +213,8 @@ const StoreMedicinePage = () => {
   };
 
   const filteredPendingIndents = applyFilters(pendingIndents);
-  const filteredHistoryIndents = applyFilters(historyIndents);
+  // History filters run on the server (see historyFilters)
+  const filteredHistoryIndents = historyIndents;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -168,7 +233,7 @@ const StoreMedicinePage = () => {
                 Pending ({filteredPendingIndents.length})
               </button>
               <button onClick={() => setActiveTab("history")} className={`px-6 py-3 text-base font-medium border-b-2 transition-colors ${activeTab === "history" ? "border-green-500 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-                History ({filteredHistoryIndents.length})
+                History ({historyTotal})
               </button>
             </nav>
 
@@ -179,7 +244,7 @@ const StoreMedicinePage = () => {
                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                 </div>
               </div>
-              <select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[180px]">
+              <select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value)} onFocus={loadFilterOptions} onMouseDown={loadFilterOptions} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[180px]">
                 <option value="">All Indents</option>
                 {patientNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
@@ -188,7 +253,7 @@ const StoreMedicinePage = () => {
                 <option value="patient">Patient</option>
                 <option value="departmental">Departmental</option>
               </select>
-              <select value={selectedWard} onChange={(e) => setSelectedWard(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[180px]">
+              <select value={selectedWard} onChange={(e) => setSelectedWard(e.target.value)} onFocus={loadFilterOptions} onMouseDown={loadFilterOptions} className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[180px]">
                 <option value="">All Wards</option>
                 {wardLocations.map((w, i) => <option key={i} value={w}>{w}</option>)}
               </select>
@@ -202,11 +267,11 @@ const StoreMedicinePage = () => {
           <div className="lg:hidden flex flex-col gap-2 pb-2">
             <nav className="flex gap-2 -mb-[1px]">
               <button onClick={() => setActiveTab("pending")} className={`flex-1 py-2 text-sm font-medium border-b-2 ${activeTab === "pending" ? "border-green-500 text-green-600" : "text-gray-500"}`}>Pending ({filteredPendingIndents.length})</button>
-              <button onClick={() => setActiveTab("history")} className={`flex-1 py-2 text-sm font-medium border-b-2 ${activeTab === "history" ? "border-green-500 text-green-600" : "text-gray-500"}`}>History ({filteredHistoryIndents.length})</button>
+              <button onClick={() => setActiveTab("history")} className={`flex-1 py-2 text-sm font-medium border-b-2 ${activeTab === "history" ? "border-green-500 text-green-600" : "text-gray-500"}`}>History ({historyTotal})</button>
             </nav>
             <div className="flex flex-wrap gap-2">
               <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 min-w-[150px] px-3 py-1.5 border rounded-lg text-xs" />
-              <select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value)} className="flex-1 min-w-[120px] px-2 py-1.5 border rounded-lg text-xs">
+              <select value={selectedPatient} onChange={(e) => setSelectedPatient(e.target.value)} onFocus={loadFilterOptions} onMouseDown={loadFilterOptions} className="flex-1 min-w-[120px] px-2 py-1.5 border rounded-lg text-xs">
                 <option value="">All Indents</option>
                 {patientNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
@@ -319,6 +384,14 @@ const StoreMedicinePage = () => {
                     </div>
                   ))}
                 </div>
+                <Pagination
+                  page={historyPage}
+                  pageSize={STORE_HISTORY_PAGE_SIZE}
+                  total={historyTotal}
+                  onPageChange={setHistoryPage}
+                  disabled={isFetchingHistory}
+                  label="indents"
+                />
               </div>
             )}
           </>

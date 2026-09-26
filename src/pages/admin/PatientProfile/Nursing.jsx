@@ -3,6 +3,7 @@ import { Heart, X, User, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { useOutletContext } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { isChangeForPatient } from "../../../utils/realtimeFilters";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -156,7 +157,10 @@ export default function Nursing() {
 
   // Real-time: refetch whenever nurse_assign_task changes
   // Silent refresh: real-time updates skip the loading spinner to avoid scroll-reset flicker
-  useRealtimeTable("nurse_assign_task", () => fetchNursingTasks(true));
+  // Only this patient's task changes trigger a reload
+  useRealtimeTable("nurse_assign_task", () => fetchNursingTasks(true), true, (payload) =>
+    isChangeForPatient(payload, ["Ipd_number"], data?.personalInfo?.ipd),
+  );
 
   const getFilteredTasks = () => {
     const tasks = activeTab === "pending" ? pendingList : historyList;

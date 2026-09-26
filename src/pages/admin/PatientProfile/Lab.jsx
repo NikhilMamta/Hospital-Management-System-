@@ -387,9 +387,11 @@ export default function Lab() {
 
         // Fetch reason_for_visit from patient_admission using admission_no
         if (admissionNo) {
+          // (patient_admission has no ward_type column; asking for it made this
+          // whole request fail, so reason_for_visit was never used)
           const { data: patAdmRecord } = await supabase
             .from("patient_admission")
-            .select("reason_for_visit, ward_type, phone_no")
+            .select("reason_for_visit, phone_no")
             .eq("admission_no", admissionNo)
             .single();
 
@@ -397,8 +399,6 @@ export default function Lab() {
             // Prioritize reason_for_visit from patient_admission as originally requested
             if (patAdmRecord.reason_for_visit)
               reasonForVisit = patAdmRecord.reason_for_visit;
-            if (!wardType && patAdmRecord.ward_type)
-              wardType = patAdmRecord.ward_type;
             if (!phoneNo && patAdmRecord.phone_no)
               phoneNo = patAdmRecord.phone_no;
           }

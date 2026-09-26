@@ -12,16 +12,20 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Bell,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
-import { 
-  getIpdAdmissions, 
-  getEligibleIpdPatients, 
-  getIpdMasters, 
-  saveIpdAdmission 
+import useDebounce from "../../../hooks/useDebounce";
+import {
+  getIpdAdmissions,
+  getEligibleIpdPatients,
+  getIpdMasters,
+  saveIpdAdmission,
+  IPD_ADMISSIONS_PAGE_SIZE,
 } from "../../../api/ipdAdmission";
 
 const PatientAdmissionSystem = () => {
@@ -31,6 +35,8 @@ const PatientAdmissionSystem = () => {
   const [admissionSearchTerm, setAdmissionSearchTerm] = useState("");
   const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
+  const [page, setPage] = useState(0);
+  const debouncedSearch = useDebounce(searchTerm, 400);
 
   const queryClient = useQueryClient();
 
@@ -48,10 +54,28 @@ const PatientAdmissionSystem = () => {
   const [doctorSearch, setDoctorSearch] = useState("");
 
   // React Query Fetching
-  const { data: admissionsData = [], isLoading: isLoadingAdmissions } = useQuery({
-    queryKey: ["ipd_admissions_all"],
-    queryFn: getIpdAdmissions,
+  // One page at a time; search and date filter run on the server.
+  const {
+    data: admissionsPage = { rows: [], total: 0 },
+    isLoading: isLoadingAdmissions,
+    isFetching: isFetchingAdmissions,
+  } = useQuery({
+    queryKey: ["ipd_admissions_all", page, debouncedSearch, dateFilter],
+    queryFn: () => getIpdAdmissions({ page, search: debouncedSearch, date: dateFilter }),
+    placeholderData: keepPreviousData,
   });
+  const admissionsData = admissionsPage.rows;
+  const totalPages = Math.max(1, Math.ceil(admissionsPage.total / IPD_ADMISSIONS_PAGE_SIZE));
+
+  // A new search or date starts again from the first page
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, dateFilter]);
+
+  // If rows disappear (e.g. a patient deleted elsewhere), don't stay on an empty page
+  useEffect(() => {
+    if (page > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalPages]);
 
   const { data: eligiblePatients = [], isLoading: isLoadingEligible } = useQuery({
     queryKey: ["eligible_ipd_patients"],
@@ -249,12 +273,26 @@ const PatientAdmissionSystem = () => {
         errMsg.includes("ipd_admissions_admission_no_unique") ||
         errMsg.includes("duplicate key") ||
         errMsg.includes("unique constraint");
-      showNotificationPopup(
-        isDuplicate
-          ? "This patient has already been admitted by another user. Please refresh."
-          : `Failed to ${editingPatient ? "update" : "admit"} patient: ${error.message}`,
-        "error"
-      );
+      // Postgres cancelled the request: the whole save was rolled back.
+      const isTimeout =
+        error.code === "57014" || /statement timeout|canceling statement/i.test(errMsg);
+      // The request may or may not have reached the server.
+      const isNetwork = /failed to fetch|networkerror|load failed/i.test(errMsg);
+
+      let message = `Failed to ${editingPatient ? "update" : "admit"} patient: ${error.message}`;
+      if (isDuplicate) {
+        message = "This patient has already been admitted by another user. Please refresh.";
+      } else if (isTimeout) {
+        message = "The server took too long, so the save was cancelled. Nothing was saved. Please try again.";
+      } else if (isNetwork) {
+        message = "Connection problem. The list has been refreshed: check whether the patient was saved before trying again.";
+      }
+      showNotificationPopup(message, "error");
+
+      // Show what is really saved (patients, eligible list, bed availability).
+      queryClient.invalidateQueries({ queryKey: ["ipd_admissions_all"] });
+      queryClient.invalidateQueries({ queryKey: ["eligible_ipd_patients"] });
+      queryClient.invalidateQueries({ queryKey: ["ipd_masters"] });
     }
   });
 
@@ -299,6 +337,8 @@ const PatientAdmissionSystem = () => {
       showNotificationPopup("Please select a bed before admitting the patient.", "error");
       return;
     }
+
+    const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
 
     const patientData = {
       ...(editingPatient ? { ipd_number: editingPatient.ipd_number } : {}),
@@ -347,9 +387,9 @@ const PatientAdmissionSystem = () => {
       marital_status: formData.maritalStatus,
       attempt: formData.attempt,
       remarks: formData.remarks.trim(),
-      timestamp: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
-      planned1: new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", ""),
-      status: "active",
+      // Admission time and status are set once, on admission. Editing must not
+      // reset them: time in ward is counted from planned1.
+      ...(editingPatient ? {} : { timestamp: now, planned1: now, status: "active" }),
     };
 
     saveMutation.mutate({
@@ -489,32 +529,18 @@ const PatientAdmissionSystem = () => {
     }
   };
 
-  // Filter patients for table display
-  const filteredPatients = useMemo(() => {
-    const search = searchTerm.toLowerCase();
-    const date = dateFilter;
-    
-    return admissionsData.filter((patient) => {
-      const matchesSearch = 
-        patient.patient_name?.toLowerCase().includes(search) ||
-        patient.admission_no?.toLowerCase().includes(search) ||
-        patient.ipd_number?.toLowerCase().includes(search) ||
-        patient.phone_no?.includes(search) ||
-        patient.whatsapp_no?.includes(search);
-      
-      const matchesDate = !date || (patient.planned1 && patient.planned1.includes(date));
-      
-      return matchesSearch && matchesDate;
-    });
-  }, [admissionsData, searchTerm, dateFilter]);
-
   const NoDataComponent = () => (
     <div className="px-4 py-8 text-center text-gray-500">
       {isLoadingAdmissions
         ? "Loading IPD patient records..."
-        : 'No IPD patient records found. Click "Patient Admission" to create one.'}
+        : debouncedSearch || dateFilter
+          ? "No patients match your search."
+          : 'No IPD patient records found. Click "Patient Admission" to create one.'}
     </div>
   );
+
+  const firstRowOnPage = admissionsPage.total === 0 ? 0 : page * IPD_ADMISSIONS_PAGE_SIZE + 1;
+  const lastRowOnPage = page * IPD_ADMISSIONS_PAGE_SIZE + admissionsData.length;
 
   return (
     <>
@@ -695,14 +721,14 @@ const PatientAdmissionSystem = () => {
                           </div>
                         </td>
                       </tr>
-                    ) : filteredPatients.length === 0 ? (
+                    ) : admissionsData.length === 0 ? (
                       <tr>
                         <td colSpan="12">
                           <NoDataComponent />
                         </td>
                       </tr>
                     ) : (
-                      filteredPatients.map((patient) => (
+                      admissionsData.map((patient) => (
                         <tr
                           key={patient.id}
                           className="hover:bg-gray-50 transition-colors border-b border-gray-100"
@@ -778,10 +804,10 @@ const PatientAdmissionSystem = () => {
                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-4"></div>
                   <p className="text-gray-700">Loading patients...</p>
                 </div>
-              ) : filteredPatients.length === 0 ? (
+              ) : admissionsData.length === 0 ? (
                 <NoDataComponent />
               ) : (
-                filteredPatients.map((patient) => (
+                admissionsData.map((patient) => (
                   <div
                     key={patient.id}
                     className="bg-white rounded-xl shadow-lg border border-gray-200/80 overflow-hidden"
@@ -886,6 +912,36 @@ const PatientAdmissionSystem = () => {
                   </div>
                 ))
               )}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 bg-white">
+              <p className="text-sm text-gray-600">
+                {admissionsPage.total === 0
+                  ? "0 patients"
+                  : `Showing ${firstRowOnPage}–${lastRowOnPage} of ${admissionsPage.total} patients`}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0 || isFetchingAdmissions}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </button>
+                <span className="text-sm text-gray-600 whitespace-nowrap">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page + 1 >= totalPages || isFetchingAdmissions}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 

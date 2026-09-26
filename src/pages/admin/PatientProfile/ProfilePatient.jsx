@@ -13,6 +13,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
 import PatientCard from "../../../components/PatientCard";
+import usePatientCardNurses, { getPatientCardIpd } from "../../../hooks/usePatientCardNurses";
 import { fetchIpdPatients, getDischargedAdmissions, deleteIpdPatient } from "../../../api/patientProfile";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 
@@ -163,6 +164,9 @@ export default function PatientProfile() {
   }, [patientsData, searchTerm, wardFilter, filterCategory, statusFilter, doctorTab, dischargedAdmissions, userRole]);
 
   const visiblePatients = filteredPatients.slice(0, visibleCount);
+
+  // Nurses for all visible cards in one request (was one request per card)
+  const cardNurses = usePatientCardNurses(visiblePatients);
 
   // Infinite Scroll Hook
   useEffect(() => {
@@ -365,6 +369,7 @@ export default function PatientProfile() {
                       onEdit={handleEdit}
                       onDelete={handleDelete}
                       compactView={compactView}
+                      nurses={cardNurses ? cardNurses[getPatientCardIpd(patient)] || [] : null}
                     />
                   </div>
                 ))

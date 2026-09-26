@@ -40,7 +40,6 @@ const RMOScoreDashboard = () => {
                 totalTasksResult,
                 pendingTasksResult,
                 completedTasksResult,
-                uniqueRmosResult,
                 rmoStatsResult
             ] = await Promise.all([
                 supabase
@@ -59,85 +58,38 @@ const RMOScoreDashboard = () => {
                     .not('planned1', 'is', null)
                     .not('actual1', 'is', null),
 
-                supabase
-                    .from('rmo_assign_task')
-                    .select('assign_rmo')
-                    .not('assign_rmo', 'is', null)
-                    .neq('assign_rmo', ''),
-
-                supabase
-                    .from('rmo_assign_task')
-                    .select('id, assign_rmo, shift, planned1, actual1')
-                    .not('assign_rmo', 'is', null)
-                    .neq('assign_rmo', '')
+                // Per-RMO totals are calculated in the database (get_rmo_score_stats),
+                // so every task is counted, not just the first 1,000 rows.
+                supabase.rpc('get_rmo_score_stats')
             ]);
+
+            if (rmoStatsResult.error) throw rmoStatsResult.error;
 
             // Extract counts from results
             const totalTasks = totalTasksResult.count || 0;
             const pendingTasks = pendingTasksResult.count || 0;
             const completedTasks = completedTasksResult.count || 0;
 
-            // Get unique RMOs from assign_rmo column
-            const uniqueRmos = new Set();
-            if (uniqueRmosResult.data) {
-                uniqueRmosResult.data.forEach(task => {
-                    if (task.assign_rmo && task.assign_rmo.trim() !== '') {
-                        uniqueRmos.add(task.assign_rmo.trim());
-                    }
-                });
-            }
-
-            // Calculate RMO statistics for the table
-            const rmoStatsMap = new Map();
-
             if (rmoStatsResult.data) {
-                rmoStatsResult.data.forEach(task => {
-                    if (!task.assign_rmo || task.assign_rmo.trim() === '') return;
-
-                    const rmoName = task.assign_rmo.trim();
-
-                    if (!rmoStatsMap.has(rmoName)) {
-                        rmoStatsMap.set(rmoName, {
-                            name: rmoName,
-                            total: 0,
-                            completed: 0,
-                            pending: 0,
-                            shifts: new Set(),
-                            score: 0
-                        });
-                    }
-
-                    const stats = rmoStatsMap.get(rmoName);
-                    stats.total += 1;
-
-                    // Check if task is completed
-                    if (task.planned1 && task.actual1) {
-                        stats.completed += 1;
-                    }
-                    // Check if task is pending
-                    else if (task.planned1 && !task.actual1) {
-                        stats.pending += 1;
-                    }
-
-                    // Track shifts
-                    if (task.shift) {
-                        stats.shifts.add(task.shift);
-                    }
-                });
-
                 // Calculate performance score and format shifts for each RMO
-                const formattedRmoStats = Array.from(rmoStatsMap.values()).map(stat => {
+                const formattedRmoStats = rmoStatsResult.data.map(stat => {
+                    const total = Number(stat.total) || 0;
+                    const completed = Number(stat.completed) || 0;
+
                     // Calculate performance score (completed/total * 100)
-                    const score = stat.total > 0 ? Math.round((stat.completed / stat.total) * 100) : 0;
+                    const score = total > 0 ? Math.round((completed / total) * 100) : 0;
 
                     // Format shifts as string
-                    const shiftsArray = Array.from(stat.shifts);
+                    const shiftsArray = stat.shifts || [];
                     const shifts = shiftsArray.length > 0
                         ? shiftsArray.slice(0, 2).join(', ') + (shiftsArray.length > 2 ? '...' : '')
                         : 'N/A';
 
                     return {
-                        ...stat,
+                        name: stat.name,
+                        total,
+                        completed,
+                        pending: Number(stat.pending) || 0,
                         shifts,
                         score
                     };
@@ -162,7 +114,7 @@ const RMOScoreDashboard = () => {
                     totalTasks,
                     totalCompleted: completedTasks,
                     pendingTasks,
-                    uniqueRmos: uniqueRmos.size,
+                    uniqueRmos: formattedRmoStats.length,
                     avgScore,
                     topPerformer
                 });

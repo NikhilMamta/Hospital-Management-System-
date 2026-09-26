@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Edit2,
@@ -13,12 +13,27 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import useDebounce from "../../../hooks/useDebounce";
+import Pagination from "../../../components/Pagination";
 import { invalidateMasterCache } from "../../../lib/masterCache";
+import { cleanSearchTerm, ilikeAny } from "../../../utils/supabaseQuery";
+
+const PAGE_SIZE = 50;
+
+// Every column of the table (the list, the edit form and the id for update/delete)
+const MEDICINE_COLUMNS = "id, medicine_name, price, timestamp";
+
+const SEARCH_COLUMNS = ["medicine_name", "price"];
 
 const Medicine = () => {
-  const [medicines, setMedicines] = useState([]);
+  const [medicines, setMedicines] = useState([]); // current page only
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearch = useDebounce(searchTerm, 400);
+  const loadSeqRef = useRef(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState(null);
   const { showNotification } = useNotification();
@@ -29,37 +44,62 @@ const Medicine = () => {
     price: "",
   });
 
-  // Fetch medicine data
+  // Fetch one page of medicines, newest first. Search runs on the server so all
+  // 4,500+ medicines can be found (the full-table load stopped at 1,000 rows).
+  // The full-page spinner only shows on the first load; reloads are quiet.
   const fetchMedicines = async () => {
+    // Ignore responses that arrive after a newer request (fast typing / paging)
+    const seq = ++loadSeqRef.current;
+    setIsFetching(true);
     try {
-      setLoading(true);
-      const { data, error } = await supabase
+      const from = page * PAGE_SIZE;
+      let query = supabase
         .from("medicine")
-        .select("*")
-        .order("timestamp", { ascending: false });
+        .select(MEDICINE_COLUMNS, { count: "exact" })
+        .order("timestamp", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
 
+      const term = cleanSearchTerm(debouncedSearch);
+      if (term) query = query.or(ilikeAny(SEARCH_COLUMNS, term));
+
+      const { data, error, count } = await query;
+      if (seq !== loadSeqRef.current) return;
       if (error) throw error;
+
       setMedicines(data || []);
+      setTotalCount(count ?? 0);
     } catch (error) {
       console.error("Error fetching medicines:", error);
       showNotification("Error loading medicine data", "error");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setIsFetching(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchMedicines();
-  }, []);
+  }, [page, debouncedSearch]);
 
-  useRealtimeTable("medicine", fetchMedicines);
+  // A new search starts again from the first page
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch]);
 
-  // Filter medicines based on search
-  const filteredMedicines = medicines.filter((medicine) =>
-    Object.values(medicine).some((value) =>
-      value?.toString().toLowerCase().includes(searchTerm.toLowerCase()),
-    ),
-  );
+  // If rows disappear (e.g. deleted elsewhere), don't stay on an empty page
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  useEffect(() => {
+    if (page > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalPages]);
+
+  // The payload argument must not reach fetchMedicines
+  useRealtimeTable("medicine", () => fetchMedicines());
+
+  // Search is applied by fetchMedicines on the server
+  const filteredMedicines = medicines;
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -205,7 +245,9 @@ const Medicine = () => {
     }
   };
 
-  // Calculate total value of medicines
+  // Calculate total value of medicines.
+  // Only used by the commented-out stats cards below. `medicines` is one page
+  // now, so re-enabling them needs a count query / server-side sum instead.
   const calculateTotalValue = () => {
     return medicines.reduce((total, medicine) => {
       const price = parseFloat(medicine.price) || 0;
@@ -325,7 +367,7 @@ const Medicine = () => {
                       {medicine.medicine_name || "N/A"}
                     </h3>
                     <p className="text-[10px] text-gray-500">
-                      ID: #{index + 1}
+                      ID: #{page * PAGE_SIZE + index + 1}
                     </p>
                   </div>
                 </div>
@@ -421,7 +463,7 @@ const Medicine = () => {
                   return (
                     <tr key={medicine.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
-                        #{index + 1}
+                        #{page * PAGE_SIZE + index + 1}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -465,6 +507,19 @@ const Medicine = () => {
           </table>
         </div>
       </div>
+
+      {totalCount > 0 && (
+        <div className="overflow-hidden border border-t-0 border-gray-200 rounded-lg shadow">
+          <Pagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={totalCount}
+            onPageChange={setPage}
+            disabled={isFetching}
+            label="medicines"
+          />
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {isModalOpen && (

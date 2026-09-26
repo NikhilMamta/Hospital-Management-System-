@@ -16,6 +16,7 @@ import supabase from "../../../SupabaseClient";
 import { useOutletContext } from "react-router-dom";
 import { useNotification } from "../../../contexts/NotificationContext";
 import useRealtimeTable from "../../../hooks/useRealtimeTable";
+import { isChangeForPatient } from "../../../utils/realtimeFilters";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -194,16 +195,8 @@ export default function GivenTask() {
     [ipdNumber],
   );
 
-  const matchesRealtimeIpd = (payload, keys) => {
-    if (!normalizedIpdNumber || normalizedIpdNumber === "N/A") {
-      return true;
-    }
-
-    const rows = [payload?.new, payload?.old].filter(Boolean);
-    return rows.some((row) =>
-      keys.some((key) => String(row?.[key] || "").trim() === normalizedIpdNumber),
-    );
-  };
+  const matchesRealtimeIpd = (payload, keys) =>
+    isChangeForPatient(payload, keys, normalizedIpdNumber);
 
   // Get user role from localStorage on component mount
   useEffect(() => {

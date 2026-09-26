@@ -13,23 +13,32 @@ import {
   Search,
   ChevronDown,
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
 import {
   getPendingIndents,
-  getHistoryIndents,
+  getApprovalHistoryPage,
+  getApprovalHistoryCount,
+  getApprovalHistoryTitles,
+  APPROVAL_HISTORY_PAGE_SIZE,
   getMedicines,
   getInvestigations,
   updateIndentStatus,
   uploadSlipToStorage,
 } from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import Pagination from "../../../components/Pagination";
 import {
+  normalizeAnyPharmacyIndent,
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
   parseJsonField,
 } from "../../../utils/pharmacyIndentUtils";
+
+// Store confirmations (actual2) change nothing shown on this page.
+const ignoreStoreConfirmation = (payload) =>
+  !(payload.eventType === "UPDATE" && payload.new?.actual2);
 
 // (drawWrappedText and MedicineDropdown stay same)
 const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
@@ -174,6 +183,7 @@ const PharmacyApproval = () => {
   const [selectedDate, setSelectedDate] = useState("");
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
   const [isSaving, setIsSaving] = useState(false);
+  const [historyPage, setHistoryPage] = useState(0);
 
   // --- Queries ---
 
@@ -185,12 +195,56 @@ const PharmacyApproval = () => {
     queryFn: getPendingIndents,
   });
 
+  // History (12k+ rows, used to stop at 1,000) is read one page at a time on
+  // the server, and only while its tab is open.
+  const isHistoryTab = activeTab === "history";
+  const historyFilters = useMemo(
+    () => ({ indentType: indentTypeFilter, patient: selectedPatient, date: selectedDate }),
+    [indentTypeFilter, selectedPatient, selectedDate],
+  );
+
   const {
-    data: rawHistory = { patient: [], departmental: [] },
+    data: historyData,
     isLoading: isLoadingHistory,
+    isFetching: isFetchingHistory,
   } = useQuery({
-    queryKey: ["pharmacy", "approval", "history"],
-    queryFn: getHistoryIndents,
+    queryKey: ["pharmacy", "approval", "history", historyPage, historyFilters],
+    queryFn: () => getApprovalHistoryPage({ page: historyPage, filters: historyFilters }),
+    enabled: isHistoryTab,
+    placeholderData: keepPreviousData,
+  });
+
+  // The History tab label needs the total while the Pending tab is open too
+  const { data: historyCount = 0 } = useQuery({
+    queryKey: ["pharmacy", "approval", "history-count", historyFilters],
+    queryFn: () => getApprovalHistoryCount(historyFilters),
+    enabled: !isHistoryTab,
+    placeholderData: keepPreviousData,
+  });
+
+  const historyTotal = isHistoryTab && historyData ? historyData.total : historyCount;
+  const historyPageCount = Math.max(1, Math.ceil(historyTotal / APPROVAL_HISTORY_PAGE_SIZE));
+
+  // A new filter or tab starts again from the first page
+  useEffect(() => {
+    setHistoryPage(0);
+  }, [historyFilters, activeTab]);
+
+  // If rows disappear, don't stay on an empty page
+  useEffect(() => {
+    if (historyPage > 0 && historyPage >= historyPageCount) setHistoryPage(historyPageCount - 1);
+  }, [historyPage, historyPageCount]);
+
+  // Every history title for the "All Indents" dropdown. It takes ~13 requests,
+  // so it loads once the History tab or the dropdown is used, and is cached
+  // for a while instead of reloading on each change.
+  const [wantHistoryTitles, setWantHistoryTitles] = useState(false);
+  const { data: historyTitles = [] } = useQuery({
+    queryKey: ["pharmacy", "approval-history-titles"],
+    queryFn: getApprovalHistoryTitles,
+    enabled: isHistoryTab || wantHistoryTitles,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 
   const { data: medicines = [] } = useQuery({
@@ -214,15 +268,14 @@ const PharmacyApproval = () => {
   const ctScanTests = investigations?.["CT-scan"] || [];
   const usgTests = investigations?.USG || [];
 
-  // Real-time
-  useRealtimeQuery(
-    ["pharmacy", "departmental_pharmacy_indent"],
-    ["pharmacy", "approval", "pending"],
-  );
-  useRealtimeQuery(
-    ["pharmacy", "departmental_pharmacy_indent"],
-    ["pharmacy", "approval", "history"],
-  );
+  // Real-time: patient indents are in `pharmacy`, ward indents in
+  // departmental_pharmacy_indent (the old array form only heard the second).
+  useRealtimeQuery("pharmacy", ["pharmacy", "approval"], {
+    filter: ignoreStoreConfirmation,
+  });
+  useRealtimeQuery("departmental_pharmacy_indent", ["pharmacy", "approval"], {
+    filter: ignoreStoreConfirmation,
+  });
 
   // --- Derived Data ---
 
@@ -233,19 +286,21 @@ const PharmacyApproval = () => {
     ].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
   }, [rawPending]);
 
-  const historyIndents = useMemo(() => {
-    return [
-      ...rawHistory.patient.map(normalizePatientPharmacyIndent),
-      ...rawHistory.departmental.map(normalizeDepartmentalPharmacyIndent),
-    ].sort((a, b) => new Date(b.actual1 || 0) - new Date(a.actual1 || 0));
-  }, [rawHistory]);
+  // One page, merged and sorted by actual1 in getApprovalHistoryPage
+  const historyIndents = useMemo(
+    () =>
+      (historyData?.rows || []).map(({ indentType, row }) =>
+        normalizeAnyPharmacyIndent(row, indentType),
+      ),
+    [historyData],
+  );
 
   const patientNames = useMemo(() => {
     const all = [...pendingIndents, ...historyIndents]
       .map((r) => r.displayTitle || r.patientName)
       .filter(Boolean);
-    return [...new Set(all)].sort();
-  }, [pendingIndents, historyIndents]);
+    return [...new Set([...all, ...historyTitles])].sort();
+  }, [pendingIndents, historyIndents, historyTitles]);
 
   const loading = isLoadingPending || isLoadingHistory || isSaving;
 
@@ -899,7 +954,8 @@ const PharmacyApproval = () => {
   };
 
   const filteredPendingIndents = applyFilters(pendingIndents);
-  const filteredHistoryIndents = applyFilters(historyIndents);
+  // History filters run on the server (see historyFilters)
+  const filteredHistoryIndents = historyIndents;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
@@ -961,7 +1017,7 @@ const PharmacyApproval = () => {
                     : "text-gray-500 hover:text-gray-700 font-medium"
                 }`}
               >
-                History ({filteredHistoryIndents.length})
+                History ({historyTotal})
               </button>
             </div>
 
@@ -969,6 +1025,8 @@ const PharmacyApproval = () => {
               <select
                 value={selectedPatient}
                 onChange={(e) => setSelectedPatient(e.target.value)}
+                onFocus={() => setWantHistoryTitles(true)}
+                onMouseDown={() => setWantHistoryTitles(true)}
                 className="flex-1 lg:flex-none px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
               >
                 <option value="">All Indents</option>
@@ -1676,6 +1734,15 @@ const PharmacyApproval = () => {
                   </div>
                 )}
               </div>
+
+              <Pagination
+                page={historyPage}
+                pageSize={APPROVAL_HISTORY_PAGE_SIZE}
+                total={historyTotal}
+                onPageChange={setHistoryPage}
+                disabled={isFetchingHistory}
+                label="indents"
+              />
             </div>
           )}
         </div>

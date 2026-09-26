@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Heart,
   Search,
@@ -12,6 +12,19 @@ import { useOutletContext } from "react-router-dom";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
 import { sendDressingNotification } from "../../../utils/whatsappService";
+import useDebounce from "../../../hooks/useDebounce";
+import { cleanSearchTerm, ilikeAny } from "../../../utils/supabaseQuery";
+
+// Columns used by the dressing list/cards (supabaseData.ipd_number included)
+const DRESSING_COLUMNS =
+  "id, task_no, admission_number, ipd_number, patient_name, ward_type, room, bed_no, patient_location, remarks, status, timestamp, planned1, actual1";
+
+// Columns used by the patient picker in the "New" form
+const PATIENT_PICKER_COLUMNS =
+  "id, admission_no, patient_name, ipd_number, bed_location, ward_type, room, bed_no, location_status, ward_no, room_no";
+
+// The picker shows at most this many matches (same as before)
+const PATIENT_PICKER_LIMIT = 10;
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -50,8 +63,10 @@ export default function Dressing() {
   const [expandedCard, setExpandedCard] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allPatients, setAllPatients] = useState([]);
+  const [patientMatches, setPatientMatches] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedPatientSearch = useDebounce(searchQuery, 400);
+  const patientSearchSeqRef = useRef(0);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const { showNotification } = useNotification();
 
@@ -114,38 +129,31 @@ export default function Dressing() {
     }
   };
 
-  // Fetch all patients for search
-  const fetchAllPatients = async () => {
-    try {
-      const { data: patients, error } = await supabase
-        .from("ipd_admissions")
-        .select(
-          `
-          id,
-          admission_no,
-          patient_name,
-          ipd_number,
-          bed_location,
-          ward_type,
-          room,
-          bed_no,
-          location_status,
-          ward_no,
-          room_no
-        `,
-        )
-        .order("patient_name");
+  // Patient picker: search ipd_admissions on the server as the user types.
+  // Before, all patients were loaded sorted by name and Supabase stopped at
+  // 1,000 rows, so patients later in the alphabet could not be found.
+  useEffect(() => {
+    // Ignore responses that arrive after a newer search
+    const seq = ++patientSearchSeqRef.current;
+    const term = cleanSearchTerm(debouncedPatientSearch);
+    if (!showForm || !showPatientDropdown || !term) return;
 
-      if (error) {
-        console.error("Error fetching patients:", error);
-        return;
-      }
-
-      setAllPatients(patients || []);
-    } catch (err) {
-      console.error("Error in fetchAllPatients:", err);
-    }
-  };
+    supabase
+      .from("ipd_admissions")
+      .select(PATIENT_PICKER_COLUMNS)
+      .or(ilikeAny(["admission_no", "patient_name", "ipd_number"], term))
+      .order("patient_name")
+      .order("id")
+      .limit(PATIENT_PICKER_LIMIT)
+      .then(({ data: patients, error }) => {
+        if (seq !== patientSearchSeqRef.current) return;
+        if (error) {
+          console.error("Error fetching patients:", error);
+          return;
+        }
+        setPatientMatches(patients || []);
+      });
+  }, [debouncedPatientSearch, showForm, showPatientDropdown]);
 
   // Fetch dressing records from Supabase
   const fetchDressingRecords = async () => {
@@ -154,17 +162,22 @@ export default function Dressing() {
 
       let query = supabase
         .from("dressing")
-        .select("*")
+        .select(DRESSING_COLUMNS)
         .order("timestamp", { ascending: false });
 
-      // If we have a specific patient from context, get their details first
-      if (data?.personalInfo?.ipd && data.personalInfo.ipd !== "N/A") {
-        const patientInfo = await getPatientFromIPD(data.personalInfo.ipd);
+      // Only this patient's dressings. Before, when the admission number could
+      // not be looked up, the query had no filter and every dressing in the
+      // hospital showed up in this patient's profile.
+      const ipd = data?.personalInfo?.ipd;
+      if (ipd && ipd !== "N/A") {
+        const patientInfo = await getPatientFromIPD(ipd);
 
-        if (patientInfo?.admission_number) {
-          // Filter by admission number
-          query = query.eq("admission_number", patientInfo.admission_number);
-        }
+        query = patientInfo?.admission_number
+          ? query.eq("admission_number", patientInfo.admission_number)
+          : query.eq("ipd_number", ipd);
+      } else {
+        // No IPD number: the "New" form saves the UHID as admission number
+        query = query.eq("admission_number", data?.personalInfo?.uhid || "");
       }
 
       const { data: dressingData, error } = await query;
@@ -454,7 +467,6 @@ export default function Dressing() {
 
   useEffect(() => {
     fetchDressingRecords();
-    fetchAllPatients();
   }, []);
 
   // Auto-fill form when opening form
@@ -480,25 +492,9 @@ export default function Dressing() {
     });
   };
 
-  // Filter patients for dropdown - using correct column names
-  const filteredPatients = allPatients
-    .filter((patient) => {
-      if (!searchQuery) return false;
-
-      return (
-        (patient.admission_no &&
-          patient.admission_no
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())) ||
-        (patient.patient_name &&
-          patient.patient_name
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())) ||
-        (patient.ipd_number &&
-          patient.ipd_number.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    })
-    .slice(0, 10); // Limit to 10 results
+  // Patients for the dropdown: the server matches admission no, name or IPD
+  // (see the patient picker effect above), at most PATIENT_PICKER_LIMIT
+  const filteredPatients = searchQuery ? patientMatches : [];
 
   const toggleCardExpansion = (taskId) => {
     if (expandedCard === taskId) {

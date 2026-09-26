@@ -28,6 +28,7 @@ import {
 } from "../../../api/pharmacy";
 import { normalizePatientPharmacyIndent } from "../../../utils/pharmacyIndentUtils";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import { isChangeForPatient } from "../../../utils/realtimeFilters";
 
 const StatusBadge = ({ status }) => {
   const getColors = () => {
@@ -140,7 +141,11 @@ export default function Pharmacy() {
   }, [rawIndents]);
 
   // Real-time synchronization
-  useRealtimeQuery("pharmacy", ["pharmacy", "indents", "patient", currentIpdNumber]);
+  // Only this patient's indents trigger a reload (same match as getPatientPharmacyIndents)
+  useRealtimeQuery("pharmacy", ["pharmacy", "indents", "patient", currentIpdNumber], {
+    filter: (payload) =>
+      isChangeForPatient(payload, ["ipd_number", "admission_number"], currentIpdNumber),
+  });
 
   // User name from local storage
   const getCurrentUser = () => {

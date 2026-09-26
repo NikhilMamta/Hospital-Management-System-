@@ -18,6 +18,7 @@
  */
 
 import supabase from '../SupabaseClient';
+import { fetchAllRows } from '../utils/supabaseQuery';
 
 const TTL = 30 * 60 * 1000; // 30 minutes
 
@@ -57,15 +58,19 @@ const isStale = (entry) =>
 export const getCachedMedicines = async () => {
   if (!isStale(medicineCache)) return medicineCache.data;
 
-  const { data, error } = await supabase
-    .from('medicine')
-    .select('medicine_name')
-    .order('medicine_name');
-
-  if (error) throw error;
+  // 4,500+ medicines: fetched 1,000 at a time (a single request stopped at 1,000,
+  // so medicines later in the alphabet were missing from the dropdowns).
+  const data = await fetchAllRows((from, to) =>
+    supabase
+      .from('medicine')
+      .select('medicine_name')
+      .order('medicine_name')
+      .order('id')
+      .range(from, to)
+  );
 
   medicineCache = {
-    data: (data || []).map((m) => m.medicine_name).filter(Boolean),
+    data: data.map((m) => m.medicine_name).filter(Boolean),
     fetchedAt: Date.now(),
   };
 

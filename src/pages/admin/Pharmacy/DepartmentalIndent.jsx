@@ -50,7 +50,8 @@ const DepartmentalIndent = () => {
     queryFn: getDepartmentalIndentsList
   });
 
-  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'departmental', 'indents']);
+  // This page only shows ward indents; the hook uses the table name (last element) anyway
+  useRealtimeQuery('departmental_pharmacy_indent', ['pharmacy', 'departmental', 'indents']);
 
   // --- Derived Data ---
   const normalizedIndents = useMemo(() => rawIndents.map(normalizeDepartmentalPharmacyIndent), [rawIndents]);

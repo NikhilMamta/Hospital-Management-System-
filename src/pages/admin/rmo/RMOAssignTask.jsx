@@ -17,6 +17,12 @@ import {
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useNotification } from "../../../contexts/NotificationContext";
+import { fetchAllRows } from "../../../utils/supabaseQuery";
+
+// Columns used to match occupied beds to admissions and fill the bed cards
+const BED_COLUMNS = "id, serial_no, floor, ward, room, bed, status";
+const ADMISSION_COLUMNS =
+  "ipd_number, patient_name, admission_no, department, consultant_dr, bed_no, floor, ward_type, location_status, room, room_no, bed_location";
 
 const RMOAssignTask = () => {
   const [showBedModal, setShowBedModal] = useState(false);
@@ -238,7 +244,7 @@ const RMOAssignTask = () => {
 
         const { data: occupiedBedsData, error: bedsError } = await supabase
           .from("all_floor_bed")
-          .select("*")
+          .select(BED_COLUMNS)
           .eq("status", "Occupied")
           .order("floor", { ascending: true });
 
@@ -249,12 +255,26 @@ const RMOAssignTask = () => {
           return;
         }
 
-        const { data: ipdAdmissions, error: ipdError } = await supabase
-          .from("ipd_admissions")
-          .select("*")
-          .order("timestamp", { ascending: false });
-
-        if (ipdError) throw ipdError;
+        // Only admissions that can be in an occupied bed: not discharged yet
+        // (the discharge bill sets actual1 and frees the bed) and on one of
+        // these bed numbers. Fetching every admission stopped at 1,000 rows,
+        // so patients admitted earlier showed as "Unknown Patient".
+        const bedNumbers = [
+          ...new Set(occupiedBedsData.map((bed) => bed.bed).filter(Boolean)),
+        ];
+        const ipdAdmissions = bedNumbers.length
+          ? await fetchAllRows((from, to) =>
+              supabase
+                .from("ipd_admissions")
+                .select(ADMISSION_COLUMNS)
+                .not("planned1", "is", null)
+                .is("actual1", null)
+                .in("bed_no", bedNumbers)
+                .order("timestamp", { ascending: false })
+                .order("id", { ascending: false })
+                .range(from, to),
+            )
+          : [];
 
         const combinedData = occupiedBedsData.map((bed) => {
           const matchingAdmission = ipdAdmissions?.find(

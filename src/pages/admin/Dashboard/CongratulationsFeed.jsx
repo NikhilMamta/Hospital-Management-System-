@@ -249,11 +249,11 @@ export default function CongratulationsFeed({ posts, isLoading, isAdmin }) {
 
     if (msUntilExpiry > 0) {
       const timer = setTimeout(() => {
-        queryClient.invalidateQueries(["congratulations-posts"]);
+        queryClient.invalidateQueries({ queryKey: ["congratulations-posts"] });
       }, msUntilExpiry + 1000);
       return () => clearTimeout(timer);
     } else {
-      queryClient.invalidateQueries(["congratulations-posts"]);
+      queryClient.invalidateQueries({ queryKey: ["congratulations-posts"] });
     }
   }, [latestPost, queryClient]);
 
@@ -261,7 +261,7 @@ export default function CongratulationsFeed({ posts, isLoading, isAdmin }) {
     if (!post || !window.confirm("Remove this celebration post?")) return;
     try {
       await deleteCongratulationsPost(post.id);
-      queryClient.invalidateQueries(["congratulations-posts"]);
+      queryClient.invalidateQueries({ queryKey: ["congratulations-posts"] });
     } catch (err) {
       console.error(err);
       alert("Failed to delete post.");

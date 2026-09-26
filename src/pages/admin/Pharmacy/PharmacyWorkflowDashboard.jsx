@@ -16,10 +16,17 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
-import { getWorkflowData } from "../../../api/pharmacy";
+import {
+  getWorkflowPatientStats,
+  getWorkflowPatientPage,
+  getWorkflowDepartmentalIndents,
+  getStaffContacts,
+  WORKFLOW_PAGE_SIZE,
+} from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
+import useDebounce from "../../../hooks/useDebounce";
 import {
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
@@ -343,51 +350,118 @@ const PharmacyWorkflowDashboard = () => {
   const { showNotification } = useNotification();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [requestTypeFilter, setRequestTypeFilter] = useState("all");
   const [expandedOrder, setExpandedOrder] = useState(null);
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [visibleCount, setVisibleCount] = useState(WORKFLOW_PAGE_SIZE);
   const [activeHandler, setActiveHandler] = useState(null);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
+  const debouncedSearch = useDebounce(searchTerm, 400);
 
-  const { data: rawData = { orders: { patient: [], departmental: [] }, contacts: {} }, isLoading: loading } = useQuery({
-    queryKey: ['pharmacy', 'workflow'],
-    queryFn: getWorkflowData
+  // The search box also matches the name of the stage an order is at
+  const stageKeys = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    return term ? STAGES.filter(s => s.label.toLowerCase().includes(term)).map(s => s.key) : [];
+  }, [debouncedSearch]);
+
+  // Patient indents (12k+, the old single list stopped at 1,000): stats are
+  // counted on the server and cards are loaded 12 at a time with the filters
+  // applied there.
+  const { data: patientStats, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['pharmacy', 'workflow', 'patient', 'stats'],
+    queryFn: getWorkflowPatientStats,
   });
 
-  useRealtimeQuery(['pharmacy', 'departmental_pharmacy_indent'], ['pharmacy', 'workflow']);
+  const {
+    data: patientPages,
+    isLoading: isLoadingList,
+    isPlaceholderData,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['pharmacy', 'workflow', 'patient', 'list', debouncedSearch, statusFilter],
+    queryFn: ({ pageParam }) => getWorkflowPatientPage({ offset: pageParam, search: debouncedSearch, status: statusFilter, stageKeys }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, page) => n + page.rows.length, 0);
+      return lastPage.rows.length === WORKFLOW_PAGE_SIZE && loaded < (allPages[0].total ?? 0) ? loaded : undefined;
+    },
+    placeholderData: keepPreviousData,
+  });
 
-  const workflows = useMemo(() => {
-    const orders = [
-      ...rawData.orders.patient.map(normalizePatientPharmacyIndent),
-      ...rawData.orders.departmental.map(normalizeDepartmentalPharmacyIndent)
-    ];
-    return orders.map(buildWorkflowOrder);
-  }, [rawData]);
+  // Departmental indents: a small table, read whole and filtered here as before
+  const { data: departmentalRows = [], isLoading: isLoadingDepartmental } = useQuery({
+    queryKey: ['pharmacy', 'workflow', 'departmental'],
+    queryFn: getWorkflowDepartmentalIndents,
+  });
 
-  const filteredWorkflows = useMemo(() => workflows.filter(w => {
-    if (searchTerm && !w.searchableText.includes(searchTerm.toLowerCase())) return false;
+  const { data: contacts = {} } = useQuery({
+    queryKey: ['pharmacy', 'workflow', 'contacts'],
+    queryFn: getStaffContacts,
+  });
+
+  const loading = isLoadingStats || isLoadingList || isLoadingDepartmental;
+
+  // Patient indents are in `pharmacy`, ward indents in departmental_pharmacy_indent
+  // (the old array form only heard the second).
+  useRealtimeQuery('pharmacy', ['pharmacy', 'workflow', 'patient']);
+  useRealtimeQuery('departmental_pharmacy_indent', ['pharmacy', 'workflow', 'departmental']);
+
+  const patientWorkflows = useMemo(() => {
+    const seen = new Set();
+    return (patientPages?.pages || [])
+      .flatMap(page => page.rows)
+      .filter(row => !seen.has(row.id) && seen.add(row.id))
+      .map(normalizePatientPharmacyIndent)
+      .map(buildWorkflowOrder);
+  }, [patientPages]);
+  const patientTotal = patientPages?.pages[0]?.total ?? 0;
+
+  const departmentalWorkflows = useMemo(
+    () => departmentalRows.map(normalizeDepartmentalPharmacyIndent).map(buildWorkflowOrder),
+    [departmentalRows],
+  );
+
+  const filteredDepartmental = useMemo(() => departmentalWorkflows.filter(w => {
+    if (debouncedSearch && !w.searchableText.includes(debouncedSearch.toLowerCase())) return false;
     if (statusFilter !== "all" && w.dashboardStatus !== statusFilter) return false;
-    if (stageFilter !== "all" && w.currentStage.key !== stageFilter) return false;
-    if (requestTypeFilter !== "all" && !w.requestTypes?.[requestTypeFilter]) return false;
     return true;
-  }), [workflows, searchTerm, statusFilter, stageFilter, requestTypeFilter]);
+  }), [departmentalWorkflows, debouncedSearch, statusFilter]);
 
-  const visibleWorkflows = useMemo(() => filteredWorkflows.slice(0, visibleCount), [filteredWorkflows, visibleCount]);
+  const filteredTotal = patientTotal + filteredDepartmental.length;
+
+  // Patient indents first, then departmental ones, as before
+  const visibleWorkflows = useMemo(() => {
+    const listed = patientWorkflows.length >= patientTotal ? [...patientWorkflows, ...filteredDepartmental] : patientWorkflows;
+    return listed.slice(0, visibleCount);
+  }, [patientWorkflows, patientTotal, filteredDepartmental, visibleCount]);
+
+  // A new search or filter starts again with the first 12 cards
+  useEffect(() => {
+    setVisibleCount(WORKFLOW_PAGE_SIZE);
+  }, [debouncedSearch, statusFilter]);
+
+  // "Load More" asks the server for the next 12 patient indents when needed
+  useEffect(() => {
+    if (!isPlaceholderData && hasNextPage && !isFetchingNextPage && patientWorkflows.length < Math.min(visibleCount, patientTotal)) {
+      fetchNextPage();
+    }
+  }, [isPlaceholderData, hasNextPage, isFetchingNextPage, patientWorkflows.length, visibleCount, patientTotal, fetchNextPage]);
 
   const stats = useMemo(() => {
+    const countDepartmental = (status) => departmentalWorkflows.filter(w => w.dashboardStatus === status).length;
+    const patient = patientStats || { total: 0, pending: 0, ready: 0, delayed: 0, completed: 0 };
     return {
-      total: workflows.length,
-      pending: workflows.filter(w => w.dashboardStatus === "pending_review").length,
-      ready: workflows.filter(w => w.dashboardStatus === "ready_to_dispense").length,
-      delayed: workflows.filter(w => w.dashboardStatus === "overdue").length,
-      completed: workflows.filter(w => w.dashboardStatus === "completed").length,
+      total: patient.total + departmentalWorkflows.length,
+      pending: patient.pending + countDepartmental("pending_review"),
+      ready: patient.ready + countDepartmental("ready_to_dispense"),
+      delayed: patient.delayed + countDepartmental("overdue"),
+      completed: patient.completed + countDepartmental("completed"),
     };
-  }, [workflows]);
+  }, [patientStats, departmentalWorkflows]);
 
   const handleOpenStage = (stage) => navigate(stage.route);
   const handleOpenAttachment = (stage) => stage.attachmentUrl && setAttachmentPreview({ url: stage.attachmentUrl, label: stage.attachmentLabel || stage.label });
-  const handleHandlerClick = (stage) => setActiveHandler({ name: stage.owner, role: stage.ownerRole || "Handler", phone: rawData.contacts[stage.owner] || "" });
+  const handleHandlerClick = (stage) => setActiveHandler({ name: stage.owner, role: stage.ownerRole || "Handler", phone: contacts[stage.owner] || "" });
 
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-gray-50"><div className="animate-spin h-10 w-10 border-b-2 border-green-500 rounded-full"/></div>;
 
@@ -396,7 +470,7 @@ const PharmacyWorkflowDashboard = () => {
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col md:flex-row justify-between gap-4">
           <div><h1 className="text-2xl font-bold">Pharmacy Workflow Dashboard</h1><p className="text-xs text-gray-500">Live multi-stage order tracking</p></div>
-          <button onClick={() => queryClient.invalidateQueries(['pharmacy', 'workflow'])} className="px-4 py-2 bg-white border rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50"><RefreshCw className="w-4 h-4"/> Refresh</button>
+          <button onClick={() => queryClient.invalidateQueries({ queryKey: ['pharmacy', 'workflow'] })} className="px-4 py-2 bg-white border rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50"><RefreshCw className="w-4 h-4"/> Refresh</button>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -423,7 +497,7 @@ const PharmacyWorkflowDashboard = () => {
         <div className="space-y-4">
           {visibleWorkflows.map(w => <PharmacyOrderCard key={w.id} workflow={w} isExpanded={expandedOrder === w.id} onToggle={() => setExpandedOrder(expandedOrder === w.id ? null : w.id)} onOpenStage={handleOpenStage} onOpenAttachment={handleOpenAttachment} onHandlerClick={handleHandlerClick} />)}
           {visibleWorkflows.length === 0 && <div className="text-center py-20 bg-white border rounded-2xl text-gray-400 italic">No matching orders found</div>}
-          {visibleWorkflows.length < filteredWorkflows.length && <button onClick={() => setVisibleCount(v => v + 12)} className="w-full py-3 bg-white border rounded-xl text-sm font-medium hover:bg-gray-50">Load More</button>}
+          {visibleWorkflows.length < filteredTotal && <button onClick={() => setVisibleCount(v => v + WORKFLOW_PAGE_SIZE)} className="w-full py-3 bg-white border rounded-xl text-sm font-medium hover:bg-gray-50">Load More</button>}
         </div>
       </div>
 

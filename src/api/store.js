@@ -15,8 +15,12 @@ const STORE_OUT_PADDING = 4;
  * Fetches the next base store out indent number.
  */
 export const getNextStoreOutIndentNo = async () => {
+  // Only the highest issue numbers are needed. Fetching all of them stopped at
+  // Supabase's 1,000-row limit, so past 1,000 requests the "max" could be too low
+  // and a duplicate SO number could be issued. Numbers are zero-padded
+  // (SO-0001), so text order equals number order up to SO-9999.
   const response = await fetch(
-    `${STORE_SUPABASE_URL}/rest/v1/store_out_request?select=issue_no&issue_no=not.is.null`,
+    `${STORE_SUPABASE_URL}/rest/v1/store_out_request?select=issue_no&issue_no=not.is.null&order=issue_no.desc&limit=50`,
     {
       headers: {
         apikey: SUPABASE_KEY,

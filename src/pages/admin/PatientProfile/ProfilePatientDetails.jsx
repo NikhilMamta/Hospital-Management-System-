@@ -4,6 +4,7 @@ import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPatientDetails } from '../../../api/patientProfile';
 import useRealtimeQuery from '../../../hooks/useRealtimeQuery';
+import { isChangeForPatient } from '../../../utils/realtimeFilters';
 
 // Calculate days in hospital
 const calculateDaysInHospital = (admissionDate) => {
@@ -39,9 +40,15 @@ export default function PatientProfileDetails() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  // Real-time updates for this specific patient
-  useRealtimeQuery(['public', 'ipd_admissions'], ['patient-details', id]);
-  useRealtimeQuery(['public', 'pharmacy'], ['patient-details', id]);
+  // Real-time updates for this specific patient only
+  // (before, any admission or pharmacy change in the hospital reloaded this page)
+  useRealtimeQuery(['public', 'ipd_admissions'], ['patient-details', id], {
+    filter: (payload) => isChangeForPatient(payload, ['id'], id),
+  });
+  useRealtimeQuery(['public', 'pharmacy'], ['patient-details', id], {
+    filter: (payload) =>
+      isChangeForPatient(payload, ['ipd_number', 'admission_number'], data?.personalInfo?.ipd),
+  });
 
   // Get all tabs
   const tabs = useMemo(() => {
