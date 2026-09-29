@@ -2,7 +2,9 @@
  * Store API service for fetching master data and mappings.
  */
 
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY2;
+const SUPABASE_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY2 ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmZHRjcWprZXN2ZGZ6bmNmYm5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwOTU3MzksImV4cCI6MjA5MjY3MTczOX0.SkoX4vwokA9iH8-jufYc01dreXa0Ms1PYDCmQpz89Y0";
 // Based on existing store-out-submit URL pattern
 const STORE_SUPABASE_URL = "https://kfdtcqjkesvdfzncfbns.supabase.co";
 const EDGE_FUNCTION_URL =
@@ -49,33 +51,52 @@ export const getNextStoreOutIndentNo = async () => {
 };
 
 /**
- * Fetches store masters (item mapping to group head) from the Edge Function.
+ * Fetches store masters (items with group head, purchase_uom, and issue_uom)
+ * directly from the store's items table, falling back to the Edge Function if needed.
  */
 export const getStoreMasters = async () => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   try {
-    const response = await fetch(EDGE_FUNCTION_URL, {
+    const response = await fetch(
+      `${STORE_SUPABASE_URL}/rest/v1/items?select=id,item_name,group_head,purchase_uom,issue_uom&order=item_name.asc&limit=5000`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+        signal: controller.signal,
+      },
+    );
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      return data;
+    }
+
+    console.warn("Items table fetch returned non-ok status:", response.status);
+
+    // Fallback to Edge Function if items table fetch fails
+    const edgeResponse = await fetch(EDGE_FUNCTION_URL, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
       },
-      signal: controller.signal,
     });
 
-    console.log("this is the edge function response", response);
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
+    if (!edgeResponse.ok) {
+      const errorText = await edgeResponse.text();
+      throw new Error(`Edge Function error: ${edgeResponse.status} - ${errorText}`);
     }
 
-    const data = await response.json();
-    console.log("this is the edge function response data", data);
+    const data = await edgeResponse.json();
     return data;
   } catch (error) {
     clearTimeout(timeoutId);

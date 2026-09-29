@@ -88,7 +88,10 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
         // Dynamically build UOM list from masters
         const uniqueUoms = [
           ...new Set(
-            mastersData.map((m) => m.unit_of_measurement).filter(Boolean),
+            mastersData
+              .flatMap((m) => [m.purchase_uom, m.issue_uom, m.unit_of_measurement])
+              .filter(Boolean)
+              .map((u) => u.trim()),
           ),
         ];
         const combinedUoms = [...new Set(["Unit", ...uniqueUoms])];
@@ -106,6 +109,42 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
     }
   };
 
+  const getUomOptionsForMedicine = (productName) => {
+    if (!productName) {
+      return uomOptions;
+    }
+    const searchValue = (productName || "").trim().toLowerCase();
+    const match = masters.find(
+      (m) => (m.item_name || "").trim().toLowerCase() === searchValue,
+    );
+
+    if (match) {
+      const uoms = [];
+      if (match.purchase_uom && match.purchase_uom.trim()) {
+        uoms.push(match.purchase_uom.trim());
+      }
+      if (match.issue_uom && match.issue_uom.trim()) {
+        const trimmed = match.issue_uom.trim();
+        if (!uoms.some((u) => u.toLowerCase() === trimmed.toLowerCase())) {
+          uoms.push(trimmed);
+        }
+      }
+      if (
+        uoms.length === 0 &&
+        match.unit_of_measurement &&
+        match.unit_of_measurement.trim()
+      ) {
+        uoms.push(match.unit_of_measurement.trim());
+      }
+
+      if (uoms.length > 0) {
+        return uoms;
+      }
+    }
+
+    return uomOptions;
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -115,7 +154,7 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
     const updatedMedicines = [...formData.medicines];
     updatedMedicines[index][field] = value;
 
-    // Auto-fill group_head when product_name is selected
+    // Auto-fill group_head and auto-select appropriate UOM when product_name is selected
     if (field === "product_name") {
       const searchValue = (value || "").trim().toLowerCase();
       const match = masters.find(
@@ -124,9 +163,38 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
 
       console.log("Searching for match:", value, "Result:", match);
 
-      if (match && match.group_head) {
-        console.log("Auto-filling group_head:", match.group_head);
-        updatedMedicines[index]["group_of_head"] = match.group_head;
+      if (match) {
+        if (match.group_head) {
+          console.log("Auto-filling group_head:", match.group_head);
+          updatedMedicines[index]["group_of_head"] = match.group_head;
+        }
+
+        const itemUoms = [];
+        if (match.purchase_uom && match.purchase_uom.trim()) {
+          itemUoms.push(match.purchase_uom.trim());
+        }
+        if (match.issue_uom && match.issue_uom.trim()) {
+          const trimmed = match.issue_uom.trim();
+          if (!itemUoms.some((u) => u.toLowerCase() === trimmed.toLowerCase())) {
+            itemUoms.push(trimmed);
+          }
+        }
+        if (
+          itemUoms.length === 0 &&
+          match.unit_of_measurement &&
+          match.unit_of_measurement.trim()
+        ) {
+          itemUoms.push(match.unit_of_measurement.trim());
+        }
+
+        if (itemUoms.length > 0) {
+          if (!itemUoms.includes(updatedMedicines[index]["uom"])) {
+            updatedMedicines[index]["uom"] = itemUoms[0];
+          }
+        }
+      } else if (!value) {
+        updatedMedicines[index]["group_of_head"] = "";
+        updatedMedicines[index]["uom"] = "Unit";
       }
     }
 
@@ -520,7 +588,7 @@ export default function StoreOutModal({ isOpen, onClose, userName }) {
                       }
                       className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-teal-500/20 appearance-none"
                     >
-                      {uomOptions.map((u) => (
+                      {getUomOptionsForMedicine(med.product_name).map((u) => (
                         <option key={u} value={u}>
                           {u}
                         </option>
