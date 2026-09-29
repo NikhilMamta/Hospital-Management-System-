@@ -95,6 +95,7 @@ const PatientAdmissionSystem = () => {
 
   const [formData, setFormData] = useState({
     registrationNumber: "",
+    ipdNumber: "",
     patientName: "",
     fatherHusband: "",
     age: "",
@@ -341,7 +342,13 @@ const PatientAdmissionSystem = () => {
     const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
 
     const patientData = {
-      ...(editingPatient ? { ipd_number: editingPatient.ipd_number } : {}),
+      // For new admissions: use manual IPD number if provided, else let the DB trigger auto-assign.
+      // For edits: always preserve the existing ipd_number.
+      ...(editingPatient
+        ? { ipd_number: editingPatient.ipd_number }
+        : formData.ipdNumber.trim()
+        ? { ipd_number: formData.ipdNumber.trim() }
+        : {}),
       admission_no: formData.registrationNumber,
       patient_name: formData.patientName.trim(),
       father_husband_name: formData.fatherHusband.trim(),
@@ -404,6 +411,7 @@ const PatientAdmissionSystem = () => {
     setShowAdmissionDropdown(false);
     setFormData({
       registrationNumber: "",
+      ipdNumber: "",
       patientName: "",
       fatherHusband: "",
       age: "",
@@ -1061,19 +1069,24 @@ const PatientAdmissionSystem = () => {
                         </p>
                       </div>
 
-                      {editingPatient && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            IPD Number
-                          </label>
-                          <input
-                            type="text"
-                            value={editingPatient.ipd_number}
-                            disabled
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 font-bold"
-                          />
-                        </div>
-                      )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          IPD Number
+                        </label>
+                        <input
+                          type="text"
+                          name="ipdNumber"
+                          value={editingPatient ? editingPatient.ipd_number : formData.ipdNumber}
+                          onChange={handleInputChange}
+                          disabled={!!editingPatient || saveMutation.isPending}
+                          placeholder={editingPatient ? "" : "e.g. IPD-2024-001"}
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent ${
+                            editingPatient
+                              ? "bg-gray-100 text-gray-600 font-bold"
+                              : "bg-white font-semibold text-green-800 placeholder-gray-400"
+                          } disabled:bg-gray-100`}
+                        />
+                      </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">

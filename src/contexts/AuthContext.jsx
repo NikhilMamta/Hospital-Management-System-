@@ -377,6 +377,50 @@ export const ALL_PAGES = [
     description: "Final billing and discharge summary",
   },
 
+  // Staff Help Tickets dropdown
+  {
+    key: "staff-tickets",
+    label: "Help Tickets",
+    type: "group",
+    icon: "LifeBuoy",
+    description: "Staff help tickets and grievance system",
+  },
+  {
+    key: "staff-tickets-raise",
+    label: "Raise Ticket",
+    path: "/admin/staff-tickets/raise",
+    icon: "PlusCircle",
+    type: "item",
+    parent: "staff-tickets",
+    description: "Raise a new staff help ticket",
+  },
+  {
+    key: "staff-tickets-follow-up",
+    label: "Follow Up",
+    path: "/admin/staff-tickets/follow-up",
+    icon: "ClipboardList",
+    type: "item",
+    parent: "staff-tickets",
+    description: "Follow up and update open tickets",
+  },
+  {
+    key: "staff-tickets-completed",
+    label: "Ticket Completion",
+    path: "/admin/staff-tickets/completed",
+    icon: "CheckSquare",
+    type: "item",
+    parent: "staff-tickets",
+    description: "Completed tickets and grievance slips",
+  },
+  {
+    key: "ayushman-portal",
+    label: "Ayushman Portal",
+    path: "/admin/ayushman-portal",
+    icon: "Shield",
+    type: "single",
+    description: "Ayushman, BSKY, ESIC and Govt. Scheme Patient Register",
+  },
+
   // Settings dropdown
   {
     key: "masters",
@@ -456,6 +500,15 @@ export const ALL_PAGES = [
     type: "item",
     parent: "masters",
     description: "Permanently delete a patient and all related records (Admin only)",
+  },
+  {
+    key: "masters-ticket-masters",
+    label: "Ticket Masters",
+    path: "/admin/masters/ticket-masters",
+    icon: "LifeBuoy",
+    type: "item",
+    parent: "masters",
+    description: "Manage categories, issues and assignees for staff tickets (Admin only)",
   },
 ];
 
@@ -597,7 +650,23 @@ export function AuthProvider({ children }) {
 
   // Check if user has access to a specific page
   const hasPageAccess = (pageKey) => {
-    if (!user || !userPages || userPages.length === 0) return false;
+    if (!user) return false;
+
+    // Admin role has full access to all pages
+    if (user.role === "admin") return true;
+
+    // Staff tickets & Ayushman portal pages are accessible to all logged-in hospital staff
+    if (
+      pageKey === "staff-tickets" ||
+      pageKey === "staff-tickets-raise" ||
+      pageKey === "staff-tickets-follow-up" ||
+      pageKey === "staff-tickets-completed" ||
+      pageKey === "ayushman-portal"
+    ) {
+      return true;
+    }
+
+    if (!userPages || userPages.length === 0) return false;
 
     // If user has all pages access
     if (userPages.includes("all")) return true;
@@ -618,36 +687,29 @@ export function AuthProvider({ children }) {
     return false;
   };
 
-  // Memoize accessible sidebar items
+  // Memoize accessible sidebar items (preserving natural ALL_PAGES order)
   const accessibleSidebarItems = useMemo(() => {
     if (!user) return [];
 
     const items = [];
 
-    // Get single pages that user has access to
-    const singlePages = ALL_PAGES.filter(
-      (page) => page.type === "single" && hasPageAccess(page.key),
-    );
-
-    // Get groups that have at least one accessible child
-    const groups = ALL_PAGES.filter((page) => page.type === "group");
-
-    groups.forEach((group) => {
-      // Find all child items of this group that user can access
-      const accessibleChildren = ALL_PAGES.filter(
-        (child) => child.parent === group.key && hasPageAccess(child.key),
-      );
-
-      // Only add group to sidebar if it has at least one accessible child
-      if (accessibleChildren.length > 0) {
-        items.push({
-          ...group,
-          accessibleChildren,
-        });
+    ALL_PAGES.forEach((page) => {
+      if (page.type === "single" && hasPageAccess(page.key)) {
+        items.push(page);
+      } else if (page.type === "group") {
+        const accessibleChildren = ALL_PAGES.filter(
+          (child) => child.parent === page.key && hasPageAccess(child.key),
+        );
+        if (accessibleChildren.length > 0) {
+          items.push({
+            ...page,
+            accessibleChildren,
+          });
+        }
       }
     });
 
-    return [...singlePages, ...items];
+    return items;
   }, [user, userPages]);
 
   // Get accessible sidebar items (for AdminLayout)

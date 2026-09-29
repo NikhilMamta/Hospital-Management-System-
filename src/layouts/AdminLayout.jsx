@@ -29,6 +29,8 @@ import {
   Key,
   Calendar,
   Trash2,
+  LifeBuoy,
+  PlusCircle,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import Footer from "../components/Footer";
@@ -58,12 +60,14 @@ const iconComponents = {
   Key,
   Calendar,
   Trash2,
+  LifeBuoy,
+  PlusCircle,
 };
 
 const getSection = (key) => {
   const clinicalKeys = [
     "admission", "ipd", "ot", "nurse-station", "shift-handover", 
-    "rmo", "lab", "pharmacy", "discharge"
+    "rmo", "lab", "pharmacy", "discharge", "staff-tickets", "ayushman-portal"
   ];
   const managementKeys = ["masters"];
   

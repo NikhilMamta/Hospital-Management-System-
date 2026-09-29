@@ -878,6 +878,8 @@ const PharmacyApproval = () => {
       const updateData = {
         medicines: JSON.stringify(editFormData.medicines),
         investigation_advice: JSON.stringify(editFormData.investigationAdvice),
+        surgical_date:
+          editFormData.surgicalDate || editFormData.surgical_date || null,
       };
 
       if (editFormData.indentType === "departmental") {
@@ -1117,6 +1119,9 @@ const PharmacyApproval = () => {
                         Diagnosis
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
+                        Surgical Date
+                      </th>
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Request Type
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
@@ -1207,6 +1212,9 @@ const PharmacyApproval = () => {
                               ? indent.remarks || "-"
                               : indent.diagnosis}
                           </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">
+                            {indent.surgicalDate || indent.surgical_date || "—"}
+                          </td>
                           <td className="px-6 py-4 text-sm">
                             <div className="flex flex-wrap gap-1">
                               {indent.requestTypes.medicineSlip && (
@@ -1268,7 +1276,7 @@ const PharmacyApproval = () => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="11" className="px-6 py-12 text-center">
+                        <td colSpan="12" className="px-6 py-12 text-center">
                           <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                           <p className="font-medium text-gray-500">
                             No pending indents
@@ -1356,6 +1364,14 @@ const PharmacyApproval = () => {
                               : indent.diagnosis}
                           </span>
                         </div>
+                        {(indent.surgicalDate || indent.surgical_date) && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Surgical Date:</span>
+                            <span className="font-medium text-gray-900">
+                              {indent.surgicalDate || indent.surgical_date}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between">
                           <span className="text-gray-600">Planned:</span>
                           <span className="font-medium text-gray-900">
@@ -1454,6 +1470,9 @@ const PharmacyApproval = () => {
                         Diagnosis
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
+                        Surgical Date
+                      </th>
+                      <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
                         Request Type
                       </th>
                       <th className="px-6 py-3 text-sm font-semibold text-left text-white bg-green-600">
@@ -1510,6 +1529,9 @@ const PharmacyApproval = () => {
                             {indent.indentType === "departmental"
                               ? indent.remarks || "-"
                               : indent.diagnosis}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">
+                            {indent.surgicalDate || indent.surgical_date || "—"}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <div className="flex flex-wrap gap-1">
@@ -1599,7 +1621,7 @@ const PharmacyApproval = () => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="11" className="px-6 py-12 text-center">
+                        <td colSpan="12" className="px-6 py-12 text-center">
                           <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                           <p className="font-medium text-gray-500">
                             No history yet
@@ -1649,6 +1671,14 @@ const PharmacyApproval = () => {
                             {indent.patientName}
                           </span>
                         </div>
+                        {(indent.surgicalDate || indent.surgical_date) && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Surgical Date:</span>
+                            <span className="font-medium text-gray-900">
+                              {indent.surgicalDate || indent.surgical_date}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between">
                           <span className="text-gray-600">Planned:</span>
                           <span className="font-medium text-gray-900">
@@ -1837,6 +1867,23 @@ const PharmacyApproval = () => {
                           ? "Enter remarks"
                           : "Enter diagnosis"
                       }
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
+                      Surgical Date
+                    </label>
+                    <input
+                      type="date"
+                      name="surgicalDate"
+                      value={
+                        editFormData.surgicalDate ||
+                        editFormData.surgical_date ||
+                        ""
+                      }
+                      onChange={handleEditInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
                       disabled={loading}
                     />
                   </div>
@@ -2249,6 +2296,14 @@ const PharmacyApproval = () => {
                       {selectedIndent.indentType === "departmental"
                         ? selectedIndent.remarks || "-"
                         : selectedIndent.diagnosis}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Surgical Date</p>
+                    <p className="font-medium">
+                      {selectedIndent.surgicalDate ||
+                        selectedIndent.surgical_date ||
+                        "—"}
                     </p>
                   </div>
                 </div>

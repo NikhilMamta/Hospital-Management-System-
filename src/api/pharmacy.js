@@ -277,11 +277,11 @@ const HISTORY_COLUMNS = {
   [PATIENT_TABLE]:
     "id, indent_no, admission_number, patient_name, uhid_number, age, gender, ward_location, " +
     "category, room, diagnosis, staff_name, consultant_name, request_types, medicines, " +
-    "investigation_advice, status, planned1, actual1, slip_image",
+    "investigation_advice, status, planned1, actual1, slip_image, surgical_date",
   [DEPARTMENTAL_TABLE]:
     "id, indent_no, ward, ward_location, floor, room, category, requested_by, remarks, " +
     "request_types, medicines, investigation_advice, status, planned1, actual1, slip_image, " +
-    "slip_image_url, approved_at, rejected_at",
+    "slip_image_url, approved_at, rejected_at, surgical_date",
 };
 
 /**

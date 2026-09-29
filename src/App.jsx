@@ -78,6 +78,15 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Dressing from "./pages/admin/PatientProfile/Dressing";
 import Roster from "./pages/Roster";
 
+// Staff Help Ticket Components
+import RaiseTicket from "./pages/staffTickets/RaiseTicket";
+import TicketFollowUp from "./pages/admin/staffTickets/TicketFollowUp";
+import TicketCompletion from "./pages/admin/staffTickets/TicketCompletion";
+import TicketMasterPage from "./pages/admin/masters/TicketMasterPage";
+
+// Ayushman Portal Component
+import AyushmanPortal from "./pages/admin/Ayushman/AyushmanPortal";
+
 function App() {
   const { user, loading, getDefaultRoute } = useAuth();
   const defaultRoute = getDefaultRoute();
@@ -224,6 +233,8 @@ function App() {
           path="/login"
           element={user ? <Navigate to={defaultRoute} replace /> : <Login />}
         />
+        <Route path="/staff-tickets/raise" element={<RaiseTicket />} />
+        <Route path="/staff-help-desk" element={<RaiseTicket />} />
 
         {/* Admin Routes */}
         <Route
@@ -593,6 +604,44 @@ function App() {
             }
           />
 
+          {/* Staff Help Ticket Routes */}
+          <Route
+            path="staff-tickets/raise"
+            element={
+              <ProtectedRoute requiredPage="staff-tickets-raise">
+                <RaiseTicket />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="staff-tickets/follow-up"
+            element={
+              <ProtectedRoute requiredPage="staff-tickets-follow-up">
+                <TicketFollowUp />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="staff-tickets/completed"
+            element={
+              <ProtectedRoute requiredPage="staff-tickets-completed">
+                <TicketCompletion />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Ayushman Portal Route */}
+          <Route
+            path="ayushman-portal"
+            element={
+              <ProtectedRoute requiredPage="ayushman-portal">
+                <AyushmanPortal />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Masters Routes */}
           <Route
             path="masters/all-staff"
@@ -662,6 +711,15 @@ function App() {
             element={
               <ProtectedRoute requiredPage="masters-delete-patient">
                 <DeletePatient />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="masters/ticket-masters"
+            element={
+              <ProtectedRoute requiredPage="masters-ticket-masters">
+                <TicketMasterPage />
               </ProtectedRoute>
             }
           />

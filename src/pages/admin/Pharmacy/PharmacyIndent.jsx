@@ -281,6 +281,7 @@ const PharmacyIndents = () => {
       wardLocation: "",
       category: "",
       room: "",
+      surgicalDate: "",
       diagnosis: "",
     };
   });
@@ -336,6 +337,7 @@ const PharmacyIndents = () => {
         wardLocation: `${selectedPatient.ward_type || ""} - ${selectedPatient.floor || ""}`,
         category: "", // ✅ User will select manually from dropdown
         room: selectedPatient.room || "",
+        surgicalDate: "",
         diagnosis: "",
       });
     }
@@ -518,6 +520,7 @@ const PharmacyIndents = () => {
       ward_location: formData.wardLocation,
       category: formData.category,
       room: formData.room,
+      surgical_date: formData.surgicalDate || null,
       diagnosis: formData.diagnosis.trim(),
       request_types: JSON.stringify(requestTypes),
       medicines: JSON.stringify(medicines),
@@ -544,6 +547,7 @@ const PharmacyIndents = () => {
       wardLocation: "",
       category: "",
       room: "",
+      surgicalDate: "",
       diagnosis: "",
     });
     setRequestTypes({ medicineSlip: false, investigation: false, package: false, nonPackage: false });
@@ -590,6 +594,7 @@ const PharmacyIndents = () => {
       ward_location: indent.ward_location,
       category: indent.category || "",
       room: indent.room,
+      surgicalDate: indent.surgical_date || indent.surgicalDate || "",
       diagnosis: indent.diagnosis,
     });
 
@@ -702,6 +707,9 @@ const PharmacyIndents = () => {
                       Diagnosis
                     </th>
                     <th className="px-4 py-3 text-sm font-semibold text-left">
+                      Surgical Date
+                    </th>
+                    <th className="px-4 py-3 text-sm font-semibold text-left">
                       Request Type
                     </th>
                     <th className="px-4 py-3 text-sm font-semibold text-left">
@@ -721,7 +729,7 @@ const PharmacyIndents = () => {
                 <tbody className="divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan="10" className="px-6 py-12 text-center">
+                      <td colSpan="12" className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
                           <div className="w-10 h-10 mb-4 border-b-2 border-green-600 rounded-full animate-spin"></div>
                           <p className="text-gray-700">Loading indents...</p>
@@ -752,6 +760,9 @@ const PharmacyIndents = () => {
                           </td>
                           <td className="px-4 py-2 text-sm">
                             {indent.diagnosis}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                            {indent.surgical_date || indent.surgicalDate || "—"}
                           </td>
                           <td className="px-4 py-2 text-sm">
                             <div className="flex flex-wrap gap-1">
@@ -847,7 +858,7 @@ const PharmacyIndents = () => {
                     })
                   ) : (
                     <tr>
-                      <td colSpan="9" className="px-6 py-12 text-center">
+                      <td colSpan="12" className="px-6 py-12 text-center">
                         <Pill className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                         <p className="font-medium text-gray-500">
                           No indents created yet
@@ -938,6 +949,16 @@ const PharmacyIndents = () => {
                             "{indent.diagnosis}"
                           </p>
                         </div>
+                        {(indent.surgical_date || indent.surgicalDate) && (
+                          <div className="space-y-0.5 col-span-2">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase">
+                              Surgical Date
+                            </span>
+                            <p className="text-xs font-semibold text-gray-700">
+                              {indent.surgical_date || indent.surgicalDate}
+                            </p>
+                          </div>
+                        )}
                         <div className="space-y-0.5">
                           <span className="text-[10px] text-gray-400 font-bold uppercase">
                             Date
@@ -1211,7 +1232,7 @@ const PharmacyIndents = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
                   {/* Updated Staff Name Field - Auto-filled from localStorage */}
                   <div>
                     <label className="block mb-1 text-sm font-semibold text-gray-700">
@@ -1240,7 +1261,20 @@ const PharmacyIndents = () => {
                     />
                   </div>
 
-                  <div className="sm:col-span-2 md:col-span-1">
+                  <div>
+                    <label className="block mb-1 text-sm font-semibold text-gray-700">
+                      Surgical Date
+                    </label>
+                    <input
+                      type="date"
+                      name="surgicalDate"
+                      value={formData.surgicalDate || ""}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-sm"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block mb-1 text-sm font-semibold text-gray-700">
                       Diagnosis <span className="text-red-500">*</span>
                     </label>
@@ -1859,6 +1893,14 @@ const PharmacyIndents = () => {
                     </p>
                     <p className="text-sm font-semibold text-gray-800 truncate">
                       {selectedIndent.staff_name}
+                    </p>
+                  </div>
+                  <div className="p-3 border border-gray-100 rounded-lg bg-gray-50">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">
+                      Surgical Date
+                    </p>
+                    <p className="text-sm font-semibold text-gray-800 truncate">
+                      {selectedIndent.surgical_date || selectedIndent.surgicalDate || "—"}
                     </p>
                   </div>
                   <div className="p-3 border border-gray-100 rounded-lg bg-gray-50 sm:col-span-1 md:col-span-2">
