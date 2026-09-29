@@ -85,8 +85,8 @@ const PharmacyIndents = () => {
   const { showNotification } = useNotification();
   const [medicineSearchTerm, setMedicineSearchTerm] = useState("");
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(null);
-  const [admissionSearch, setAdmissionSearch] = useState("");
-  const [showAdmissionDropdown, setShowAdmissionDropdown] = useState(false);
+  const [ipdSearch, setIpdSearch] = useState("");
+  const [showIpdDropdown, setShowIpdDropdown] = useState(false);
   const dropdownRef = useRef(null);
   const observerTarget = useRef(null);
 
@@ -221,6 +221,7 @@ const PharmacyIndents = () => {
         indentNumber: savedRow.indent_no,
         patientName: savedRow.patient_name,
         admissionNo: savedRow.admission_number,
+        ipdNumber: savedRow.ipd_number,
         totalMedicines,
       });
 
@@ -271,6 +272,7 @@ const PharmacyIndents = () => {
   const [formData, setFormData] = useState(() => {
     const currentUserName = getCurrentUser();
     return {
+      ipdNumber: "",
       admissionNumber: "",
       staffName: currentUserName,
       consultantName: "",
@@ -309,7 +311,7 @@ const PharmacyIndents = () => {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowAdmissionDropdown(false);
+        setShowIpdDropdown(false);
       }
       if (showMedicineDropdown && !event.target.closest(".medicine-dropdown-container")) {
         setShowMedicineDropdown(null);
@@ -320,26 +322,29 @@ const PharmacyIndents = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMedicineDropdown]);
 
-  const handleAdmissionSelect = (admissionNo) => {
-    const selectedPatient = admissionPatients.find(
-      (patient) => patient.admission_no === admissionNo,
-    );
-
-    if (selectedPatient) {
+  const handleIpdSelect = (patient) => {
+    if (patient) {
       setFormData({
-        admissionNumber: selectedPatient.admission_no,
+        ipdNumber: patient.ipd_number || "",
+        admissionNumber: patient.admission_no || "",
         staffName: getCurrentUser(), // Keep the staff name from localStorage
-        consultantName: selectedPatient.consultant_dr || "",
-        patientName: selectedPatient.patient_name || "",
+        consultantName: patient.consultant_dr || "",
+        patientName: patient.patient_name || "",
         uhidNumber: "",
-        age: selectedPatient.age || "",
-        gender: selectedPatient.gender || "",
-        wardLocation: `${selectedPatient.ward_type || ""} - ${selectedPatient.floor || ""}`,
+        age: patient.age || "",
+        gender: patient.gender || "",
+        wardLocation: `${patient.ward_type || ""} - ${patient.floor || ""}`.replace(/^ - | - $/g, ""),
         category: "", // ✅ User will select manually from dropdown
-        room: selectedPatient.room || "",
+        room: patient.room || "",
         surgicalDate: "",
         diagnosis: "",
       });
+      setIpdSearch(
+        patient.ipd_number
+          ? `${patient.ipd_number} - ${patient.patient_name}`
+          : `${patient.admission_no} - ${patient.patient_name}`,
+      );
+      setShowIpdDropdown(false);
     }
   };
 
@@ -481,7 +486,9 @@ const PharmacyIndents = () => {
 
 
   const handleSubmit = async () => {
-    if (!formData.admissionNumber) return showNotification("Please select Admission Number", "error");
+    if (!formData.ipdNumber && !formData.admissionNumber) {
+      return showNotification("Please select IPD Number", "error");
+    }
     if (!formData.diagnosis.trim()) return showNotification("Please enter Diagnosis", "error");
     if (!Object.values(requestTypes).some(Boolean)) return showNotification("Please select at least one Request Type", "error");
 
@@ -502,15 +509,18 @@ const PharmacyIndents = () => {
       }
     }
 
-    const selectedPatient = admissionPatients.find((p) => p.admission_no === formData.admissionNumber);
-    if (!selectedPatient) return showNotification("Unable to find patient admission records. Please re-select.", "error");
+    const selectedPatient = admissionPatients.find(
+      (p) =>
+        (formData.ipdNumber && p.ipd_number === formData.ipdNumber) ||
+        (formData.admissionNumber && p.admission_no === formData.admissionNumber),
+    );
 
     const now = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
     
     const pharmacyData = {
       timestamp: now,
-      admission_number: formData.admissionNumber,
-      ipd_number: selectedPatient.ipd_number || "",
+      admission_number: formData.admissionNumber || selectedPatient?.admission_no || "",
+      ipd_number: formData.ipdNumber || selectedPatient?.ipd_number || "",
       staff_name: formData.staffName,
       consultant_name: formData.consultantName,
       patient_name: formData.patientName,
@@ -535,8 +545,11 @@ const PharmacyIndents = () => {
     } else {
       createMutation.mutate(pharmacyData);
     }
-  };  const resetForm = () => {
+  };
+
+  const resetForm = () => {
     setFormData({
+      ipdNumber: "",
       admissionNumber: "",
       staffName: getCurrentUser(),
       consultantName: "",
@@ -550,6 +563,8 @@ const PharmacyIndents = () => {
       surgicalDate: "",
       diagnosis: "",
     });
+    setIpdSearch("");
+    setShowIpdDropdown(false);
     setRequestTypes({ medicineSlip: false, investigation: false, package: false, nonPackage: false });
     setMedicines([]);
     setInvestigations([]);
@@ -584,7 +599,8 @@ const PharmacyIndents = () => {
 
     setSelectedIndent(indent);
     setFormData({
-      admissionNumber: indent.admission_number,
+      ipdNumber: indent.ipd_number || indent.ipdNumber || "",
+      admissionNumber: indent.admission_number || indent.admissionNumber || "",
       staffName: indent.staff_name || getCurrentUser(),
       consultantName: indent.consultant_name,
       patientName: indent.patient_name,
@@ -597,6 +613,11 @@ const PharmacyIndents = () => {
       surgicalDate: indent.surgical_date || indent.surgicalDate || "",
       diagnosis: indent.diagnosis,
     });
+    setIpdSearch(
+      indent.ipd_number || indent.ipdNumber
+        ? `${indent.ipd_number || indent.ipdNumber} - ${indent.patient_name || ""}`
+        : indent.admission_number || indent.admissionNumber || "",
+    );
 
     setRequestTypes(parseJsonField(indent.request_types));
     setMedicines(parseJsonField(indent.medicines));
@@ -1080,64 +1101,70 @@ const PharmacyIndents = () => {
                 <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2 md:grid-cols-3">
                   <div className="relative">
                     <label className="block mb-1 text-sm font-semibold text-gray-700">
-                      Admission Number <span className="text-red-500">*</span>
+                      IPD Number <span className="text-red-500">*</span>
                     </label>
 
                     <div ref={dropdownRef} className="relative z-10">
                       <Search className="absolute z-0 w-4 h-4 text-gray-400 left-3 top-3" />
                       <input
                         type="text"
-                        value={admissionSearch}
+                        value={ipdSearch}
                         onChange={(e) => {
-                          setAdmissionSearch(e.target.value);
-                          setShowAdmissionDropdown(true);
+                          setIpdSearch(e.target.value);
+                          setShowIpdDropdown(true);
                         }}
-                        onFocus={() => setShowAdmissionDropdown(true)}
-                        placeholder="Type Admission Number..."
+                        onFocus={() => setShowIpdDropdown(true)}
+                        placeholder="Type IPD Number..."
                         className="w-full px-3 py-2.5 pl-10 pr-3 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-green-500"
                         disabled={editMode || loading}
                       />
 
                       {/* Dropdown */}
-                      {showAdmissionDropdown && (
+                      {showIpdDropdown && (
                         <div className="absolute z-50 w-full mt-1 overflow-y-auto bg-white border rounded-lg shadow-lg max-h-60">
                           {admissionPatients
-                            .filter(
-                              (p) =>
-                                p.admission_no
-                                  ?.toLowerCase()
-                                  .includes(admissionSearch.toLowerCase()) ||
-                                p.patient_name
-                                  ?.toLowerCase()
-                                  .includes(admissionSearch.toLowerCase()),
-                            )
+                            .filter((p) => {
+                              if (!ipdSearch) return true;
+                              const query = ipdSearch.trim().toLowerCase();
+                              return (
+                                (p.ipd_number && p.ipd_number.toLowerCase().includes(query)) ||
+                                (p.patient_name && p.patient_name.toLowerCase().includes(query)) ||
+                                (p.admission_no && p.admission_no.toLowerCase().includes(query))
+                              );
+                            })
                             .map((patient) => (
                               <div
-                                key={patient.admission_no}
+                                key={patient.ipd_number || patient.admission_no}
                                 onMouseDown={() => {
-                                  setAdmissionSearch(
-                                    `${patient.admission_no} - ${patient.patient_name}`,
-                                  );
-                                  setShowAdmissionDropdown(false);
-                                  handleAdmissionSelect(patient.admission_no);
+                                  handleIpdSelect(patient);
                                 }}
                                 className="px-4 py-2 text-sm cursor-pointer hover:bg-green-50"
                               >
-                                <div className="font-medium">
-                                  {patient.admission_no}
+                                <div className="font-semibold text-gray-900 flex items-center justify-between">
+                                  <span>IPD: {patient.ipd_number || "—"}</span>
+                                  {patient.admission_no && (
+                                    <span className="text-xs text-gray-500 font-normal">
+                                      Adm: {patient.admission_no}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {patient.patient_name}
+                                  {patient.patient_name} {patient.ward_type ? `• ${patient.ward_type}` : ""}
                                 </div>
                               </div>
                             ))}
 
-                          {admissionPatients.filter((p) =>
-                            p.admission_no?.toLowerCase().includes(admissionSearch.toLowerCase()) ||
-                            p.patient_name?.toLowerCase().includes(admissionSearch.toLowerCase())
-                          ).length === 0 && (
-                            <div className="px-4 py-1 text-sm text-center text-gray-500">
-                              No matching admission found
+                          {admissionPatients.filter((p) => {
+                            if (!ipdSearch) return true;
+                            const query = ipdSearch.trim().toLowerCase();
+                            return (
+                              (p.ipd_number && p.ipd_number.toLowerCase().includes(query)) ||
+                              (p.patient_name && p.patient_name.toLowerCase().includes(query)) ||
+                              (p.admission_no && p.admission_no.toLowerCase().includes(query))
+                            );
+                          }).length === 0 && (
+                            <div className="px-4 py-2 text-sm text-center text-gray-500">
+                              No matching patient found
                             </div>
                           )}
                         </div>
@@ -1768,11 +1795,19 @@ const PharmacyIndents = () => {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Admission No:</span>
+                  <span className="text-sm text-gray-600">IPD No:</span>
                   <span className="text-sm font-medium text-gray-800">
-                    {successData.admissionNo}
+                    {successData.ipdNumber || "—"}
                   </span>
                 </div>
+                {successData.admissionNo && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Admission No:</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {successData.admissionNo}
+                    </span>
+                  </div>
+                )}
                 {successData.totalMedicines > 0 && (
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">

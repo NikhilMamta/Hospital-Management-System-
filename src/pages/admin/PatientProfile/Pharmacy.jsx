@@ -187,6 +187,7 @@ export default function Pharmacy() {
     wardLocation: "",
     category: "",
     room: "",
+    surgicalDate: "",
     diagnosis: "",
   });
 
@@ -582,6 +583,7 @@ export default function Pharmacy() {
         ward_location: formData.wardLocation || "",
         category: formData.category?.trim() || "",
         room: formData.room || "",
+        surgical_date: formData.surgicalDate || null,
         diagnosis: formData.diagnosis.trim(),
         request_types: JSON.stringify(requestTypes),
         medicines: JSON.stringify(medicines),
@@ -698,6 +700,7 @@ export default function Pharmacy() {
     setFormData((prev) => ({
       ...prev,
       diagnosis: "",
+      surgicalDate: "",
     }));
     setRequestTypes({
       medicineSlip: false,
@@ -752,6 +755,7 @@ export default function Pharmacy() {
       diagnosis: indent.diagnosis || "",
       staffName: indent.staffName || "",
       category: indent.category || "", // ✅ Preserve category from the indent
+      surgicalDate: indent.surgicalDate || indent.surgical_date || "",
     }));
     setRequestTypes({ ...indent.requestTypes });
     setMedicines([...indent.medicines]);
@@ -945,6 +949,12 @@ export default function Pharmacy() {
                         </span>
                       </div>
 
+                      {(indent.surgicalDate || indent.surgical_date) && (
+                        <div className="text-xs text-teal-600 font-medium">
+                          Surgical Date: {indent.surgicalDate || indent.surgical_date}
+                        </div>
+                      )}
+
                       {/* Request Types as chips */}
                       <div className="flex flex-wrap gap-1">
                         {indent.requestTypes.medicineSlip && (
@@ -1108,6 +1118,11 @@ export default function Pharmacy() {
                         <div className="max-w-xs text-xs text-gray-500 truncate">
                           {indent.diagnosis}
                         </div>
+                        {(indent.surgicalDate || indent.surgical_date) && (
+                          <div className="text-[11px] text-teal-600 font-medium mt-0.5">
+                            Surgical: {indent.surgicalDate || indent.surgical_date}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
@@ -1349,6 +1364,19 @@ export default function Pharmacy() {
                         value={formData.consultantName}
                         readOnly
                         className="w-full px-3 py-2 text-gray-600 border border-gray-300 rounded-lg cursor-not-allowed bg-gray-50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block mb-1 text-sm font-medium text-gray-700">
+                        Surgical Date
+                      </label>
+                      <input
+                        type="date"
+                        name="surgicalDate"
+                        value={formData.surgicalDate || ""}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
                     </div>
 
@@ -1784,6 +1812,12 @@ export default function Pharmacy() {
                       <span className="font-medium">{formData.category}</span>
                       <span className="text-gray-600">Diagnosis:</span>
                       <span className="font-medium">{formData.diagnosis}</span>
+                      {formData.surgicalDate && (
+                        <>
+                          <span className="text-gray-600">Surgical Date:</span>
+                          <span className="font-medium">{formData.surgicalDate}</span>
+                        </>
+                      )}
                       <span className="text-gray-600">IPD:</span>
                       <span className="font-medium">{currentIpdNumber}</span>
                     </div>
@@ -2071,6 +2105,14 @@ export default function Pharmacy() {
                       {selectedIndent.consultantName}
                     </p>
                   </div>
+                  {(selectedIndent.surgicalDate || selectedIndent.surgical_date) && (
+                    <div>
+                      <p className="text-gray-500">Surgical Date</p>
+                      <p className="font-medium text-gray-900">
+                        {selectedIndent.surgicalDate || selectedIndent.surgical_date}
+                      </p>
+                    </div>
+                  )}
                   <div className="col-span-full">
                     <p className="text-gray-500">Diagnosis</p>
                     <p className="font-medium text-gray-900">
