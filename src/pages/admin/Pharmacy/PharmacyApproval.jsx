@@ -458,7 +458,16 @@ const PharmacyApproval = () => {
       y + 17,
     );
     ctx.font = "12px Arial";
-    ctx.fillText(String(title || "-").toUpperCase(), 110, y + 17);
+    if (indent.indentType === "departmental") {
+      ctx.fillText(String(title || "-").toUpperCase(), 110, y + 17);
+    } else {
+      ctx.fillText(String(title || "-").toUpperCase(), 110, y + 17, 190);
+
+      ctx.font = "bold 12px Arial";
+      ctx.fillText("IPD No:", 310, y + 17);
+      ctx.font = "12px Arial";
+      ctx.fillText(indent.ipdNumber || "-", 360, y + 17, 110);
+    }
 
     ctx.font = "bold 12px Arial";
     ctx.fillText(secondaryLabel, 480, y + 17);
