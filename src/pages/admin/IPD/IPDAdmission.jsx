@@ -28,6 +28,16 @@ import {
   IPD_ADMISSIONS_PAGE_SIZE,
 } from "../../../api/ipdAdmission";
 
+// Tolerant ward matching (case/spacing/word-order differences like "General Female Ward")
+const matchesBedTab = (ward, tab) => {
+  if (tab === "All") return true;
+  const n = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const w = n(ward);
+  if (tab === "Female General Ward") return w.includes("female");
+  if (tab === "Male General Ward") return w.includes("male") && !w.includes("female");
+  return w === n(tab);
+};
+
 const PatientAdmissionSystem = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
@@ -2095,7 +2105,7 @@ const PatientAdmissionSystem = () => {
                       {mastersData.beds
                         .filter(
                           (bed) =>
-                            bedFilterTab === "All" || bed.ward === bedFilterTab,
+                            matchesBedTab(bed.ward, bedFilterTab),
                         )
                         .map((bed) => (
                           <div
