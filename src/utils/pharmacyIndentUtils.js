@@ -59,6 +59,7 @@ export const normalizePatientPharmacyIndent = (row = {}) => {
     diagnosis: row.diagnosis || "",
     remarks: row.remarks || "",
     surgicalDate: row.surgical_date || null,
+    admissionDate: row.admission_date || row.admissionDate || null,
     requestTypes,
     requestTypeLabels: getRequestTypeLabels(requestTypes),
     medicines: Array.isArray(medicines) ? medicines : [],

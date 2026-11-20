@@ -275,7 +275,7 @@ const HISTORY_STATUSES = ["approved", "rejected"];
 // History table plus its view and slip modals (editing is only for pending indents).
 const HISTORY_COLUMNS = {
   [PATIENT_TABLE]:
-    "id, indent_no, admission_number, patient_name, uhid_number, age, gender, ward_location, " +
+    "id, indent_no, admission_number, ipd_number, patient_name, uhid_number, age, gender, ward_location, " +
     "category, room, diagnosis, staff_name, consultant_name, request_types, medicines, " +
     "investigation_advice, status, planned1, actual1, slip_image, surgical_date",
   [DEPARTMENTAL_TABLE]:
@@ -285,20 +285,89 @@ const HISTORY_COLUMNS = {
 };
 
 /**
- * Approval filters on the server: "All Indents" (displayTitle) and the date,
+ * Fetches admission dates keyed by admission_no and ipd_number.
+ * Queries ipd_admissions first, with patient_admission fallback.
+ */
+export const getAdmissionDates = async (admissionNos = [], ipdNos = []) => {
+  const cleanAdmNos = [...new Set(admissionNos.filter(Boolean))];
+  const cleanIpdNos = [...new Set(ipdNos.filter(Boolean))];
+  if (!cleanAdmNos.length && !cleanIpdNos.length) return {};
+
+  const map = {};
+
+  if (cleanAdmNos.length) {
+    const { data: ipdRows } = await supabase
+      .from("ipd_admissions")
+      .select("admission_no, ipd_number, timestamp, planned1")
+      .in("admission_no", cleanAdmNos);
+
+    (ipdRows || []).forEach((r) => {
+      const date = r.timestamp || r.planned1;
+      if (r.admission_no && date) map[r.admission_no] = date;
+      if (r.ipd_number && date) map[r.ipd_number] = date;
+    });
+  }
+
+  const missingIpdNos = cleanIpdNos.filter((no) => !map[no]);
+  if (missingIpdNos.length) {
+    const { data: ipdRowsByIpd } = await supabase
+      .from("ipd_admissions")
+      .select("admission_no, ipd_number, timestamp, planned1")
+      .in("ipd_number", missingIpdNos);
+
+    (ipdRowsByIpd || []).forEach((r) => {
+      const date = r.timestamp || r.planned1;
+      if (r.admission_no && date) map[r.admission_no] = date;
+      if (r.ipd_number && date) map[r.ipd_number] = date;
+    });
+  }
+
+  const missingAdmNos = cleanAdmNos.filter((no) => !map[no]);
+  if (missingAdmNos.length) {
+    const { data: paRows } = await supabase
+      .from("patient_admission")
+      .select("admission_no, timestamp, planned1")
+      .in("admission_no", missingAdmNos);
+
+    (paRows || []).forEach((r) => {
+      const date = r.timestamp || r.planned1;
+      if (r.admission_no && date) map[r.admission_no] = date;
+    });
+  }
+
+  return map;
+};
+
+/**
+ * Approval filters on the server: "All Indents" (displayTitle) and the date range,
  * which matched planned1's local calendar day. Rows without planned1 passed
  * the old date check, so they still do.
  */
-const withApprovalFilters = (query, table, { patient, date } = {}) => {
+const withApprovalFilters = (
+  query,
+  table,
+  { patient, date, startDate, endDate, fromDate, toDate } = {},
+) => {
   let q = query;
   if (patient) q = q.or(firstFilledEquals(TITLE_COLUMNS[table], patient));
-  if (date) {
-    const start = new Date(`${date}T00:00:00`);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    const from = quoteFilterValue(toColumnTimestamp(start, table));
-    const to = quoteFilterValue(toColumnTimestamp(end, table));
-    q = q.or(`planned1.is.null,and(planned1.gte.${from},planned1.lt.${to})`);
+
+  const from = startDate || fromDate || (date && !endDate && !toDate ? date : null);
+  const to = endDate || toDate || (date && !startDate && !fromDate ? date : null);
+
+  if (from && to) {
+    const start = new Date(`${from}T00:00:00`);
+    const end = new Date(new Date(`${to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000);
+    const fromVal = quoteFilterValue(toColumnTimestamp(start, table));
+    const toVal = quoteFilterValue(toColumnTimestamp(end, table));
+    q = q.or(`planned1.is.null,and(planned1.gte.${fromVal},planned1.lt.${toVal})`);
+  } else if (from) {
+    const start = new Date(`${from}T00:00:00`);
+    const fromVal = quoteFilterValue(toColumnTimestamp(start, table));
+    q = q.or(`planned1.is.null,planned1.gte.${fromVal}`);
+  } else if (to) {
+    const end = new Date(new Date(`${to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000);
+    const toVal = quoteFilterValue(toColumnTimestamp(end, table));
+    q = q.or(`planned1.is.null,planned1.lt.${toVal}`);
   }
   return q;
 };
@@ -508,10 +577,10 @@ const STORE_SEARCH_COLUMNS = {
 const STORE_COLUMNS = {
   [PATIENT_TABLE]:
     "id, indent_no, admission_number, patient_name, uhid_number, staff_name, ward_location, " +
-    "diagnosis, medicines, status, planned2, actual2, slip_image",
+    "diagnosis, medicines, status, planned2, actual2, slip_image, approved_by",
   [DEPARTMENTAL_TABLE]:
     "id, indent_no, ward, ward_location, requested_by, remarks, medicines, status, planned2, " +
-    "actual2, slip_image",
+    "actual2, slip_image, approved_by",
 };
 
 // Indents that reached the store: sent on by approval (planned2) and not rejected.
@@ -524,9 +593,13 @@ const storeQuery = (table, columns, options) =>
 
 /**
  * Store filters on the server, same checks the page runs in the browser for
- * pending indents. The date matched planned2's UTC day (toISOString).
+ * pending indents. The date/range matched planned2's UTC day (toISOString).
  */
-const withStoreFilters = (query, table, { search, patient, ward, date } = {}) => {
+const withStoreFilters = (
+  query,
+  table,
+  { search, patient, ward, date, startDate, endDate, fromDate, toDate } = {},
+) => {
   let q = query;
 
   const term = cleanSearchTerm(search);
@@ -549,12 +622,16 @@ const withStoreFilters = (query, table, { search, patient, ward, date } = {}) =>
         : q.filter("ward_location", "match", `^\\s*${escapeRegExp(ward)}\\s*$`);
   }
 
-  if (date) {
-    const start = new Date(`${date}T00:00:00Z`);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    q = q
-      .gte("planned2", toColumnTimestamp(start, table))
-      .lt("planned2", toColumnTimestamp(end, table));
+  const from = startDate || fromDate || (date && !endDate && !toDate ? date : null);
+  const to = endDate || toDate || (date && !startDate && !fromDate ? date : null);
+
+  if (from) {
+    const start = new Date(`${from}T00:00:00Z`);
+    q = q.gte("planned2", toColumnTimestamp(start, table));
+  }
+  if (to) {
+    const end = new Date(new Date(`${to}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000);
+    q = q.lt("planned2", toColumnTimestamp(end, table));
   }
 
   return q;

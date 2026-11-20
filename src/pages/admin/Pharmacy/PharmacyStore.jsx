@@ -10,6 +10,7 @@ import {
   normalizeStoreWard,
   STORE_HISTORY_PAGE_SIZE,
   updateIndentStatus,
+  uploadSlipToStorage,
 } from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import useDebounce from "../../../hooks/useDebounce";
@@ -18,6 +19,7 @@ import {
   normalizeDepartmentalPharmacyIndent,
   normalizePatientPharmacyIndent,
 } from "../../../utils/pharmacyIndentUtils";
+import { stampSlipFooter } from "../../../utils/pharmacySlipUtils";
 
 // New or edited indents (no planned2 yet) have not reached the store.
 const reachedStore = (payload) =>
@@ -41,7 +43,8 @@ const StoreMedicinePage = () => {
   const [selectedIndent, setSelectedIndent] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [selectedWard, setSelectedWard] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
   const [historyPage, setHistoryPage] = useState(0);
@@ -66,8 +69,9 @@ const StoreMedicinePage = () => {
     patient: selectedPatient,
     ward: selectedWard,
     indentType: indentTypeFilter,
-    date: selectedDate,
-  }), [debouncedSearch, selectedPatient, selectedWard, indentTypeFilter, selectedDate]);
+    startDate,
+    endDate,
+  }), [debouncedSearch, selectedPatient, selectedWard, indentTypeFilter, startDate, endDate]);
 
   const { data: historyData, isLoading: isLoadingHistory, isFetching: isFetchingHistory } = useQuery({
     queryKey: ['pharmacy', 'store', 'history', historyPage, historyFilters],
@@ -147,11 +151,48 @@ const StoreMedicinePage = () => {
   const confirmMutation = useMutation({
     mutationFn: async (indent) => {
       const actual2 = new Date().toLocaleString("en-CA", { timeZone: "Asia/Kolkata", hour12: false }).replace(",", "");
+
+      let givenByName = "Store";
+      try {
+        const userStr = localStorage.getItem("mis_user");
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          givenByName = user?.name || user?.username || "Store";
+        }
+      } catch (e) {
+        console.error("Error reading mis_user:", e);
+      }
+
+      const updateData = { actual2 };
+
+      // Update slip image with Given By if a slip exists
+      if (indent.slipImage) {
+        try {
+          const stampedSlipBase64 = await stampSlipFooter(indent.slipImage, {
+            preparedBy: indent.staffName || indent.requestedBy || "Nikhil Kumar Uranw",
+            approvedBy: indent.approvedBy || "Pharmacy",
+            givenBy: givenByName,
+          });
+
+          if (stampedSlipBase64) {
+            const url = await uploadSlipToStorage(
+              stampedSlipBase64,
+              indent.indentNumber || indent.id,
+            );
+            if (url) {
+              updateData.slip_image = url;
+            }
+          }
+        } catch (slipErr) {
+          console.error("Error updating slip with givenBy:", slipErr);
+        }
+      }
+
       return await updateIndentStatus({
         table: indent.sourceTable,
         id: indent.sourceId,
         status: indent.status,
-        updateData: { actual2 }
+        updateData,
       });
     },
     onSuccess: (_, indent) => {
@@ -168,16 +209,46 @@ const StoreMedicinePage = () => {
     setViewModal(true);
   };
 
-  const handleViewSlip = (indent) => {
+  const handleViewSlip = async (indent) => {
     setSelectedIndent(indent);
     setSlipModal(true);
+
+    if (indent.slipImage) {
+      try {
+        let givenBy = "";
+        if (indent.actual2) {
+          try {
+            const userStr = localStorage.getItem("mis_user");
+            if (userStr) {
+              const user = JSON.parse(userStr);
+              givenBy = user?.name || user?.username || "Store";
+            }
+          } catch (e) {}
+        }
+
+        const stamped = await stampSlipFooter(indent.slipImage, {
+          preparedBy: indent.staffName || indent.requestedBy || "Nikhil Kumar Uranw",
+          approvedBy: indent.approvedBy || "Pharmacy",
+          givenBy,
+        });
+
+        if (stamped) {
+          setSelectedIndent((prev) =>
+            prev && prev.id === indent.id ? { ...prev, slipImage: stamped } : prev,
+          );
+        }
+      } catch (err) {
+        console.error("Error updating slip preview with givenBy:", err);
+      }
+    }
   };
 
   const downloadSlip = (indent) => {
-    if (!indent.slipImage) return;
+    const slipUrl = selectedIndent?.slipImage || indent?.slipImage;
+    if (!slipUrl) return;
     const link = document.createElement("a");
     link.download = `Medicine_Slip_${indent.indentNumber || indent.id}.png`;
-    link.href = indent.slipImage;
+    link.href = slipUrl;
     link.click();
   };
 
@@ -204,9 +275,11 @@ const StoreMedicinePage = () => {
       const normalizedWard = normalizeWardFilter(indent.location || indent.wardLocation);
       if (selectedWard && normalizedWard !== selectedWard) return false;
       if (indentTypeFilter !== "all" && indent.indentType !== indentTypeFilter) return false;
-      if (selectedDate && indent.planned2) {
-        const planned2Date = new Date(indent.planned2).toISOString().split("T")[0];
-        if (planned2Date !== selectedDate) return false;
+      if ((startDate || endDate) && (indent.planned2 || indent.timestamp)) {
+        const rawDate = indent.planned2 || indent.timestamp;
+        const indentDate = new Date(rawDate).toISOString().split("T")[0];
+        if (startDate && indentDate < startDate) return false;
+        if (endDate && indentDate > endDate) return false;
       }
       return true;
     });
@@ -215,6 +288,24 @@ const StoreMedicinePage = () => {
   const filteredPendingIndents = applyFilters(pendingIndents);
   // History filters run on the server (see historyFilters)
   const filteredHistoryIndents = historyIndents;
+
+  const handleClearFilters = () => {
+    setSelectedPatient("");
+    setSelectedWard("");
+    setStartDate("");
+    setEndDate("");
+    setSearchTerm("");
+    setIndentTypeFilter("all");
+  };
+
+  const hasActiveFilters = Boolean(
+    selectedPatient ||
+    selectedWard ||
+    startDate ||
+    endDate ||
+    searchTerm ||
+    indentTypeFilter !== "all"
+  );
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -237,7 +328,7 @@ const StoreMedicinePage = () => {
               </button>
             </nav>
 
-            <div className="flex gap-3 items-center">
+            <div className="flex gap-3 items-center flex-wrap">
               <div className="relative">
                 <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm min-w-[200px]" />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -257,9 +348,30 @@ const StoreMedicinePage = () => {
                 <option value="">All Wards</option>
                 {wardLocations.map((w, i) => <option key={i} value={w}>{w}</option>)}
               </select>
-              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-              {(selectedPatient || selectedWard || selectedDate || searchTerm || indentTypeFilter !== "all") && (
-                <button onClick={() => { setSelectedPatient(""); setSelectedWard(""); setSelectedDate(""); setSearchTerm(""); setIndentTypeFilter("all"); }} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium">Clear</button>
+              <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1.5 rounded-lg border border-gray-300">
+                <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-200">
+                  <span className="text-[11px] font-semibold text-gray-500">From</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="border-none outline-none text-xs p-0 bg-transparent text-gray-700 cursor-pointer"
+                  />
+                </div>
+                <span className="text-gray-400 text-xs font-medium">to</span>
+                <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-200">
+                  <span className="text-[11px] font-semibold text-gray-500">To</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="border-none outline-none text-xs p-0 bg-transparent text-gray-700 cursor-pointer"
+                  />
+                </div>
+              </div>
+              {hasActiveFilters && (
+                <button onClick={handleClearFilters} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium">Clear</button>
               )}
             </div>
           </div>
@@ -275,7 +387,19 @@ const StoreMedicinePage = () => {
                 <option value="">All Indents</option>
                 {patientNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
-              <button onClick={() => { setSearchTerm(""); setSelectedPatient(""); setSelectedWard(""); setSelectedDate(""); setIndentTypeFilter("all"); }} className="px-3 py-1.5 bg-gray-200 rounded-lg text-xs">Clear</button>
+              <div className="flex items-center gap-1 w-full sm:w-auto">
+                <div className="flex-1 flex items-center gap-1 bg-white px-2 py-1 rounded-lg border text-xs">
+                  <span className="text-[10px] text-gray-500 font-medium">From:</span>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full text-xs border-none outline-none bg-transparent" />
+                </div>
+                <div className="flex-1 flex items-center gap-1 bg-white px-2 py-1 rounded-lg border text-xs">
+                  <span className="text-[10px] text-gray-500 font-medium">To:</span>
+                  <input type="date" value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} className="w-full text-xs border-none outline-none bg-transparent" />
+                </div>
+              </div>
+              {hasActiveFilters && (
+                <button onClick={handleClearFilters} className="px-3 py-1.5 bg-gray-200 rounded-lg text-xs">Clear</button>
+              )}
             </div>
           </div>
         </div>

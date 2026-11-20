@@ -26,6 +26,7 @@ import {
   getInvestigations,
   updateIndentStatus,
   uploadSlipToStorage,
+  getAdmissionDates,
 } from "../../../api/pharmacy";
 import useRealtimeQuery from "../../../hooks/useRealtimeQuery";
 import Pagination from "../../../components/Pagination";
@@ -35,10 +36,30 @@ import {
   normalizePatientPharmacyIndent,
   parseJsonField,
 } from "../../../utils/pharmacyIndentUtils";
+import { renderSlipCanvasFooter } from "../../../utils/pharmacySlipUtils";
 
 // Store confirmations (actual2) change nothing shown on this page.
 const ignoreStoreConfirmation = (payload) =>
   !(payload.eventType === "UPDATE" && payload.new?.actual2);
+
+const formatAdmissionDate = (dateString) => {
+  if (!dateString || dateString === "-" || dateString === "—") return "—";
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return dateString;
+    const hasTime =
+      String(dateString).includes("T") ||
+      (String(dateString).includes(" ") && String(dateString).includes(":"));
+    return d.toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      ...(hasTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    });
+  } catch {
+    return dateString;
+  }
+};
 
 // (drawWrappedText and MedicineDropdown stay same)
 const drawWrappedText = (ctx, text, x, y, maxWidth, lineHeight) => {
@@ -180,7 +201,8 @@ const PharmacyApproval = () => {
 
   // Filter States
   const [selectedPatient, setSelectedPatient] = useState("");
-  const [selectedDate, setSelectedDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [indentTypeFilter, setIndentTypeFilter] = useState("all");
   const [isSaving, setIsSaving] = useState(false);
   const [historyPage, setHistoryPage] = useState(0);
@@ -199,8 +221,13 @@ const PharmacyApproval = () => {
   // the server, and only while its tab is open.
   const isHistoryTab = activeTab === "history";
   const historyFilters = useMemo(
-    () => ({ indentType: indentTypeFilter, patient: selectedPatient, date: selectedDate }),
-    [indentTypeFilter, selectedPatient, selectedDate],
+    () => ({
+      indentType: indentTypeFilter,
+      patient: selectedPatient,
+      startDate,
+      endDate,
+    }),
+    [indentTypeFilter, selectedPatient, startDate, endDate],
   );
 
   const {
@@ -279,20 +306,71 @@ const PharmacyApproval = () => {
 
   // --- Derived Data ---
 
+  // Collect admission numbers & IPD numbers to fetch their admission dates
+  const admissionQueryKeys = useMemo(() => {
+    const admNos = new Set();
+    const ipdNos = new Set();
+
+    (rawPending.patient || []).forEach((row) => {
+      if (row.admission_number) admNos.add(row.admission_number);
+      if (row.ipd_number) ipdNos.add(row.ipd_number);
+    });
+
+    (historyData?.rows || []).forEach(({ indentType, row }) => {
+      if (indentType !== "departmental") {
+        if (row.admission_number) admNos.add(row.admission_number);
+        if (row.ipd_number) ipdNos.add(row.ipd_number);
+      }
+    });
+
+    return {
+      admNos: Array.from(admNos),
+      ipdNos: Array.from(ipdNos),
+    };
+  }, [rawPending, historyData]);
+
+  const { data: admissionDatesMap = {} } = useQuery({
+    queryKey: [
+      "pharmacy",
+      "admission-dates",
+      admissionQueryKeys.admNos,
+      admissionQueryKeys.ipdNos,
+    ],
+    queryFn: () =>
+      getAdmissionDates(admissionQueryKeys.admNos, admissionQueryKeys.ipdNos),
+    enabled:
+      admissionQueryKeys.admNos.length > 0 || admissionQueryKeys.ipdNos.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const pendingIndents = useMemo(() => {
     return [
-      ...rawPending.patient.map(normalizePatientPharmacyIndent),
+      ...rawPending.patient.map((row) => {
+        const normalized = normalizePatientPharmacyIndent(row);
+        const admDate =
+          admissionDatesMap[normalized.admissionNumber] ||
+          admissionDatesMap[normalized.ipdNumber] ||
+          normalized.admissionDate ||
+          null;
+        return { ...normalized, admissionDate: admDate };
+      }),
       ...rawPending.departmental.map(normalizeDepartmentalPharmacyIndent),
     ].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-  }, [rawPending]);
+  }, [rawPending, admissionDatesMap]);
 
   // One page, merged and sorted by actual1 in getApprovalHistoryPage
   const historyIndents = useMemo(
     () =>
-      (historyData?.rows || []).map(({ indentType, row }) =>
-        normalizeAnyPharmacyIndent(row, indentType),
-      ),
-    [historyData],
+      (historyData?.rows || []).map(({ indentType, row }) => {
+        const normalized = normalizeAnyPharmacyIndent(row, indentType);
+        const admDate =
+          admissionDatesMap[normalized.admissionNumber] ||
+          admissionDatesMap[normalized.ipdNumber] ||
+          normalized.admissionDate ||
+          null;
+        return { ...normalized, admissionDate: admDate };
+      }),
+    [historyData, admissionDatesMap],
   );
 
   const patientNames = useMemo(() => {
@@ -719,33 +797,57 @@ const PharmacyApproval = () => {
     // Move to footer position (always at bottom)
     y = 1050;
 
-    // Footer - Prepared By and Approved By
-    ctx.strokeRect(10, y, 415, 40);
-    ctx.strokeRect(425, y, 415, 40);
-
-    ctx.fillStyle = "#000000";
-    ctx.font = "bold 12px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Prepared By", 20, y + 15);
-    ctx.font = "11px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Nikhil Kumar Uranw", 20, y + 32, 390);
-
-    ctx.font = "bold 12px Arial";
-    ctx.fillText("Approved By", 435, y + 15);
-    ctx.font = "11px Arial";
-    ctx.fillText(username || "Pharmacy", 435, y + 32);
+    // Footer - Prepared By, Approved By, Given By (3 equal boxes)
+    renderSlipCanvasFooter(ctx, y, {
+      preparedBy: indent.staffName || "Nikhil Kumar Uranw",
+      approvedBy: username || "Pharmacy",
+      givenBy: "",
+    });
 
     return canvas.toDataURL("image/png");
   };
 
-  const handleView = (indent) => {
-    setSelectedIndent(indent);
+  const handleView = async (indent) => {
+    const admDate =
+      indent.admissionDate ||
+      admissionDatesMap[indent.admissionNumber] ||
+      admissionDatesMap[indent.ipdNumber] ||
+      null;
+
+    setSelectedIndent({ ...indent, admissionDate: admDate });
     setViewModal(true);
+
+    if (
+      !admDate &&
+      (indent.admissionNumber || indent.ipdNumber) &&
+      indent.indentType !== "departmental"
+    ) {
+      try {
+        const dates = await getAdmissionDates(
+          [indent.admissionNumber],
+          [indent.ipdNumber],
+        );
+        const fetchedDate =
+          dates[indent.admissionNumber] || dates[indent.ipdNumber] || null;
+        if (fetchedDate) {
+          setSelectedIndent((prev) =>
+            prev && prev.id === indent.id
+              ? { ...prev, admissionDate: fetchedDate }
+              : prev,
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching admission date for view:", err);
+      }
+    }
   };
 
-  const handleEdit = (indent) => {
-    setSelectedIndent(indent);
+  const handleEdit = async (indent) => {
+    const admDate =
+      indent.admissionDate ||
+      admissionDatesMap[indent.admissionNumber] ||
+      admissionDatesMap[indent.ipdNumber] ||
+      null;
 
     // Clone medicines to ensure they have IDs for editing
     const medicinesWithIds = (indent.medicines || []).map((med, index) => ({
@@ -755,6 +857,7 @@ const PharmacyApproval = () => {
 
     setEditFormData({
       ...indent,
+      admissionDate: admDate,
       medicines: medicinesWithIds,
       investigationAdvice: indent.investigationAdvice
         ? { ...indent.investigationAdvice }
@@ -767,7 +870,37 @@ const PharmacyApproval = () => {
             remarks: "",
           },
     });
+    setSelectedIndent({ ...indent, admissionDate: admDate });
     setEditModal(true);
+
+    if (
+      !admDate &&
+      (indent.admissionNumber || indent.ipdNumber) &&
+      indent.indentType !== "departmental"
+    ) {
+      try {
+        const dates = await getAdmissionDates(
+          [indent.admissionNumber],
+          [indent.ipdNumber],
+        );
+        const fetchedDate =
+          dates[indent.admissionNumber] || dates[indent.ipdNumber] || null;
+        if (fetchedDate) {
+          setSelectedIndent((prev) =>
+            prev && prev.id === indent.id
+              ? { ...prev, admissionDate: fetchedDate }
+              : prev,
+          );
+          setEditFormData((prev) =>
+            prev && prev.id === indent.id
+              ? { ...prev, admissionDate: fetchedDate }
+              : prev,
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching admission date for edit:", err);
+      }
+    }
   };
 
   const handleEditInputChange = (e) => {
@@ -955,10 +1088,11 @@ const PharmacyApproval = () => {
       const matchesIndentType =
         indentTypeFilter === "all" || record.indentType === indentTypeFilter;
       let matchesDate = true;
-      if (selectedDate && record.planned1) {
-        const recordDate = new Date(record.planned1).toLocaleDateString();
-        const filterDate = new Date(selectedDate).toLocaleDateString();
-        matchesDate = recordDate === filterDate;
+      if ((startDate || endDate) && (record.planned1 || record.timestamp)) {
+        const rawDate = record.planned1 || record.timestamp;
+        const recordDate = new Date(rawDate).toISOString().split("T")[0];
+        if (startDate && recordDate < startDate) matchesDate = false;
+        if (endDate && recordDate > endDate) matchesDate = false;
       }
       return matchesPatient && matchesDate && matchesIndentType;
     });
@@ -1058,20 +1192,38 @@ const PharmacyApproval = () => {
                 <option value="departmental">Departmental</option>
               </select>
 
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="flex-1 lg:flex-none px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-              />
+              <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-lg border border-gray-300">
+                <div className="flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-gray-200">
+                  <span className="text-[10px] font-semibold text-gray-500">From</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="border-none outline-none text-xs p-0 bg-transparent text-gray-700 cursor-pointer"
+                  />
+                </div>
+                <span className="text-gray-400 text-xs font-medium">to</span>
+                <div className="flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-gray-200">
+                  <span className="text-[10px] font-semibold text-gray-500">To</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="border-none outline-none text-xs p-0 bg-transparent text-gray-700 cursor-pointer"
+                  />
+                </div>
+              </div>
 
               {(selectedPatient ||
-                selectedDate ||
+                startDate ||
+                endDate ||
                 indentTypeFilter !== "all") && (
                 <button
                   onClick={() => {
                     setSelectedPatient("");
-                    setSelectedDate("");
+                    setStartDate("");
+                    setEndDate("");
                     setIndentTypeFilter("all");
                   }}
                   className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-medium transition-colors"
@@ -1845,9 +1997,17 @@ const PharmacyApproval = () => {
                     <p className="font-medium">
                       {editFormData.indentType === "departmental"
                         ? editFormData.requestedBy
-                        : editFormData.uhidNumber}
+                        : editFormData.uhidNumber || "—"}
                     </p>
                   </div>
+                  {editFormData.indentType !== "departmental" && (
+                    <div>
+                      <p className="text-sm text-gray-500">Admission Date</p>
+                      <p className="font-medium text-gray-900">
+                        {formatAdmissionDate(editFormData.admissionDate)}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className="block mb-1 text-sm font-medium text-gray-700">
                       {editFormData.indentType === "departmental"
@@ -2262,9 +2422,17 @@ const PharmacyApproval = () => {
                     <p className="font-medium">
                       {selectedIndent.indentType === "departmental"
                         ? selectedIndent.requestedBy
-                        : selectedIndent.uhidNumber}
+                        : selectedIndent.uhidNumber || "—"}
                     </p>
                   </div>
+                  {selectedIndent.indentType !== "departmental" && (
+                    <div>
+                      <p className="text-sm text-gray-500">Admission Date</p>
+                      <p className="font-medium text-gray-900">
+                        {formatAdmissionDate(selectedIndent.admissionDate)}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-sm text-gray-500">Age</p>
                     <p className="font-medium">{selectedIndent.age}</p>
