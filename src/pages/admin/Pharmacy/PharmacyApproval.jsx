@@ -799,7 +799,7 @@ const PharmacyApproval = () => {
 
     // Footer - Prepared By, Approved By, Given By (3 equal boxes)
     renderSlipCanvasFooter(ctx, y, {
-      preparedBy: indent.staffName || "Nikhil Kumar Uranw",
+      preparedBy: "Nikhil Kumar Uranw",
       approvedBy: username || "Pharmacy",
       givenBy: "",
     });

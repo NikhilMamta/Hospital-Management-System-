@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Eye, FileText, X, Download, CheckCircle, Clock } from "lucide-react";
+import { Eye, FileText, X, Printer, CheckCircle, Clock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useNotification } from "../../../contexts/NotificationContext";
 import {
@@ -169,7 +169,7 @@ const StoreMedicinePage = () => {
       if (indent.slipImage) {
         try {
           const stampedSlipBase64 = await stampSlipFooter(indent.slipImage, {
-            preparedBy: indent.staffName || indent.requestedBy || "Nikhil Kumar Uranw",
+            preparedBy: "Nikhil Kumar Uranw",
             approvedBy: indent.approvedBy || "Pharmacy",
             givenBy: givenByName,
           });
@@ -213,43 +213,18 @@ const StoreMedicinePage = () => {
     setSelectedIndent(indent);
     setSlipModal(true);
 
-    if (indent.slipImage) {
-      try {
-        let givenBy = "";
-        if (indent.actual2) {
-          try {
-            const userStr = localStorage.getItem("mis_user");
-            if (userStr) {
-              const user = JSON.parse(userStr);
-              givenBy = user?.name || user?.username || "Store";
-            }
-          } catch (e) {}
-        }
-
-        const stamped = await stampSlipFooter(indent.slipImage, {
-          preparedBy: indent.staffName || indent.requestedBy || "Nikhil Kumar Uranw",
-          approvedBy: indent.approvedBy || "Pharmacy",
-          givenBy,
-        });
-
-        if (stamped) {
-          setSelectedIndent((prev) =>
-            prev && prev.id === indent.id ? { ...prev, slipImage: stamped } : prev,
-          );
-        }
-      } catch (err) {
-        console.error("Error updating slip preview with givenBy:", err);
-      }
-    }
+    // The slip was already stamped (with the confirming user's name as "Given By")
+    // at confirm time and stored, so show it as-is. Never re-stamp with the
+    // currently logged-in user.
   };
 
-  const downloadSlip = (indent) => {
+  const printSlip = (indent) => {
     const slipUrl = selectedIndent?.slipImage || indent?.slipImage;
     if (!slipUrl) return;
-    const link = document.createElement("a");
-    link.download = `Medicine_Slip_${indent.indentNumber || indent.id}.png`;
-    link.href = slipUrl;
-    link.click();
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<html><head><title>Medicine Slip</title><style>@page{margin:0}body{margin:0}img{width:100%;display:block}</style></head><body><img src="${slipUrl}" onload="window.focus();window.print();"/></body></html>`);
+    w.document.close();
   };
 
   // --- Filter Helper ---
@@ -568,7 +543,7 @@ const StoreMedicinePage = () => {
               <img src={selectedIndent.slipImage} alt="Slip" className="w-full mix-blend-multiply" />
             </div>
             <div className="p-4 border-t flex justify-end gap-2">
-               <button onClick={() => downloadSlip(selectedIndent)} className="px-4 py-2 bg-purple-600 text-white rounded flex items-center gap-2"><Download className="w-4 h-4"/> Download</button>
+               <button onClick={() => printSlip(selectedIndent)} className="px-4 py-2 bg-purple-600 text-white rounded flex items-center gap-2"><Printer className="w-4 h-4"/> Print</button>
                <button onClick={() => setSlipModal(false)} className="px-4 py-2 bg-gray-200 rounded">Close</button>
             </div>
           </div>
